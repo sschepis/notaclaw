@@ -1,0 +1,12 @@
+{
+  "name": "@alephnet/workflow-weaver",
+  "version": "0.1.0",
+  "description": "Visual orchestration engine for chaining agents, tools, and semantic queries into reusable workflows.",
+  "main": "main/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "react-flow-renderer": "^10.3.17"
+  }
+}

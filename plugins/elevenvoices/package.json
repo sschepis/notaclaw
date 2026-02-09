@@ -1,0 +1,31 @@
+{
+  "name": "@alephnet/elevenvoices",
+  "version": "0.1.0",
+  "description": "ElevenLabs voice synthesis integration for AI-powered speech generation, voice cloning, and sound effects.",
+  "main": "main/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "elevenlabs",
+    "tts",
+    "text-to-speech",
+    "voice-synthesis",
+    "voice-cloning",
+    "sound-effects",
+    "ai-voice"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  }
+}

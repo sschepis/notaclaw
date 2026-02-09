@@ -1,0 +1,19 @@
+{
+  "name": "@alephnet/wallet",
+  "version": "0.1.0",
+  "description": "Manages identity, Aleph Token (ℵ) balance, staking, and transactions.",
+  "main": "main/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "wallet"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "description": "Secure sandboxed environment for executing Python and JavaScript code with timeout enforcement and output limits.",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": true,
+    "semanticDomain": "cognitive"
+  },
+  "components": [
+    {
+      "slot": "fence:renderer",

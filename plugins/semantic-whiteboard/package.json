@@ -1,0 +1,14 @@
+{
+  "name": "@alephnet/semantic-whiteboard",
+  "version": "0.1.0",
+  "description": "Real-time collaborative canvas where humans and agents co-create mind maps, diagrams, and notes.",
+  "type": "module",
+  "main": "main/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "tldraw": "^2.4.6",
+    "yjs": "^13.6.14"
+  }
+}

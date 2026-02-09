@@ -1,0 +1,11 @@
+{
+  "id": "resonant-agent",
+  "version": "0.1.0",
+  "name": "Resonant Agent",
+  "description": "Semantic Resonance Engine and SRIA Agent implementation.",
+  "main": "dist/index.js",
+  "permissions": [
+    "dsn:register-skill",
+    "ai:complete"
+  ]
+}

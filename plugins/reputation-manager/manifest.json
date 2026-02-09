@@ -1,0 +1,12 @@
+{
+  "id": "@alephnet/reputation-manager",
+  "version": "0.1.0",
+  "name": "Reputation Manager",
+  "description": "Visualizes and manages Web of Trust and reputation scores.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "store:read",
+    "store:write"
+  ]
+}

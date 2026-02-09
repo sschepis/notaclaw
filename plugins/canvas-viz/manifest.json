@@ -1,0 +1,12 @@
+{
+  "id": "@alephnet/canvas-viz",
+  "version": "1.0.0",
+  "name": "Canvas Visualizer",
+  "description": "Renders interactive HTML5 Canvas visualizations inline in chat. Supports ```canvas and ```viz fence blocks with sandboxed execution, edit/view source toggle, and AI skill integration.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "dsn:register-tool",
+    "store:read"
+  ]
+}

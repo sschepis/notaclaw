@@ -1,0 +1,796 @@
+# Semantic Content Storage & Retrieval
+
+The **Semantic Content Store** provides a content-addressed storage layer indexed by SMF (Sedenion Memory Field) vectors, enabling semantic queries across all stored content. It integrates with Gun.js for distributed durability and AlephNet's GMF for network-wide semantic consensus.
+
+## Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SEMANTIC CONTENT STORE                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐ │
+│  │    INGEST     │────▶│   SMF INDEX   │────▶│    STORAGE    │ │
+│  │               │     │               │     │               │ │
+│  │ • Chunking    │     │ • 16-dim SMF  │     │ • Gun Graph   │ │
+│  │ • Embedding   │     │ • Domain tags │     │ • IPFS/IPNS   │ │
+│  │ • SMF project │     │ • Timestamps  │     │ • GMF sync    │ │
+│  └───────────────┘     └───────────────┘     └───────────────┘ │
+│                              │                                  │
+│                              ▼                                  │
+│                    ┌───────────────┐                           │
+│                    │ SEMANTIC QUERY│                           │
+│                    │               │                           │
+│                    │ • Natural lang│                           │
+│                    │ • SMF vectors │                           │
+│                    │ • Hybrid      │                           │
+│                    └───────────────┘                           │
+│                              │                                  │
+│                              ▼                                  │
+│  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐ │
+│  │   RETRIEVAL   │◀───│   RANKING     │◀───│    ACCESS     │ │
+│  │               │     │               │     │               │ │
+│  │ • Content     │     │ • Relevance   │     │ • Visibility  │ │
+│  │ • Metadata    │     │ • Recency     │     │ • Permissions │ │
+│  │ • Provenance  │     │ • Coherence   │     │ • Staking     │ │
+│  └───────────────┘     └───────────────┘     └───────────────┘ │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Content Entity Definition
+
+```typescript
+/**
+ * Stored content item with semantic indexing
+ */
+export interface ContentItem {
+  // ═══════════════════════════════════════════════════════════════
+  // IDENTITY
+  // ═══════════════════════════════════════════════════════════════
+  
+  /** Content-addressed ID (hash of content) */
+  contentId: string;
+  
+  /** Human-readable title */
+  title: string;
+  
+  /** Content type */
+  type: 'TEXT' | 'MARKDOWN' | 'JSON' | 'HTML' | 'IMAGE' | 'AUDIO' | 'BINARY';
+  
+  /** MIME type */
+  mimeType: string;
+  
+  /** Owner's KeyTriplet fingerprint */
+  ownerId: string;
+  
+  /** Source (conversation, task, service, external) */
+  source: {
+    type: 'CONVERSATION' | 'TASK' | 'SERVICE' | 'EXTERNAL' | 'USER_UPLOAD';
+    id?: string;
+    url?: string;
+  };
+  
+  // ═══════════════════════════════════════════════════════════════
+  // CONTENT
+  // ═══════════════════════════════════════════════════════════════
+  
+  /** The actual content (or reference for large items) */
+  content: {
+    /** Inline content (for small items < 1MB) */
+    inline?: string;
+    
+    /** External reference (for large items) */
+    externalRef?: {
+      protocol: 'IPFS' | 'IPNS' | 'HTTP' | 'GUN';
+      uri: string;
+      size: number;
+      checksum: string;
+    };
+    
+    /** Encrypted content (if visibility requires) */
+    encrypted?: {
+      ciphertext: string;
+      algorithm: 'AES-256-GCM' | 'ChaCha20-Poly1305';
+      keyHint: string;
+    };
+  };
+  
+  /** Content chunks (for large documents) */
+  chunks?: Array<{
+    chunkId: string;
+    index: number;
+    content: string;
+    smf: number[];
+    startOffset: number;
+    endOffset: number;
+  }>;
+  
+  // ═══════════════════════════════════════════════════════════════
+  // SEMANTIC INDEXING
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Semantic metadata for search and retrieval
+   */
+  semantic: {
+    /** 16-dimensional SMF vector */
+    smf: number[];
+    
+    /** Dominant semantic domain */
+    domain: SemanticDomain;
+    
+    /** Secondary domains */
+    secondaryDomains: SemanticDomain[];
+    
+    /** Prime factors for routing */
+    primeFactors: number[];
+    
+    /** Keywords extracted from content */
+    keywords: string[];
+    
+    /** Entities mentioned */
+    entities: Array<{
+      name: string;
+      type: string;
+      salience: number;
+    }>;
+    
+    /** Summary generated by AI */
+    summary?: string;
+    
+    /** Embedding model used */
+    embeddingModel: string;
+    
+    /** Last re-indexed timestamp */
+    lastIndexedAt: number;
+  };
+  
+  // ═══════════════════════════════════════════════════════════════
+  // VISIBILITY & ACCESS
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Access control
+   */
+  visibility: {
+    /** Visibility level */
+    level: 'PUBLIC' | 'FRIENDS' | 'PRIVATE' | 'RESTRICTED';
+    
+    /** For FRIENDS: list of friend fingerprints */
+    friendsList?: string[];
+    
+    /** For RESTRICTED: specific allowed fingerprints */
+    allowedUsers?: string[];
+    
+    /** Minimum tier required */
+    minTier?: 'Neophyte' | 'Adept' | 'Magus' | 'Archon';
+    
+    /** Whether content contributes to GMF */
+    contributeToGMF: boolean;
+    
+    /** GMF contribution weight (0-1) */
+    gmfWeight?: number;
+    
+    /** Expiration timestamp (null = never) */
+    expiresAt?: number | null;
+  };
+  
+  // ═══════════════════════════════════════════════════════════════
+  // VERSIONING
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Version history
+   */
+  versioning: {
+    /** Current version number */
+    version: number;
+    
+    /** Previous version content ID */
+    previousVersionId?: string;
+    
+    /** Version history */
+    history: Array<{
+      version: number;
+      contentId: string;
+      timestamp: number;
+      summary: string;
+    }>;
+    
+    /** Fork parent (if forked from another content) */
+    forkedFrom?: string;
+  };
+  
+  // ═══════════════════════════════════════════════════════════════
+  // METADATA
+  // ═══════════════════════════════════════════════════════════════
+  
+  /** User-defined tags */
+  tags: string[];
+  
+  /** Category */
+  category?: string;
+  
+  /** Language */
+  language: string;
+  
+  /** Creation timestamp */
+  createdAt: number;
+  
+  /** Last modified timestamp */
+  updatedAt: number;
+  
+  /** Coherence proof from network */
+  coherenceProof?: {
+    tickNumber: number;
+    coherence: number;
+    smfHash: string;
+  };
+}
+```
+
+## Semantic Query Interface
+
+```typescript
+/**
+ * Query specification for semantic search
+ */
+export interface SemanticQuery {
+  // ═══════════════════════════════════════════════════════════════
+  // QUERY TYPES
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Natural language query
+   */
+  naturalLanguage?: string;
+  
+  /**
+   * Direct SMF vector query
+   */
+  smfVector?: number[];
+  
+  /**
+   * Keyword-based query
+   */
+  keywords?: string[];
+  
+  /**
+   * Entity-based query
+   */
+  entities?: Array<{
+    name?: string;
+    type?: string;
+  }>;
+  
+  // ═══════════════════════════════════════════════════════════════
+  // FILTERS
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Filter options
+   */
+  filters?: {
+    /** Content types to include */
+    types?: ContentItem['type'][];
+    
+    /** Semantic domains to search */
+    domains?: SemanticDomain[];
+    
+    /** Date range */
+    dateRange?: {
+      after?: number;
+      before?: number;
+    };
+    
+    /** Owner filter */
+    owners?: string[];
+    
+    /** Source filter */
+    sources?: ContentItem['source']['type'][];
+    
+    /** Tag filter */
+    tags?: string[];
+    
+    /** Category filter */
+    categories?: string[];
+    
+    /** Language filter */
+    languages?: string[];
+    
+    /** Minimum coherence score */
+    minCoherence?: number;
+    
+    /** Include GMF content */
+    includeGMF?: boolean;
+  };
+  
+  // ═══════════════════════════════════════════════════════════════
+  // RANKING & RESULTS
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Ranking configuration
+   */
+  ranking?: {
+    /** Ranking strategy */
+    strategy: 'RELEVANCE' | 'RECENCY' | 'COHERENCE' | 'HYBRID';
+    
+    /** Weights for hybrid ranking */
+    weights?: {
+      relevance: number;
+      recency: number;
+      coherence: number;
+    };
+    
+    /** Boost factors */
+    boosts?: {
+      /** Boost for owner's own content */
+      ownContent?: number;
+      /** Boost for friends' content */
+      friendsContent?: number;
+      /** Boost for verified content */
+      verifiedContent?: number;
+    };
+  };
+  
+  /**
+   * Result configuration
+   */
+  results?: {
+    /** Maximum results to return */
+    limit?: number;
+    
+    /** Offset for pagination */
+    offset?: number;
+    
+    /** Include content chunks */
+    includeChunks?: boolean;
+    
+    /** Highlight matching terms */
+    highlight?: boolean;
+    
+    /** Include SMF similarity scores */
+    includeSimilarity?: boolean;
+  };
+}
+
+/**
+ * Query result
+ */
+export interface SemanticQueryResult {
+  /** Total matching items */
+  total: number;
+  
+  /** Returned items */
+  items: Array<{
+    content: ContentItem;
+    
+    /** Relevance score (0-1) */
+    relevance: number;
+    
+    /** SMF similarity (0-1) */
+    smfSimilarity: number;
+    
+    /** Matching chunks (if requested) */
+    matchingChunks?: Array<{
+      chunkId: string;
+      content: string;
+      similarity: number;
+      highlights?: string;
+    }>;
+    
+    /** Source of match */
+    matchSource: 'LOCAL' | 'GMF' | 'NETWORK';
+  }>;
+  
+  /** Query SMF (for reference) */
+  querySMF: number[];
+  
+  /** Query processing time (ms) */
+  processingTimeMs: number;
+  
+  /** Domains searched */
+  domainsSearched: SemanticDomain[];
+}
+```
+
+## Content Store Implementation
+
+```typescript
+/**
+ * Semantic Content Store
+ */
+export class SemanticContentStore {
+  constructor(
+    private gun: any,
+    private gmf: GlobalMemoryField,
+    private embedder: EmbeddingService,
+    private identity: KeyTriplet
+  ) {}
+  
+  // ═══════════════════════════════════════════════════════════════
+  // INGESTION
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Store content with semantic indexing
+   */
+  async store(
+    content: string | Buffer,
+    metadata: {
+      title: string;
+      type: ContentItem['type'];
+      mimeType: string;
+      visibility: ContentItem['visibility'];
+      tags?: string[];
+      category?: string;
+    },
+    options?: {
+      chunkSize?: number;
+      contributeToGMF?: boolean;
+    }
+  ): Promise<ContentItem> {
+    // 1. Generate content hash
+    const contentId = await this.hashContent(content);
+    
+    // 2. Chunk content if needed
+    const chunks = this.chunkContent(content, options?.chunkSize ?? 1000);
+    
+    // 3. Generate embeddings for each chunk
+    const chunkSMFs = await Promise.all(
+      chunks.map(chunk => this.embedder.embed(chunk.content))
+    );
+    
+    // 4. Compute aggregate SMF
+    const aggregateSMF = this.aggregateSMFs(chunkSMFs);
+    
+    // 5. Determine semantic domain
+    const domain = this.determineDomain(aggregateSMF);
+    
+    // 6. Extract metadata
+    const keywords = await this.extractKeywords(content.toString());
+    const entities = await this.extractEntities(content.toString());
+    const summary = await this.generateSummary(content.toString());
+    
+    // 7. Build content item
+    const item: ContentItem = {
+      contentId,
+      title: metadata.title,
+      type: metadata.type,
+      mimeType: metadata.mimeType,
+      ownerId: this.identity.fingerprint,
+      source: { type: 'USER_UPLOAD' },
+      content: {
+        inline: content.length < 1_000_000 ? content.toString() : undefined,
+        externalRef: content.length >= 1_000_000 ? await this.storeExternal(content) : undefined
+      },
+      chunks: chunks.map((chunk, i) => ({
+        ...chunk,
+        smf: chunkSMFs[i]
+      })),
+      semantic: {
+        smf: aggregateSMF,
+        domain,
+        secondaryDomains: this.findSecondaryDomains(aggregateSMF),
+        primeFactors: this.computePrimeFactors(aggregateSMF),
+        keywords,
+        entities,
+        summary,
+        embeddingModel: this.embedder.modelName,
+        lastIndexedAt: Date.now()
+      },
+      visibility: metadata.visibility,
+      versioning: {
+        version: 1,
+        history: []
+      },
+      tags: metadata.tags ?? [],
+      category: metadata.category,
+      language: await this.detectLanguage(content.toString()),
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    
+    // 8. Store in Gun graph
+    await this.storeInGun(item);
+    
+    // 9. Contribute to GMF if configured
+    if (options?.contributeToGMF && metadata.visibility.contributeToGMF) {
+      await this.contributeToGMF(item);
+    }
+    
+    return item;
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // QUERY
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Search content semantically
+   */
+  async query(query: SemanticQuery): Promise<SemanticQueryResult> {
+    const startTime = Date.now();
+    
+    // 1. Convert query to SMF vector
+    const querySMF = query.smfVector ?? 
+      await this.embedder.embed(query.naturalLanguage ?? query.keywords?.join(' ') ?? '');
+    
+    // 2. Determine domains to search
+    const domainsToSearch = query.filters?.domains ?? 
+      [this.determineDomain(querySMF), ...this.findSecondaryDomains(querySMF)];
+    
+    // 3. Search local store
+    const localResults = await this.searchLocal(querySMF, query);
+    
+    // 4. Search GMF if requested
+    let gmfResults: typeof localResults = [];
+    if (query.filters?.includeGMF !== false) {
+      gmfResults = await this.searchGMF(querySMF, query);
+    }
+    
+    // 5. Merge and rank results
+    const mergedResults = this.mergeResults(localResults, gmfResults, query.ranking);
+    
+    // 6. Apply filters
+    const filteredResults = this.applyFilters(mergedResults, query.filters);
+    
+    // 7. Paginate
+    const offset = query.results?.offset ?? 0;
+    const limit = query.results?.limit ?? 20;
+    const paginatedResults = filteredResults.slice(offset, offset + limit);
+    
+    // 8. Enrich results
+    const enrichedResults = await this.enrichResults(paginatedResults, query.results);
+    
+    return {
+      total: filteredResults.length,
+      items: enrichedResults,
+      querySMF,
+      processingTimeMs: Date.now() - startTime,
+      domainsSearched: domainsToSearch
+    };
+  }
+  
+  /**
+   * Find similar content
+   */
+  async findSimilar(contentId: string, options?: {
+    limit?: number;
+    minSimilarity?: number;
+    sameOwnerOnly?: boolean;
+  }): Promise<SemanticQueryResult> {
+    const content = await this.get(contentId);
+    if (!content) {
+      throw new Error(`Content ${contentId} not found`);
+    }
+    
+    return this.query({
+      smfVector: content.semantic.smf,
+      filters: {
+        owners: options?.sameOwnerOnly ? [content.ownerId] : undefined
+      },
+      ranking: {
+        strategy: 'RELEVANCE'
+      },
+      results: {
+        limit: options?.limit ?? 10
+      }
+    });
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // RETRIEVAL
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Get content by ID
+   */
+  async get(contentId: string): Promise<ContentItem | null> {
+    return new Promise((resolve) => {
+      this.gun.get('content').get(contentId).once((data: any) => {
+        resolve(data ? this.deserializeContent(data) : null);
+      });
+    });
+  }
+  
+  /**
+   * Get content with access check
+   */
+  async getWithAccessCheck(
+    contentId: string,
+    requesterId: string
+  ): Promise<ContentItem | null> {
+    const content = await this.get(contentId);
+    if (!content) return null;
+    
+    if (!this.checkAccess(content, requesterId)) {
+      throw new Error('Access denied');
+    }
+    
+    // Decrypt if needed
+    if (content.content.encrypted) {
+      content.content.inline = await this.decrypt(content, requesterId);
+    }
+    
+    return content;
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // ACCESS CONTROL
+  // ═══════════════════════════════════════════════════════════════
+  
+  private checkAccess(content: ContentItem, requesterId: string): boolean {
+    switch (content.visibility.level) {
+      case 'PUBLIC':
+        return true;
+        
+      case 'PRIVATE':
+        return content.ownerId === requesterId;
+        
+      case 'FRIENDS':
+        return content.ownerId === requesterId ||
+          (content.visibility.friendsList?.includes(requesterId) ?? false);
+        
+      case 'RESTRICTED':
+        return content.ownerId === requesterId ||
+          (content.visibility.allowedUsers?.includes(requesterId) ?? false);
+        
+      default:
+        return false;
+    }
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // GMF INTEGRATION
+  // ═══════════════════════════════════════════════════════════════
+  
+  private async contributeToGMF(content: ContentItem): Promise<void> {
+    const proposal = {
+      type: 'CONTENT',
+      contentId: content.contentId,
+      smf: content.semantic.smf,
+      weight: content.visibility.gmfWeight ?? 0.5,
+      metadata: {
+        title: content.title,
+        summary: content.semantic.summary,
+        domain: content.semantic.domain
+      }
+    };
+    
+    await this.gmf.propose(proposal);
+  }
+  
+  private async searchGMF(
+    querySMF: number[],
+    query: SemanticQuery
+  ): Promise<Array<{ content: ContentItem; similarity: number }>> {
+    const gmfObjects = await this.gmf.query(querySMF, {
+      type: 'CONTENT',
+      limit: query.results?.limit ?? 20
+    });
+    
+    const results = await Promise.all(
+      gmfObjects.map(async (obj: any) => {
+        const content = await this.get(obj.contentId);
+        return content ? {
+          content,
+          similarity: this.cosineSimilarity(querySMF, obj.smf)
+        } : null;
+      })
+    );
+    
+    return results.filter(Boolean) as Array<{ content: ContentItem; similarity: number }>;
+  }
+}
+```
+
+## Graph Schema for Content
+
+```javascript
+// gun.get('content').get(contentId)
+{
+  // Core content item
+  item: ContentItem,
+  
+  // Chunk index for large documents
+  chunkIndex: {
+    'chunk_0': { smf: [...], startOffset: 0, endOffset: 1000 },
+    'chunk_1': { smf: [...], startOffset: 1000, endOffset: 2000 }
+  },
+  
+  // Access log
+  accessLog: {
+    'access_1': { userId: string, timestamp: number, action: 'VIEW' | 'DOWNLOAD' }
+  },
+  
+  // Citations and references
+  references: {
+    'ref_1': { targetContentId: string, type: 'CITES' | 'REFERENCES' | 'REPLIES_TO' }
+  },
+  
+  // User interactions
+  interactions: {
+    likes: number,
+    shares: number,
+    citations: number
+  }
+}
+
+// gun.get('contentIndex')
+{
+  // By owner
+  byOwner: {
+    'fingerprint_1': ['contentId_1', 'contentId_2'],
+    'fingerprint_2': ['contentId_3']
+  },
+  
+  // By domain
+  byDomain: {
+    'perceptual': ['contentId_1'],
+    'cognitive': ['contentId_2', 'contentId_3']
+  },
+  
+  // By tag
+  byTag: {
+    'javascript': ['contentId_1'],
+    'design': ['contentId_2']
+  },
+  
+  // Recent content
+  recent: ['contentId_3', 'contentId_2', 'contentId_1']
+}
+```
+
+## Example Usage
+
+```typescript
+// Initialize store
+const contentStore = new SemanticContentStore(gun, gmf, embedder, identity);
+
+// Store a document
+const doc = await contentStore.store(
+  `# Introduction to AlephNet
+  
+  AlephNet is a distributed semantic network that combines...`,
+  {
+    title: 'Introduction to AlephNet',
+    type: 'MARKDOWN',
+    mimeType: 'text/markdown',
+    visibility: {
+      level: 'PUBLIC',
+      contributeToGMF: true,
+      gmfWeight: 0.8
+    },
+    tags: ['alephnet', 'documentation', 'introduction'],
+    category: 'documentation'
+  }
+);
+
+// Semantic search
+const results = await contentStore.query({
+  naturalLanguage: 'How does distributed consensus work in AlephNet?',
+  filters: {
+    types: ['MARKDOWN', 'TEXT'],
+    domains: ['cognitive'],
+    minCoherence: 0.7
+  },
+  ranking: {
+    strategy: 'HYBRID',
+    weights: { relevance: 0.6, recency: 0.2, coherence: 0.2 }
+  },
+  results: {
+    limit: 10,
+    includeChunks: true,
+    highlight: true
+  }
+});
+
+// Find similar content
+const similar = await contentStore.findSimilar(doc.contentId, {
+  limit: 5,
+  minSimilarity: 0.7
+});
+```

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "description": "Standard tools for the SRIA agent including web search, URL reading, and system utilities.",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": true,
+    "semanticDomain": "general"
+  },
+  "components": [
+    {
+      "slot": "sidebar:nav-item",
+      "id": "agent-essentials-nav",
+      "description": "Navigation item for agent essentials panel"
+    },
+    {
+      "slot": "sidebar:view:agents",
+      "id": "agent-essentials-panel",
+      "description": "Agent tools management panel"
+    }
+  ],
+  "actions": [
+    {
+      "name": "web_search",
+      "type": "dsn-tool",
+      "description": "Search the web for information",
+      "executionLocation": "SERVER"
+    },
+    {
+      "name": "read_url",
+      "type": "dsn-tool",
+      "description": "Read and extract content from a URL",
+      "executionLocation": "SERVER"
+    }
+  ],
+  "skills": [
+    {
+      "name": "web_search",
+      "description": "Search the web for information",
+      "executionLocation": "SERVER"
+    },
+    {
+      "name": "read_url",
+      "description": "Read and extract content from a URL",
+      "executionLocation": "SERVER"
+    }
+  ],
+  "permissions": [
+    "dsn:register-tool",
+    "network:http"
+  ]
+}

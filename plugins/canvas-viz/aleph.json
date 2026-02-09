@@ -1,0 +1,47 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "description": "Renders interactive HTML5 Canvas visualizations and animations inline in chat conversations.",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": true,
+    "semanticDomain": "perceptual"
+  },
+  "components": [
+    {
+      "slot": "fence:renderer",
+      "id": "canvas-viz-renderer",
+      "description": "Renders canvas fence blocks as interactive HTML5 Canvas visualizations"
+    }
+  ],
+  "actions": [
+    {
+      "name": "generate_canvas_visualization",
+      "type": "dsn-tool",
+      "description": "Generate an HTML5 Canvas visualization rendered inline in the chat",
+      "executionLocation": "CLIENT"
+    },
+    {
+      "name": "canvas:get-graph",
+      "type": "ipc-handler",
+      "description": "Retrieve the current graph data for canvas rendering"
+    },
+    {
+      "name": "canvas:add-node",
+      "type": "ipc-handler",
+      "description": "Add a node to the canvas graph"
+    }
+  ],
+  "skills": [
+    {
+      "name": "generate_canvas_visualization",
+      "description": "Generate an HTML5 Canvas visualization rendered inline in the chat. The AI should output JavaScript code inside a ```canvas fence block.",
+      "executionLocation": "CLIENT"
+    }
+  ],
+  "permissions": [
+    "dsn:register-tool",
+    "store:read"
+  ]
+}

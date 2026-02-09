@@ -1,0 +1,12 @@
+{
+  "id": "@alephnet/code-interpreter",
+  "version": "0.1.0",
+  "name": "Code Interpreter",
+  "description": "Secure sandboxed environment for code execution.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "fs:read",
+    "fs:write"
+  ]
+}

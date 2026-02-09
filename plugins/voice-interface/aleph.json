@@ -1,0 +1,25 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": false,
+    "semanticDomain": "perceptual"
+  },
+  "skills": [
+    {
+      "name": "speech_to_text",
+      "description": "Convert spoken audio to text",
+      "executionLocation": "CLIENT"
+    },
+    {
+      "name": "text_to_speech",
+      "description": "Convert text to spoken audio",
+      "executionLocation": "CLIENT"
+    }
+  ],
+  "permissions": [
+    "dsn:register-tool"
+  ]
+}

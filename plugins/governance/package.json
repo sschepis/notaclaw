@@ -1,0 +1,23 @@
+{
+  "name": "@alephnet/governance",
+  "version": "0.1.0",
+  "description": "Participation in decentralized governance, voting, and coherence claims.",
+  "main": "main/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "governance"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0",
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^1.0.0",
+    "tailwind-merge": "^1.0.0"
+  }
+}

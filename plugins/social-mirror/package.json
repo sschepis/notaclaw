@@ -1,0 +1,14 @@
+{
+  "name": "@alephnet/social-mirror",
+  "version": "0.1.0",
+  "description": "Ingests social graphs and content from Farcaster, Lens, and Twitter into the Global Memory Field.",
+  "type": "module",
+  "main": "main/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@farcaster/hub-nodejs": "^0.11.0",
+    "twitter-api-v2": "^1.16.0"
+  }
+}

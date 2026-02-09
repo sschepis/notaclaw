@@ -1,0 +1,25 @@
+{
+  "name": "@alephnet/knowledge-graph",
+  "version": "0.1.0",
+  "description": "Explorer for the Global Memory Field (GMF) and semantic data.",
+  "main": "main/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "knowledge-graph"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0",
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^1.0.0",
+    "tailwind-merge": "^1.0.0",
+    "framer-motion": "^10.0.0",
+    "lucide-react": "^0.563.0"
+  }
+}

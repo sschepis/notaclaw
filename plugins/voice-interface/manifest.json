@@ -1,0 +1,11 @@
+{
+  "id": "@alephnet/voice-interface",
+  "version": "0.1.0",
+  "name": "Voice Interface",
+  "description": "Speech-to-Text and Text-to-Speech capabilities.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "ui:audio"
+  ]
+}

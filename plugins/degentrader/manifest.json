@@ -1,0 +1,38 @@
+{
+  "id": "com.notaclaw.degentrader",
+  "name": "Degen Trader",
+  "version": "0.1.0",
+  "description": "Multi-chain crypto trading bot with AI-driven strategies and learning capabilities.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.tsx",
+  "permissions": [
+    "network:http",
+    "store:read",
+    "store:write",
+    "secrets:read",
+    "secrets:write",
+    "ai:complete",
+    "dsn:register-tool",
+    "dsn:publish-observation"
+  ],
+  "semanticDomain": "economic",
+  "aleph": {
+    "tools": [
+      {
+        "name": "get_market_status",
+        "description": "Get current market status and active opportunities",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "chain": {
+              "type": "string",
+              "enum": ["ETH", "SOL", "BASE"],
+              "description": "Blockchain to query"
+            }
+          }
+        }
+      }
+    ],
+    "smfProfile": [0.2, 0.1, 0.1, 0.1, 0.1, 0.9, 0.5, 0.8, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  }
+}

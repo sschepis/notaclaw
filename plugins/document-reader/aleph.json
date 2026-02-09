@@ -1,0 +1,26 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": true,
+    "semanticDomain": "perceptual"
+  },
+  "skills": [
+    {
+      "name": "read_document",
+      "description": "Extract text content from various document formats (PDF, DOCX, etc.)",
+      "executionLocation": "CLIENT"
+    },
+    {
+      "name": "summarize_document",
+      "description": "Generate a summary of a document's content",
+      "executionLocation": "SERVER"
+    }
+  ],
+  "permissions": [
+    "dsn:register-tool",
+    "fs:read"
+  ]
+}

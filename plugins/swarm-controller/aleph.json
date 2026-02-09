@@ -1,0 +1,76 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": true,
+    "semanticDomain": "meta"
+  },
+  "skills": [
+    {
+      "name": "spawn_agent",
+      "description": "Spawn a new agent instance in the swarm",
+      "executionLocation": "SERVER"
+    },
+    {
+      "name": "coordinate_swarm",
+      "description": "Coordinate task execution across swarm agents",
+      "executionLocation": "SERVER"
+    },
+    {
+      "name": "get_swarm_status",
+      "description": "Get the current status of the agent swarm",
+      "executionLocation": "CLIENT"
+    }
+  ],
+  "permissions": [
+    "dsn:register-tool",
+    "dsn:register-service",
+    "network:http"
+  ],
+  "settings": [
+    {
+      "key": "maxAgents",
+      "label": "Max Agents",
+      "type": "number",
+      "default": 5,
+      "description": "Maximum number of concurrent agents allowed",
+      "min": 1,
+      "max": 20
+    },
+    {
+      "key": "coordinationStrategy",
+      "label": "Coordination Strategy",
+      "type": "select",
+      "default": "centralized",
+      "description": "Strategy used for agent coordination",
+      "options": [
+        { "label": "Centralized", "value": "centralized" },
+        { "label": "Decentralized", "value": "decentralized" },
+        { "label": "Hybrid", "value": "hybrid" }
+      ]
+    },
+    {
+      "key": "taskTimeout",
+      "label": "Task Timeout (s)",
+      "type": "number",
+      "default": 60,
+      "description": "Maximum time in seconds allowed for a task before timeout",
+      "min": 10,
+      "max": 300
+    },
+    {
+      "key": "logLevel",
+      "label": "Log Level",
+      "type": "select",
+      "default": "info",
+      "description": "Verbosity of agent logs",
+      "options": [
+        { "label": "Info", "value": "info" },
+        { "label": "Debug", "value": "debug" },
+        { "label": "Error", "value": "error" }
+      ]
+    }
+  ]
+}

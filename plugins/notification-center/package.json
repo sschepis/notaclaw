@@ -1,0 +1,19 @@
+{
+  "name": "@alephnet/notification-center",
+  "version": "0.1.0",
+  "description": "Centralized hub for system alerts and notifications.",
+  "main": "main/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "notification-center"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

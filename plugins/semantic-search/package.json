@@ -1,0 +1,19 @@
+{
+  "name": "@alephnet/semantic-search",
+  "version": "0.1.0",
+  "description": "Deep search capabilities leveraging GMF vectors.",
+  "main": "main/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "semantic-search"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

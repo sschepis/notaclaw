@@ -1,0 +1,135 @@
+{
+  "id": "@alephnet/elevenvoices",
+  "version": "0.1.0",
+  "name": "ElevenVoices",
+  "description": "ElevenLabs voice synthesis integration for AI-powered speech generation, voice cloning, and sound effects.",
+  "author": "AlephNet",
+  "license": "MIT",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "icon": "icon.svg",
+  "permissions": [
+    "network:http",
+    "fs:read",
+    "fs:write",
+    "store:read",
+    "store:write",
+    "dsn:register-tool"
+  ],
+  "semanticDomain": "creative",
+  "aleph": {
+    "capabilities": {
+      "skillProvider": true,
+      "dsnEnabled": true,
+      "semanticDomain": "creative"
+    },
+    "tools": [
+      {
+        "name": "text_to_speech",
+        "description": "Convert text to speech using ElevenLabs AI voices",
+        "executionLocation": "SERVER"
+      },
+      {
+        "name": "get_voices",
+        "description": "List all available ElevenLabs voices",
+        "executionLocation": "SERVER"
+      },
+      {
+        "name": "clone_voice",
+        "description": "Clone a voice from audio samples",
+        "executionLocation": "SERVER"
+      },
+      {
+        "name": "generate_sound_effect",
+        "description": "Generate sound effects from text descriptions",
+        "executionLocation": "SERVER"
+      },
+      {
+        "name": "speech_to_speech",
+        "description": "Transform speech with a different voice while preserving tone and emotion",
+        "executionLocation": "SERVER"
+      }
+    ],
+    "settings": [
+      {
+        "key": "apiKey",
+        "label": "ElevenLabs API Key",
+        "type": "secret",
+        "default": "",
+        "description": "Your ElevenLabs API key for authentication"
+      },
+      {
+        "key": "defaultVoiceId",
+        "label": "Default Voice ID",
+        "type": "string",
+        "default": "21m00Tcm4TlvDq8ikWAM",
+        "description": "Default voice ID to use for text-to-speech (Rachel)"
+      },
+      {
+        "key": "defaultModel",
+        "label": "Default Model",
+        "type": "select",
+        "default": "eleven_multilingual_v2",
+        "options": [
+          { "value": "eleven_multilingual_v2", "label": "Multilingual v2 (Best quality)" },
+          { "value": "eleven_turbo_v2_5", "label": "Turbo v2.5 (Fast)" },
+          { "value": "eleven_flash_v2_5", "label": "Flash v2.5 (Fastest)" },
+          { "value": "eleven_monolingual_v1", "label": "English v1" }
+        ],
+        "description": "Default TTS model to use"
+      },
+      {
+        "key": "outputFormat",
+        "label": "Output Format",
+        "type": "select",
+        "default": "mp3_44100_128",
+        "options": [
+          { "value": "mp3_44100_128", "label": "MP3 44.1kHz 128kbps" },
+          { "value": "mp3_44100_192", "label": "MP3 44.1kHz 192kbps" },
+          { "value": "pcm_16000", "label": "PCM 16kHz" },
+          { "value": "pcm_22050", "label": "PCM 22.05kHz" },
+          { "value": "pcm_24000", "label": "PCM 24kHz" },
+          { "value": "pcm_44100", "label": "PCM 44.1kHz" }
+        ],
+        "description": "Audio output format"
+      },
+      {
+        "key": "stability",
+        "label": "Voice Stability",
+        "type": "number",
+        "default": 0.5,
+        "min": 0,
+        "max": 1,
+        "step": 0.1,
+        "description": "Higher values make voice more consistent, lower values more expressive"
+      },
+      {
+        "key": "similarityBoost",
+        "label": "Similarity Boost",
+        "type": "number",
+        "default": 0.75,
+        "min": 0,
+        "max": 1,
+        "step": 0.1,
+        "description": "Higher values make voice closer to original, may amplify artifacts"
+      },
+      {
+        "key": "style",
+        "label": "Style Exaggeration",
+        "type": "number",
+        "default": 0,
+        "min": 0,
+        "max": 1,
+        "step": 0.1,
+        "description": "Exaggerates the style of the original speaker (v2 models only)"
+      },
+      {
+        "key": "useSpeakerBoost",
+        "label": "Speaker Boost",
+        "type": "boolean",
+        "default": true,
+        "description": "Boost similarity to original speaker (increases latency)"
+      }
+    ]
+  }
+}

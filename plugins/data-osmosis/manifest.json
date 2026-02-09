@@ -1,0 +1,16 @@
+{
+  "id": "@alephnet/data-osmosis",
+  "version": "0.1.0",
+  "name": "Data Osmosis",
+  "description": "Universal data connector for ingesting external data sources into the AlephNet Semantic Graph.",
+  "author": "AlephNet Team",
+  "license": "MIT",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": [
+    "network:http",
+    "store:read",
+    "store:write"
+  ],
+  "semanticDomain": "perceptual"
+}

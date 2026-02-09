@@ -1,0 +1,86 @@
+{
+  "id": "@alephnet/knowledge-graph",
+  "version": "1.0.0",
+  "name": "Knowledge Graph",
+  "description": "Semantic knowledge graph for storing and querying entities, relationships, and concepts. Enables AI-powered knowledge management and traversal.",
+  "author": "AlephNet",
+  "license": "MIT",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": [
+    "dsn:register-tool",
+    "store:read",
+    "store:write"
+  ],
+  "semanticDomain": "cognitive",
+  "aleph": {
+    "capabilities": {
+      "skillProvider": true,
+      "dsnEnabled": true,
+      "semanticDomain": "cognitive"
+    },
+    "tools": [
+      {
+        "name": "query_knowledge",
+        "description": "Query the knowledge graph for entities and relationships using subject/predicate/object patterns",
+        "executionLocation": "CLIENT"
+      },
+      {
+        "name": "add_knowledge",
+        "description": "Add new knowledge to the graph with entities and relationships",
+        "executionLocation": "CLIENT"
+      },
+      {
+        "name": "get_related_entities",
+        "description": "Traverse the knowledge graph to find related entities",
+        "executionLocation": "CLIENT"
+      },
+      {
+        "name": "search_knowledge",
+        "description": "Search entities by text query and type",
+        "executionLocation": "CLIENT"
+      }
+    ],
+    "settings": [
+      {
+        "key": "maxNodes",
+        "label": "Max Nodes",
+        "type": "number",
+        "default": 100,
+        "description": "Maximum number of nodes to display in the graph visualization",
+        "min": 10,
+        "max": 1000
+      },
+      {
+        "key": "depth",
+        "label": "Default Traversal Depth",
+        "type": "number",
+        "default": 2,
+        "description": "Default depth of relationships to traverse when exploring nodes",
+        "min": 1,
+        "max": 5
+      },
+      {
+        "key": "autoExpand",
+        "label": "Auto Expand",
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically expand related nodes when selecting a node"
+      },
+      {
+        "key": "nodeColor",
+        "label": "Default Node Color",
+        "type": "color",
+        "default": "#4287f5",
+        "description": "Default color for graph nodes"
+      },
+      {
+        "key": "persistGraph",
+        "label": "Persist Graph",
+        "type": "boolean",
+        "default": true,
+        "description": "Save graph to storage between sessions"
+      }
+    ]
+  }
+}

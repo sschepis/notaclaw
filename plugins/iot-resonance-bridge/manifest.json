@@ -1,0 +1,13 @@
+{
+  "id": "@alephnet/iot-resonance-bridge",
+  "version": "0.1.0",
+  "name": "IoT Resonance Bridge",
+  "description": "Connects the Semantic Mesh to the physical world via Home Assistant and Matter integration.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.tsx",
+  "permissions": [
+    "network:http",
+    "store:read",
+    "store:write"
+  ]
+}

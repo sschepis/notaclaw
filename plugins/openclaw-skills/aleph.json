@@ -1,0 +1,16 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": true,
+    "semanticDomain": "general"
+  },
+  "skills": [],
+  "permissions": [
+    "dsn:register-tool",
+    "network:http",
+    "fs:read"
+  ]
+}

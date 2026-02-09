@@ -1,0 +1,17 @@
+{
+  "name": "@alephnet/canvas-viz",
+  "version": "1.0.0",
+  "description": "Canvas visualization plugin for AlephNet - renders interactive HTML5 Canvas animations inline in chat conversations",
+  "main": "main/index.js",
+  "author": "AlephNet",
+  "license": "MIT",
+  "keywords": [
+    "canvas",
+    "visualization",
+    "animation",
+    "alephnet-plugin"
+  ],
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

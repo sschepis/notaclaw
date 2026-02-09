@@ -1,0 +1,33 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "description": "Exposes agent capabilities via a local REST/WebSocket API with webhook ingestion, DoS protection, and CORS support.",
+  "capabilities": {
+    "skillProvider": false,
+    "dsnEnabled": true,
+    "semanticDomain": "infrastructure"
+  },
+  "components": [
+    {
+      "slot": "sidebar:nav-item",
+      "id": "api-gateway-nav",
+      "description": "Navigation item for API gateway panel"
+    },
+    {
+      "slot": "sidebar:view:api-gateway",
+      "id": "api-gateway-panel",
+      "description": "API gateway configuration and monitoring panel"
+    }
+  ],
+  "actions": [
+    {
+      "name": "gateway:message",
+      "type": "ipc-event",
+      "description": "Emitted when a normalized webhook message is received"
+    }
+  ],
+  "permissions": [
+    "network:http"
+  ]
+}

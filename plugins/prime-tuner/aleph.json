@@ -1,0 +1,59 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": true,
+    "semanticDomain": "meta"
+  },
+  "skills": [
+    {
+      "name": "tune_primes",
+      "description": "Adjust prime resonance parameters for improved coherence",
+      "executionLocation": "CLIENT"
+    }
+  ],
+  "permissions": [
+    "dsn:register-tool"
+  ],
+  "settings": [
+    {
+      "key": "resonanceFrequency",
+      "label": "Resonance Frequency (Hz)",
+      "type": "number",
+      "default": 432,
+      "description": "Target frequency for prime tuning",
+      "min": 20,
+      "max": 20000
+    },
+    {
+      "key": "autoTune",
+      "label": "Auto Tune",
+      "type": "boolean",
+      "default": false,
+      "description": "Automatically adjust tuning parameters based on feedback"
+    },
+    {
+      "key": "sensitivity",
+      "label": "Tuning Sensitivity",
+      "type": "number",
+      "default": 0.5,
+      "description": "Sensitivity of the tuning algorithm (0.0 - 1.0)",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "key": "mode",
+      "label": "Tuning Mode",
+      "type": "select",
+      "default": "harmonic",
+      "description": "Algorithm used for tuning",
+      "options": [
+        { "label": "Harmonic", "value": "harmonic" },
+        { "label": "Melodic", "value": "melodic" },
+        { "label": "Scalar", "value": "scalar" }
+      ]
+    }
+  ]
+}

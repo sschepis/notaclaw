@@ -1,0 +1,14 @@
+{
+  "id": "@alephnet/entangled-chat",
+  "version": "0.1.0",
+  "name": "Entangled Chat",
+  "description": "Non-local, resonance-based communication system using prime entanglement protocols.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.tsx",
+  "permissions": [
+    "network:p2p",
+    "store:read",
+    "store:write",
+    "crypto:sign"
+  ]
+}

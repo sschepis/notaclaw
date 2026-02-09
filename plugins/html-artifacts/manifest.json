@@ -1,0 +1,13 @@
+{
+  "id": "@alephnet/html-artifacts",
+  "version": "0.1.0",
+  "name": "HTML Artifact Studio",
+  "description": "Generate, preview, and edit HTML/React artifacts.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "dsn:register-tool",
+    "fs:read",
+    "fs:write"
+  ]
+}

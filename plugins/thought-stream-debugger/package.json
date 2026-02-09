@@ -1,0 +1,13 @@
+{
+  "name": "@alephnet/thought-stream-debugger",
+  "version": "0.1.0",
+  "description": "Advanced observability tool for inspecting agent execution traces, memory access, and resonance scores.",
+  "main": "main/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "d3": "^7.8.5",
+    "framer-motion": "^11.0.0"
+  }
+}

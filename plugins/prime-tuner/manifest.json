@@ -1,0 +1,12 @@
+{
+  "id": "@alephnet/prime-tuner",
+  "version": "0.1.0",
+  "name": "Prime Tuner",
+  "description": "Diagnostic tool to visualize and tune Prime-Resonant frequencies.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "store:read",
+    "store:write"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": true,
+    "semanticDomain": "perceptual"
+  },
+  "skills": [
+    {
+      "name": "generate_artifact",
+      "description": "Generates an HTML or React artifact. Use this to create web pages, dashboards, or UI components.",
+      "executionLocation": "SERVER"
+    }
+  ],
+  "permissions": [
+    "dsn:register-tool"
+  ]
+}

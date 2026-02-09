@@ -1,0 +1,16 @@
+{
+  "name": "@alephnet/secrets-manager",
+  "version": "0.1.0",
+  "description": "Securely manage API keys and secrets.",
+  "main": "main/index.js",
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "secrets-manager"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

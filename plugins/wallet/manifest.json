@@ -1,0 +1,14 @@
+{
+  "id": "@alephnet/wallet",
+  "version": "0.1.0",
+  "name": "AlephNet Wallet",
+  "description": "Manages identity, Aleph Token (ℵ) balance, staking, and transactions.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "dsn:identity",
+    "store:read",
+    "store:write",
+    "network:http"
+  ]
+}

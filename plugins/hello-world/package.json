@@ -1,0 +1,16 @@
+{
+  "name": "@alephnet/hello-world",
+  "version": "1.0.0",
+  "description": "A test plugin",
+  "main": "main/index.js",
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "hello-world"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

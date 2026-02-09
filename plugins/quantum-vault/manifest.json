@@ -1,0 +1,12 @@
+{
+  "id": "@alephnet/quantum-vault",
+  "version": "0.1.0",
+  "name": "Quantum Vault",
+  "description": "High-security enclave for storing sensitive data using post-quantum cryptography.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.tsx",
+  "permissions": [
+    "store:secure",
+    "crypto:sign"
+  ]
+}

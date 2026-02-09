@@ -1,0 +1,36 @@
+{
+  "id": "@alephnet/secure-comms",
+  "version": "0.1.0",
+  "name": "Secure Comms",
+  "description": "Encrypted peer-to-peer messaging and private rooms.",
+  "author": "AlephNet",
+  "license": "MIT",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": [
+    "dsn:identity",
+    "network:p2p",
+    "dsn:register-tool",
+    "network:http"
+  ],
+  "semanticDomain": "perceptual",
+  "aleph": {
+    "capabilities": {
+      "skillProvider": true,
+      "dsnEnabled": true,
+      "semanticDomain": "perceptual"
+    },
+    "tools": [
+      {
+        "name": "send_secure_message",
+        "description": "Send an encrypted message to another node",
+        "executionLocation": "CLIENT"
+      },
+      {
+        "name": "verify_signature",
+        "description": "Verify the cryptographic signature of a message",
+        "executionLocation": "CLIENT"
+      }
+    ]
+  }
+}

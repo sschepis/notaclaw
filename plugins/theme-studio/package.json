@@ -1,0 +1,19 @@
+{
+  "name": "@alephnet/theme-studio",
+  "version": "0.1.0",
+  "description": "Advanced UI customization and theming.",
+  "main": "main/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "theme-studio"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

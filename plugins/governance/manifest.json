@@ -1,0 +1,16 @@
+{
+  "id": "@alephnet/governance",
+  "version": "0.1.0",
+  "name": "Governance Console",
+  "description": "Participation in decentralized governance, voting, and coherence claims.",
+  "author": "AlephNet",
+  "license": "MIT",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": [
+    "dsn:identity",
+    "store:write",
+    "dsn:publish-observation"
+  ],
+  "semanticDomain": "meta"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@notaclaw/resonant-agent",
+  "version": "1.0.0",
+  "description": "Semantic Resonance Engine as a Notaclaw Plugin",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@sschepis/alephnet-node": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

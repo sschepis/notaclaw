@@ -1,0 +1,13 @@
+{
+  "id": "@alephnet/social-mirror",
+  "version": "0.1.0",
+  "name": "Social Mirror",
+  "description": "Ingests social graphs and content from Farcaster, Lens, and Twitter into the Global Memory Field.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.tsx",
+  "permissions": [
+    "network:http",
+    "store:read",
+    "store:write"
+  ]
+}

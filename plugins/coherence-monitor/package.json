@@ -1,0 +1,19 @@
+{
+  "name": "@alephnet/coherence-monitor",
+  "version": "0.1.0",
+  "description": "Visualizes Free Energy minimization and node coherence.",
+  "main": "main/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "coherence-monitor"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

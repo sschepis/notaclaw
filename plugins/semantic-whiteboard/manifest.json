@@ -1,0 +1,13 @@
+{
+  "id": "@alephnet/semantic-whiteboard",
+  "version": "0.1.0",
+  "name": "Semantic Whiteboard",
+  "description": "Real-time collaborative canvas where humans and agents co-create mind maps, diagrams, and notes.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.tsx",
+  "permissions": [
+    "network:http",
+    "store:read",
+    "store:write"
+  ]
+}

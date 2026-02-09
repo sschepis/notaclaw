@@ -1,0 +1,19 @@
+{
+  "name": "@alephnet/api-gateway",
+  "version": "0.1.0",
+  "description": "Exposes agent capabilities via local REST/WebSocket API.",
+  "main": "main/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "api-gateway"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

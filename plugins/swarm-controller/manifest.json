@@ -1,0 +1,12 @@
+{
+  "id": "@alephnet/swarm-controller",
+  "version": "0.1.0",
+  "name": "Swarm Controller",
+  "description": "Orchestration tool for managing multiple DSN nodes.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "network:p2p",
+    "dsn:identity"
+  ]
+}

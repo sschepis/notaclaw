@@ -1,0 +1,76 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "capabilities": {
+    "skillProvider": true,
+    "dsnEnabled": true,
+    "semanticDomain": "cognitive"
+  },
+  "skills": [
+    {
+      "name": "semantic_search",
+      "description": "Search indexed content using semantic similarity for meaning-based retrieval",
+      "executionLocation": "CLIENT"
+    },
+    {
+      "name": "index_content",
+      "description": "Index content for semantic search with embeddings and metadata",
+      "executionLocation": "CLIENT"
+    },
+    {
+      "name": "find_similar_content",
+      "description": "Find content similar to an already indexed item",
+      "executionLocation": "CLIENT"
+    }
+  ],
+  "permissions": [
+    "dsn:register-tool",
+    "store:read",
+    "store:write"
+  ],
+  "settings": [
+    {
+      "key": "vectorDimension",
+      "label": "Vector Dimension",
+      "type": "number",
+      "default": 128,
+      "min": 32,
+      "max": 512,
+      "description": "Dimension of embedding vectors (higher = more precision, more memory)"
+    },
+    {
+      "key": "defaultThreshold",
+      "label": "Default Similarity Threshold",
+      "type": "number",
+      "default": 0.5,
+      "min": 0,
+      "max": 1,
+      "step": 0.1,
+      "description": "Minimum similarity score to include in search results"
+    },
+    {
+      "key": "maxResults",
+      "label": "Max Results",
+      "type": "number",
+      "default": 20,
+      "min": 5,
+      "max": 100,
+      "description": "Maximum number of results to return from searches"
+    },
+    {
+      "key": "autoIndex",
+      "label": "Auto-Index Conversations",
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically index conversation messages for search"
+    },
+    {
+      "key": "persistIndex",
+      "label": "Persist Index",
+      "type": "boolean",
+      "default": true,
+      "description": "Save search index to storage between sessions"
+    }
+  ]
+}

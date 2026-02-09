@@ -1,0 +1,13 @@
+{
+  "id": "@alephnet/agent-essentials",
+  "version": "0.1.0",
+  "name": "Agent Essentials",
+  "description": "Standard tools for the SRIA agent (Filesystem, Web Search, System Info).",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "fs:read",
+    "fs:write",
+    "network:http"
+  ]
+}

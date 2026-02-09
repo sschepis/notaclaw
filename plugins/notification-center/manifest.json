@@ -1,0 +1,11 @@
+{
+  "id": "@alephnet/notification-center",
+  "version": "0.1.0",
+  "name": "Notification Center",
+  "description": "Centralized hub for system alerts and notifications.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "ui:notification"
+  ]
+}

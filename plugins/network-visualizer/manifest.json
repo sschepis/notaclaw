@@ -1,0 +1,60 @@
+{
+  "id": "@alephnet/network-visualizer",
+  "version": "0.1.0",
+  "name": "Network Visualizer",
+  "description": "Visualizes the DSN mesh topology and semantic routing paths.",
+  "author": "AlephNet",
+  "license": "MIT",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": [
+    "store:read"
+  ],
+  "semanticDomain": "perceptual",
+  "aleph": {
+    "capabilities": {
+      "skillProvider": false,
+      "dsnEnabled": true,
+      "semanticDomain": "perceptual"
+    },
+    "settings": [
+      {
+        "key": "refreshRate",
+        "label": "Refresh Rate (ms)",
+        "type": "number",
+        "default": 1000,
+        "description": "Interval in milliseconds to refresh network data",
+        "min": 100,
+        "max": 10000
+      },
+      {
+        "key": "showTraffic",
+        "label": "Show Traffic",
+        "type": "boolean",
+        "default": true,
+        "description": "Visualize data traffic between nodes"
+      },
+      {
+        "key": "layoutMode",
+        "label": "Layout Mode",
+        "type": "select",
+        "default": "force-directed",
+        "description": "Algorithm used for node layout",
+        "options": [
+          { "label": "Force Directed", "value": "force-directed" },
+          { "label": "Circular", "value": "circular" },
+          { "label": "Grid", "value": "grid" }
+        ]
+      },
+      {
+        "key": "nodeSize",
+        "label": "Node Size",
+        "type": "number",
+        "default": 10,
+        "description": "Base size of network nodes",
+        "min": 5,
+        "max": 50
+      }
+    ]
+  }
+}

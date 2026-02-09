@@ -1,0 +1,26 @@
+{
+  "id": "@alephnet/hello-world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "description": "A test plugin",
+  "author": "AlephNet",
+  "license": "MIT",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": ["dsn:register-tool"],
+  "semanticDomain": "general",
+  "aleph": {
+    "capabilities": {
+      "skillProvider": true,
+      "dsnEnabled": false,
+      "semanticDomain": "general"
+    },
+    "tools": [
+      {
+        "name": "say_hello",
+        "description": "Says hello to the user",
+        "executionLocation": "CLIENT"
+      }
+    ]
+  }
+}

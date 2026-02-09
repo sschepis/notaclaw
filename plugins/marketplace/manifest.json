@@ -1,0 +1,23 @@
+{
+  "id": "@alephnet/marketplace",
+  "version": "0.1.0",
+  "name": "Service Marketplace",
+  "description": "Discovery and subscription management for SRIA services.",
+  "author": "AlephNet",
+  "license": "MIT",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": [
+    "network:http",
+    "store:read",
+    "store:write"
+  ],
+  "semanticDomain": "temporal",
+  "aleph": {
+    "capabilities": {
+      "skillProvider": false,
+      "dsnEnabled": true,
+      "semanticDomain": "temporal"
+    }
+  }
+}

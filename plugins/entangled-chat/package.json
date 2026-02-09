@@ -1,0 +1,13 @@
+{
+  "name": "@alephnet/entangled-chat",
+  "version": "0.1.0",
+  "description": "Non-local, resonance-based communication system using prime entanglement protocols.",
+  "main": "main/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "libsodium-wrappers": "^0.7.13",
+    "simple-peer": "^9.11.1"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "@alephnet/theme-studio",
+  "version": "0.1.0",
+  "name": "Theme Studio",
+  "description": "Advanced UI customization and theming.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "ui:theme"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@alephnet/federated-trainer",
+  "version": "0.1.0",
+  "description": "Orchestrates distributed training rounds for fine-tuning SLMs across the mesh without sharing raw data.",
+  "main": "main/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs-node": "^4.17.0",
+    "simple-peer": "^9.11.1"
+  }
+}

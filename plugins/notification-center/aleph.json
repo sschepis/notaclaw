@@ -1,0 +1,11 @@
+{
+  "$schema": "https://aleph.network/schemas/aleph-extension-v1.json",
+  "type": "aleph-extension",
+  "alephVersion": "1.0.0",
+  "capabilities": {
+    "skillProvider": false,
+    "dsnEnabled": true,
+    "semanticDomain": "perceptual"
+  },
+  "permissions": []
+}

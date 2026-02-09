@@ -1,0 +1,231 @@
+/* KaTeX CSS for math rendering - must be first */
+@import 'katex/dist/katex.min.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.3rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    background-image: radial-gradient(circle at center, rgba(30, 41, 59, 0.1) 0%, transparent 70%);
+  }
+  [data-theme="light"] body,
+  [data-theme="daylight"] body {
+    background-image: radial-gradient(circle at center, rgba(15, 23, 42, 0.08) 0%, transparent 70%);
+  }
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gray-700/50 hover:bg-gray-600/80 transition-colors rounded-full;
+  }
+
+  .glass-panel {
+    @apply bg-background/80 backdrop-blur-xl border border-border shadow-xl;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* ========================================
+   Markdown Content Styles
+   ======================================== */
+
+/* KaTeX Math Styling Overrides */
+.markdown-content .katex-display {
+  @apply my-6 overflow-x-auto overflow-y-hidden py-3;
+}
+
+.markdown-content .katex {
+  font-size: 1.1em;
+  color: #e2e8f0;
+}
+
+.markdown-content .katex-display > .katex {
+  font-size: 1.2em;
+}
+
+/* Math block container styling */
+.markdown-content .katex-display {
+  @apply bg-gray-800/30 rounded-lg border border-white/5 px-4;
+}
+
+/* Inline math styling */
+.markdown-content .katex:not(.katex-display .katex) {
+  @apply px-1;
+}
+
+/* Make math expressions blend with dark theme */
+.markdown-content .katex .mord,
+.markdown-content .katex .mop,
+.markdown-content .katex .mrel,
+.markdown-content .katex .mbin,
+.markdown-content .katex .minner,
+.markdown-content .katex .mopen,
+.markdown-content .katex .mclose,
+.markdown-content .katex .mpunct {
+  color: inherit;
+}
+
+/* Special styling for fractions and large operators */
+.markdown-content .katex .frac-line {
+  border-bottom-color: #a78bfa;
+}
+
+.markdown-content .katex .mop-limits > .vlist-t .vlist-r .vlist::before {
+  border-bottom-color: #a78bfa;
+}
+
+/* ========================================
+   Syntax Highlighter Theme Adjustments
+   ======================================== */
+
+.markdown-content pre {
+  @apply font-mono;
+}
+
+/* Line numbers styling */
+.markdown-content .linenumber {
+  @apply text-gray-600 select-none pr-4 text-right;
+  min-width: 3em;
+}
+
+/* Scrollbar for code blocks */
+.markdown-content pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.markdown-content pre::-webkit-scrollbar-track {
+  @apply bg-gray-800/50 rounded;
+}
+
+.markdown-content pre::-webkit-scrollbar-thumb {
+  @apply bg-gray-600/50 rounded hover:bg-gray-500/50;
+}
+
+/* ========================================
+   Additional Typography Styles
+   ======================================== */
+
+/* First paragraph in blockquote should not have top margin */
+.markdown-content blockquote > p:first-child {
+  @apply mt-0;
+}
+
+/* Last paragraph in blockquote should not have bottom margin */
+.markdown-content blockquote > p:last-child {
+  @apply mb-0;
+}
+
+/* Nested lists */
+.markdown-content ul ul,
+.markdown-content ol ol,
+.markdown-content ul ol,
+.markdown-content ol ul {
+  @apply my-1;
+}
+
+/* Task list styling */
+.markdown-content li:has(> input[type="checkbox"]) {
+  @apply list-none -ml-6;
+}
+
+/* Table cell alignment */
+.markdown-content th[align="center"],
+.markdown-content td[align="center"] {
+  @apply text-center;
+}
+
+.markdown-content th[align="right"],
+.markdown-content td[align="right"] {
+  @apply text-right;
+}

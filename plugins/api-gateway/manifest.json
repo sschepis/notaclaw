@@ -1,0 +1,11 @@
+{
+  "id": "@alephnet/api-gateway",
+  "version": "0.1.0",
+  "name": "API Gateway",
+  "description": "Exposes agent capabilities via local REST/WebSocket API.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "network:http"
+  ]
+}

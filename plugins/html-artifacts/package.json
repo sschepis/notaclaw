@@ -1,0 +1,12 @@
+{
+  "name": "@alephnet/html-artifacts",
+  "version": "0.1.0",
+  "description": "Generate, preview, and edit HTML/React artifacts.",
+  "main": "main/index.js",
+  "keywords": ["alephnet", "plugin", "html-artifacts"],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}

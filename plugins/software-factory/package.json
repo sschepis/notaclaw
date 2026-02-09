@@ -1,0 +1,18 @@
+{
+  "name": "@notaclaw/software-factory",
+  "version": "1.0.0",
+  "description": "A sophisticated software development plugin for Notaclaw",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@sschepis/alephnet-node": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

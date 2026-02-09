@@ -1,0 +1,216 @@
+.flexlayout__layout {
+    --color-text: hsl(var(--muted-foreground));
+    --color-background: transparent;
+    --color-base: transparent;
+    --color-1: hsl(var(--card));
+    --color-2: hsl(var(--muted));
+    --color-3: hsl(var(--muted-foreground));
+    --color-drag1: hsl(var(--primary) / 0.5);
+    --color-drag2: hsl(var(--primary) / 0.5);
+    --color-icon: hsl(var(--muted-foreground));
+    --color-tab-selected: hsl(var(--primary));
+    --color-tab-unselected: hsl(var(--muted-foreground));
+    --color-tab-hover: hsl(var(--foreground));
+    --color-overflow: hsl(var(--card));
+    
+    background-color: transparent;
+    height: 100%;
+    min-height: 100%;
+    display: flex;
+}
+
+/* Ensure root containers stretch full height */
+.flexlayout__layout,
+.flexlayout__layout_main,
+.flexlayout__layout_border_container,
+.flexlayout__layout_border_container_inner,
+.flexlayout__row,
+.flexlayout__tabset,
+.flexlayout__tabset_container,
+.flexlayout__tabset_content,
+.flexlayout__tab,
+.flexlayout__tab_moveable,
+.flexlayout__tab_content,
+.flexlayout__border,
+.flexlayout__border_inner,
+.flexlayout__border_tab_content {
+    height: 100%;
+    min-height: 0;
+}
+
+.flexlayout__row {
+    flex: 1 1 auto;
+}
+
+/* Make tab contents a flex column to prevent extra vertical slack */
+.flexlayout__tab_moveable {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+/* Ensure tab content children don't exceed parent bounds */
+.flexlayout__tab_moveable > * {
+    max-height: 100%;
+    min-height: 0;
+}
+
+/* Make the layout body fill available space */
+.flexlayout__layout > .flexlayout__tabset_container,
+.flexlayout__layout > .flexlayout__tabset_container > .flexlayout__tabset,
+.flexlayout__layout > .flexlayout__tabset_container > .flexlayout__tabset > .flexlayout__tabset_content {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Tab Header Strip */
+.flexlayout__tab_set_header {
+    background-color: hsl(var(--muted)) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    border-bottom: 1px solid hsl(var(--border));
+    box-shadow: none !important;
+    padding: 4px 4px 0 4px !important; /* Top padding for tab rounding */
+    height: 36px !important; /* Increased height for better touch/click targets */
+    display: flex;
+    align-items: flex-end !important;
+}
+
+/* Tab Button */
+.flexlayout__tab_button {
+    background-color: transparent !important;
+    background-image: none !important;
+    color: var(--color-tab-unselected);
+    border: 1px solid transparent !important;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 16px !important;
+    margin: 0 2px -1px 0 !important; /* Overlap bottom border */
+    display: flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    border-top-left-radius: 6px !important;
+    border-top-right-radius: 6px !important;
+    position: relative;
+    opacity: 0.7;
+    box-shadow: none !important;
+}
+
+.flexlayout__tab_button:hover {
+    background-color: hsl(var(--background) / 0.5) !important;
+    color: var(--color-tab-hover);
+    opacity: 1;
+}
+
+.flexlayout__tab_button--selected {
+    background-color: hsl(var(--background)) !important;
+    background-image: none !important;
+    color: var(--color-tab-selected) !important;
+    border-top: 1px solid hsl(var(--primary) / 0.3) !important;
+    border-left: 1px solid hsl(var(--border)) !important;
+    border-right: 1px solid hsl(var(--border)) !important;
+    border-bottom: 1px solid hsl(var(--background)) !important; /* Hide header border */
+    z-index: 5;
+    opacity: 1;
+    box-shadow: none !important;
+}
+
+/* Top accent line for active tab */
+.flexlayout__tab_button--selected::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: hsl(var(--primary));
+    border-radius: 6px 6px 0 0;
+    opacity: 1;
+}
+
+/* Splitter */
+.flexlayout__splitter {
+    background-color: transparent !important;
+    border: none !important;
+    z-index: 10;
+}
+
+.flexlayout__splitter:hover {
+    background-color: hsl(var(--primary)) !important;
+    transition: background-color 0.2s ease;
+}
+
+.flexlayout__splitter_drag {
+    background-color: hsl(var(--primary) / 0.5) !important;
+    border-radius: 2px;
+}
+
+/* Tab Content */
+.flexlayout__tab {
+    background-color: hsl(var(--background)) !important;
+}
+
+/* Floating Window */
+.flexlayout__floating_window_body {
+    background-color: hsl(var(--popover)) !important;
+    border: 1px solid hsl(var(--border));
+}
+
+.flexlayout__floating_window_title {
+    background-color: hsl(var(--popover)) !important;
+    border-bottom: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding-left: 12px !important;
+}
+
+/* Toolbar Buttons (Close, Maximize, Float) */
+.flexlayout__tab_toolbar_button {
+    width: 20px !important;
+    height: 20px !important;
+    margin-left: 4px !important;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.4;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.flexlayout__tab_toolbar_button:hover {
+    background-color: hsl(var(--muted));
+    opacity: 1;
+}
+
+.flexlayout__tab_toolbar_button svg {
+    fill: hsl(var(--muted-foreground)) !important;
+    width: 12px !important;
+    height: 12px !important;
+}
+
+.flexlayout__tab_toolbar_button:hover svg {
+    fill: hsl(var(--foreground)) !important;
+}
+
+/* Hide trailing garbage */
+.flexlayout__tab_button_trailing {
+    display: none !important;
+}
+
+/* Drag Rect */
+.flexlayout__drag_rect {
+    background-color: hsl(var(--primary) / 0.1) !important;
+    border: 1px solid hsl(var(--primary)) !important;
+    border-radius: 4px;
+    box-shadow: none !important;
+    backdrop-filter: none;
+}
+
+/* Custom scrollbars for the layout panels */
+.flexlayout__tab_content {
+    @apply overflow-hidden !important;
+}

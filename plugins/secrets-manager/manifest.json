@@ -1,0 +1,22 @@
+{
+  "id": "@alephnet/secrets-manager",
+  "version": "0.1.0",
+  "name": "Secrets Manager",
+  "description": "Securely manage API keys and secrets.",
+  "author": "AlephNet",
+  "license": "MIT",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": [
+    "secrets:read",
+    "secrets:write"
+  ],
+  "semanticDomain": "security",
+  "aleph": {
+    "capabilities": {
+      "skillProvider": false,
+      "dsnEnabled": false,
+      "semanticDomain": "security"
+    }
+  }
+}

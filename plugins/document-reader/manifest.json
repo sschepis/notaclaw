@@ -1,0 +1,12 @@
+{
+  "id": "@alephnet/document-reader",
+  "version": "0.1.0",
+  "name": "Document Reader",
+  "description": "Advanced document ingestion and semantic indexing.",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "fs:read",
+    "store:write"
+  ]
+}
