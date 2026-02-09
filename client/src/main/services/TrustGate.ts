@@ -66,6 +66,11 @@ const CAPABILITY_MATRIX: Partial<Record<Capability, Partial<Record<TrustLevel, M
     COMMUNITY: { decision: 'CONFIRM', risk: 'medium' },
     UNKNOWN: { decision: 'DENY' },
   },
+  'gateway:register': {
+    VOUCHED: { decision: 'ALLOW' },
+    COMMUNITY: { decision: 'CONFIRM', risk: 'high' },
+    UNKNOWN: { decision: 'DENY' },
+  },
   'dsn:publish-observation': {
     VOUCHED: { decision: 'ALLOW' },
     COMMUNITY: { decision: 'CONFIRM', risk: 'medium' },

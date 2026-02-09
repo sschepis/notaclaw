@@ -94,6 +94,18 @@ export interface ServiceDefinition {
   smfSignature: number[];
 }
 
+export interface GatewayDefinition {
+  id: string;
+  name: string;
+  type: string;
+  status?: 'connected' | 'disconnected' | 'error';
+  networkName: string;
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  submitTask(task: any): Promise<string>;
+  getTaskStatus(taskId: string): Promise<any>;
+}
+
 export interface ServiceInstance {
   serviceId: string;
   nodeId: string;
@@ -148,3 +160,4 @@ export interface ServiceSubscription {
   apiKey: string;
   createdAt: number;
 }
+

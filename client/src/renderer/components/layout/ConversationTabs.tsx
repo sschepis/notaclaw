@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { X, Plus, MessageSquare, Users, Rss, FileText } from 'lucide-react';
+import { X, Plus, MessageSquare, Users, Rss, FileText, Puzzle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const ConversationTabs: React.FC = () => {
@@ -9,7 +9,7 @@ export const ConversationTabs: React.FC = () => {
         activeTabId,
         setActiveTabId,
         closeTab,
-        createConversation
+        startDraftConversation
     } = useAppStore();
 
     // Icon mapping
@@ -19,6 +19,7 @@ export const ConversationTabs: React.FC = () => {
             case 'chat': return <MessageSquare size={12} className={className} />;
             case 'group': return <Users size={12} className={className} />;
             case 'feed': return <Rss size={12} className={className} />;
+            case 'extension': return <Puzzle size={12} className={className} />;
             default: return <FileText size={12} className={className} />;
         }
     };
@@ -68,7 +69,7 @@ export const ConversationTabs: React.FC = () => {
             </AnimatePresence>
 
             <button
-                onClick={() => createConversation()}
+                onClick={() => startDraftConversation()}
                 className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ml-1"
                 title="New Chat"
             >

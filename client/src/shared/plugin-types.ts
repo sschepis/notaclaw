@@ -1,6 +1,6 @@
 // Plugin Types
 import type { SkillDefinition, KeyTriplet } from './types';
-import type { ServiceDefinition } from './service-types';
+import type { ServiceDefinition, GatewayDefinition } from './service-types';
 import type { TrustAssessment } from './trust-types';
 import type { UIExtensionAPI } from './slot-types';
 
@@ -37,6 +37,7 @@ export interface AlephExtension {
   permissions: PluginPermission[];
   components?: any;
   actions?: any;
+  configuration?: any;
 }
 
 export interface PluginManifest {
@@ -167,7 +168,7 @@ export interface PluginContext {
       }): void;
     };
     gateways: {
-      register(gateway: ChannelGateway): void;
+      register(gateway: GatewayDefinition): void;
     };
     sandbox: SandboxProvider; // Available if 'exec:spawn' permission granted
   };

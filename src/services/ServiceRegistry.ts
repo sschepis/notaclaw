@@ -1,9 +1,10 @@
 import { AlephGunBridge } from '@sschepis/alephnet-node';
-import { ServiceDefinition, ServiceInstance } from '../shared/service-types';
+import { ServiceDefinition, ServiceInstance, GatewayDefinition } from '../shared/service-types';
 
 export class ServiceRegistry {
     private bridge: AlephGunBridge;
     private toolHandlers: Map<string, Function> = new Map();
+    private gateways: Map<string, GatewayDefinition> = new Map();
 
     constructor(bridge: AlephGunBridge) {
         this.bridge = bridge;
@@ -12,6 +13,27 @@ export class ServiceRegistry {
     registerToolHandler(name: string, handler: Function) {
         this.toolHandlers.set(name, handler);
         console.log(`Registered handler for tool: ${name}`);
+    }
+
+    async registerGateway(gateway: GatewayDefinition) {
+        this.gateways.set(gateway.id, gateway);
+        console.log(`Registered gateway: ${gateway.id} (${gateway.type})`);
+        
+        try {
+            await gateway.connect();
+            gateway.status = 'connected';
+        } catch (error) {
+            console.error(`Failed to connect gateway ${gateway.id}:`, error);
+            gateway.status = 'error';
+        }
+    }
+
+    getGateway(id: string): GatewayDefinition | undefined {
+        return this.gateways.get(id);
+    }
+
+    getGateways(): GatewayDefinition[] {
+        return Array.from(this.gateways.values());
     }
 
     async invokeTool(name: string, args: any): Promise<any> {

@@ -57,11 +57,6 @@ const NAV_ITEMS: Record<string, { label: string; icon: React.ReactNode; color?: 
     label: "Extensions",
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
   },
-  'chat-mode': {
-    label: "Chat Mode",
-    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>,
-    color: "green"
-  },
   messages: {
     label: "Messages",
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
@@ -149,7 +144,7 @@ const PluginNavButton: React.FC<{
 };
 
 export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode, onOpenSettings }) => {
-  const { activeSidebarView, setActiveSidebarView, navOrder, setNavOrder, setLayoutAction } = useAppStore();
+  const { activeSidebarView, setActiveSidebarView, navOrder, setNavOrder, setLayoutAction, activeConversationId, startDraftConversation } = useAppStore();
   
   // Get plugin-registered navigation items
   const pluginNavigations = usePluginNavigations();
@@ -191,10 +186,14 @@ export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode, onOpenSe
                 const isActive = id === 'chat-mode' ? currentMode === 'chat' : activeSidebarView === id;
                 
                 let onClick = () => setActiveSidebarView(id as any);
-                if (id === 'chat-mode') {
+                if (id === 'messages') {
                     onClick = () => {
+                        setActiveSidebarView('messages');
                         setMode('chat');
                         setLayoutAction({ type: 'open', component: 'stage', name: 'CHAT', icon: 'stage' });
+                        if (!activeConversationId) {
+                            startDraftConversation();
+                        }
                     };
                 } else if (id === 'groups') {
                     onClick = () => {

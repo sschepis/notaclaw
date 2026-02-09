@@ -64,7 +64,7 @@ export interface Conversation {
 
 export interface Tab {
   id: string;
-  type: 'chat' | 'group' | 'feed' | 'file';
+  type: 'chat' | 'group' | 'feed' | 'file' | 'extension';
   title: string;
   data?: any;
 }
@@ -106,6 +106,7 @@ interface AppState {
   // Actions
   loadConversations: () => Promise<void>;
   createConversation: (title?: string) => Promise<string>;
+  startDraftConversation: () => void; // New action
   deleteConversation: (id: string) => Promise<void>;
   setActiveConversationId: (id: string | null) => void;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
@@ -277,6 +278,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
   },
 
+  startDraftConversation: () => {
+    const draftId = `draft-${Date.now()}`;
+    const newConversation: Conversation = {
+        id: draftId,
+        title: 'New Chat',
+        messages: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+    };
+    
+    set(state => {
+        const newTab: Tab = {
+            id: draftId,
+            type: 'chat',
+            title: 'New Chat'
+        };
+        return {
+            conversations: { ...state.conversations, [draftId]: newConversation },
+            activeConversationId: draftId,
+            openConversationIds: [...state.openConversationIds, draftId],
+            tabs: [...state.tabs, newTab],
+            activeTabId: draftId
+        };
+    });
+  },
+
   createConversation: async (title) => {
     try {
         const aiConv = await window.electronAPI.aiConversationCreate({ title });
@@ -426,27 +453,68 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addMessage: async (msg, conversationId) => {
-    const targetId = conversationId || get().activeConversationId;
+    let targetId = conversationId || get().activeConversationId;
     
     if (!targetId) {
-        // Create new conversation first
-        const newId = await get().createConversation('New Conversation');
-        if (newId) {
-            await get().addMessage(msg, newId);
+        // Create new draft conversation first if none exists
+        get().startDraftConversation();
+        targetId = get().activeConversationId;
+        if (!targetId) return;
+    }
+
+    // Check if target is a draft
+    if (targetId.startsWith('draft-')) {
+        // Create real conversation
+        // Use message content as title (truncated)
+        const title = msg.content.substring(0, 30) || 'New Chat';
+        
+        try {
+            const aiConv = await window.electronAPI.aiConversationCreate({ title });
+            const newConversation = fromAIConversation(aiConv);
+            const realId = newConversation.id;
+            
+            // Replace draft with real conversation in store
+            set(state => {
+                // Remove draft
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { [targetId!]: draft, ...restConversations } = state.conversations;
+                
+                // Create new tab replacing the draft tab
+                const newTabs = state.tabs.map(t => 
+                    t.id === targetId ? { ...t, id: realId, title: newConversation.title } : t
+                );
+                
+                // Update open/active IDs
+                const newOpenIds = state.openConversationIds.map(id => id === targetId ? realId : id);
+                
+                return {
+                    conversations: { ...restConversations, [realId]: newConversation },
+                    activeConversationId: realId,
+                    openConversationIds: newOpenIds,
+                    tabs: newTabs,
+                    activeTabId: realId
+                };
+            });
+            
+            // Update targetId to use real ID for message addition
+            targetId = realId;
+            
+        } catch (err) {
+            console.error('Failed to create real conversation from draft:', err);
+            return;
         }
-        return;
     }
 
     // Update local state immediately for responsiveness
     set((state) => {
-        const conversation = state.conversations[targetId];
+        const conversation = state.conversations[targetId!];
         if (!conversation) return state;
         if (conversation.messages.some(m => m.id === msg.id)) return state;
 
         return {
             conversations: {
                 ...state.conversations,
-                [targetId]: {
+                [targetId!]: {
                     ...conversation,
                     messages: [...conversation.messages, msg],
                     updatedAt: Date.now()
@@ -458,7 +526,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Persist to backend
     try {
         await window.electronAPI.aiConversationAddMessage({
-            conversationId: targetId,
+            conversationId: targetId!,
             message: toAIMessage(msg)
         });
     } catch (err) {

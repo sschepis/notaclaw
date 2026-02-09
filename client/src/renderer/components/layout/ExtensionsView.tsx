@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { usePluginStore, ExtensionFilter } from '../../store/usePluginStore';
+import { useAppStore } from '../../store/useAppStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { PluginManifest, SkillManifest } from '../../../shared/plugin-types';
 import { PopupMenu, PopupMenuItem } from '../ui/PopupMenu';
@@ -9,6 +10,7 @@ import { Trash2, Power, RefreshCw, Download, Copy, Settings, MoreVertical } from
 
 export const ExtensionsView: React.FC = () => {
     const { plugins, availableSkills, filter, setFilter, setPlugins, setAvailableSkills, updatePluginStatus, removePlugin } = usePluginStore();
+    const { openTab } = useAppStore();
     const [search, setSearch] = useState('');
     const [menuState, setMenuState] = useState<{
         position?: { x: number; y: number };
@@ -68,6 +70,14 @@ export const ExtensionsView: React.FC = () => {
     };
 
     const filteredItems = getDisplayedItems();
+
+    const handleExtensionClick = (item: PluginManifest | SkillManifest) => {
+        openTab({
+            id: item.id,
+            type: 'extension',
+            title: item.name
+        });
+    };
 
     const handleContextMenu = (e: React.MouseEvent, id: string) => {
         e.preventDefault();
@@ -196,8 +206,9 @@ export const ExtensionsView: React.FC = () => {
                     return (
                         <div
                             key={item.id}
+                            onClick={() => handleExtensionClick(item)}
                             onContextMenu={(e) => installed && handleContextMenu(e, item.id)}
-                            className={`p-3 bg-card rounded-lg hover:bg-muted/50 transition-colors border border-border hover:border-primary/30 group relative ${isDisabled ? 'opacity-75' : ''}`}
+                            className={`p-3 bg-card rounded-lg hover:bg-muted/50 transition-colors border border-border hover:border-primary/30 group relative cursor-pointer ${isDisabled ? 'opacity-75' : ''}`}
                         >
                             <div className="flex flex-wrap justify-between items-start mb-1 gap-y-1">
                                 <div className="flex items-center gap-2 min-w-0">
@@ -221,7 +232,15 @@ export const ExtensionsView: React.FC = () => {
                                 <span className="text-[10px] text-muted-foreground/70 font-mono">{item.id}</span>
                                 <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     {!installed && (
-                                        <button className="text-[10px] bg-primary hover:bg-primary/90 text-primary-foreground px-2 py-1 rounded" title="Install">
+                                        <button 
+                                            className="text-[10px] bg-primary hover:bg-primary/90 text-primary-foreground px-2 py-1 rounded" 
+                                            title="Install"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                // TODO: Implement install
+                                                console.log('Install', item.id);
+                                            }}
+                                        >
                                             Install
                                         </button>
                                     )}

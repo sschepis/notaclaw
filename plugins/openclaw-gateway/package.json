@@ -1,0 +1,11 @@
+{
+  "name": "openclaw-gateway",
+  "version": "0.1.0",
+  "main": "dist/plugins/openclaw-gateway/src/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

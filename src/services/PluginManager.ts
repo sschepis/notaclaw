@@ -13,7 +13,7 @@ import { TrustEvaluator } from './TrustEvaluator';
 import { TrustGate } from './TrustGate';
 import { SignedEnvelope, Capability, TrustAssessment, CapabilityCheckResult } from '../shared/trust-types';
 import { SkillDefinition } from '../shared/types';
-import { ServiceDefinition } from '../shared/service-types';
+import { ServiceDefinition, GatewayDefinition } from '../shared/service-types';
 
 export class PluginManager extends BasePluginManager<PluginContext> {
   private pluginsDir: string;
@@ -330,7 +330,10 @@ export class PluginManager extends BasePluginManager<PluginContext> {
             }
         },
         gateways: {
-            register: (_gateway) => console.warn('Gateways not implemented')
+            register: (gateway: GatewayDefinition) => {
+                check('gateway:register');
+                this.serviceRegistry.registerGateway(gateway);
+            }
         },
         sandbox: {} as any
       },

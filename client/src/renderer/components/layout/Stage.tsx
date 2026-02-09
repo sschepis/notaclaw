@@ -1,15 +1,20 @@
 import React, { useState, useCallback } from 'react';
 import { ChatView } from './ChatView';
+import { ExtensionDetailView } from './ExtensionDetailView';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ConversationTabs } from './ConversationTabs';
 import { ConversationSidebar, TaskDetailDialog } from '../conversation';
 import { ScheduledTask } from '../../../shared/alephnet-types';
+import { useAppStore } from '../../store/useAppStore';
 
 interface StageProps {
   mode: 'chat' | 'canvas';
 }
 
 export const Stage: React.FC<StageProps> = ({ mode }) => {
+  const { tabs, activeTabId } = useAppStore();
+  const activeTab = tabs.find(t => t.id === activeTabId);
+
   // Sidebar state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
@@ -68,17 +73,23 @@ export const Stage: React.FC<StageProps> = ({ mode }) => {
                 
                 {/* Main content area with sidebar */}
                 <div className="flex-1 min-h-0 flex relative">
-                    {/* Chat area */}
+                    {/* Content area */}
                     <div className="flex-1 min-w-0 min-h-0 relative">
-                        <ChatView onTaskClick={handleTaskClick} />
+                        {activeTab?.type === 'extension' ? (
+                            <ExtensionDetailView />
+                        ) : (
+                            <ChatView onTaskClick={handleTaskClick} />
+                        )}
                     </div>
                     
-                    {/* Collapsible Sidebar */}
-                    <ConversationSidebar
-                        isOpen={isSidebarOpen}
-                        onToggle={handleToggleSidebar}
-                        onTaskClick={handleTaskClick}
-                    />
+                    {/* Collapsible Sidebar - Only show for chat views */}
+                    {activeTab?.type !== 'extension' && (
+                        <ConversationSidebar
+                            isOpen={isSidebarOpen}
+                            onToggle={handleToggleSidebar}
+                            onTaskClick={handleTaskClick}
+                        />
+                    )}
                 </div>
             </motion.div>
         ) : (
