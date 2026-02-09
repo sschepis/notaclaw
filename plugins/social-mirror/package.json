@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@farcaster/hub-nodejs": "^0.11.0",
+    "@neynar/nodejs-sdk": "^3.131.0",
     "twitter-api-v2": "^1.16.0"
   }
 }

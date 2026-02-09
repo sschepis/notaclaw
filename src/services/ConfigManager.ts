@@ -1,0 +1,133 @@
+import path from 'path';
+import fs from 'fs/promises';
+
+const CONFIG_FILE = 'config.json';
+
+export interface NetworkConfig {
+  peers: string[];
+  bootstrapUrl: string;
+  heartbeatIntervalMs: number;
+}
+
+export interface LoggingConfig {
+  level: 'debug' | 'info' | 'warn' | 'error';
+  format: 'json' | 'pretty';
+  outputFile?: string;
+}
+
+export interface AppConfig {
+  network: NetworkConfig;
+  logging: LoggingConfig;
+}
+
+const DEFAULT_CONFIG: AppConfig = {
+  network: {
+    peers: [
+      'http://localhost:8765/gun',
+      'https://gun-manhattan.herokuapp.com/gun',
+      'https://gun-us.herokuapp.com/gun'
+    ],
+    bootstrapUrl: 'https://alephnet.io/bootstrap',
+    heartbeatIntervalMs: 30000
+  },
+  logging: {
+    level: 'info',
+    format: 'json'
+  }
+};
+
+export class ConfigManager {
+  private configPath: string | null = null;
+  private config: AppConfig = DEFAULT_CONFIG;
+  private loaded = false;
+
+  constructor() {
+    // Path is resolved in initialize()
+  }
+
+  private getConfigPath(): string {
+    if (!this.configPath) {
+      // Use 'data' directory in current working directory for headless node
+      const dataDir = path.join(process.cwd(), 'data');
+      this.configPath = path.join(dataDir, CONFIG_FILE);
+    }
+    return this.configPath;
+  }
+
+  async initialize(): Promise<void> {
+    try {
+      const configPath = this.getConfigPath();
+      // Ensure directory exists
+      await fs.mkdir(path.dirname(configPath), { recursive: true });
+      
+      const data = await fs.readFile(configPath, 'utf-8');
+      const userConfig = JSON.parse(data);
+      // Deep merge with defaults
+      this.config = this.deepMerge(DEFAULT_CONFIG, userConfig);
+      this.loaded = true;
+    } catch {
+      // Config doesn't exist, use defaults and create it
+      this.config = DEFAULT_CONFIG;
+      await this.save();
+      this.loaded = true;
+    }
+  }
+
+  getConfig(): AppConfig {
+    return this.config;
+  }
+
+  getNetworkConfig(): NetworkConfig {
+    return this.config.network;
+  }
+
+  getLoggingConfig(): LoggingConfig {
+    return this.config.logging;
+  }
+
+  async updateNetworkConfig(updates: Partial<NetworkConfig>): Promise<void> {
+    this.config.network = { ...this.config.network, ...updates };
+    await this.save();
+  }
+
+  async updateLoggingConfig(updates: Partial<LoggingConfig>): Promise<void> {
+    this.config.logging = { ...this.config.logging, ...updates };
+    await this.save();
+  }
+
+  async addPeer(peerUrl: string): Promise<void> {
+    if (!this.config.network.peers.includes(peerUrl)) {
+      this.config.network.peers.push(peerUrl);
+      await this.save();
+    }
+  }
+
+  async removePeer(peerUrl: string): Promise<void> {
+    this.config.network.peers = this.config.network.peers.filter(p => p !== peerUrl);
+    await this.save();
+  }
+
+  private async save(): Promise<void> {
+    const data = JSON.stringify(this.config, null, 2);
+    const configPath = this.getConfigPath();
+    await fs.writeFile(configPath, data, { mode: 0o600 });
+  }
+
+  private deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
+    const result = { ...target };
+    for (const key of Object.keys(source) as (keyof T)[]) {
+      const sourceVal = source[key];
+      const targetVal = target[key];
+      if (sourceVal && typeof sourceVal === 'object' && !Array.isArray(sourceVal) &&
+          targetVal && typeof targetVal === 'object' && !Array.isArray(targetVal)) {
+        result[key] = this.deepMerge(targetVal, sourceVal as any);
+      } else if (sourceVal !== undefined) {
+        result[key] = sourceVal as T[keyof T];
+      }
+    }
+    return result;
+  }
+}
+
+// Singleton instance
+export const configManager = new ConfigManager();

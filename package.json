@@ -18,8 +18,15 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.39",
+    "@ai-sdk/google": "^3.0.23",
+    "@ai-sdk/openai": "^3.0.26",
     "@sschepis/alephnet-node": "^1.4.0",
+    "@types/uuid": "^10.0.0",
+    "ai": "^6.0.78",
     "framer-motion": "^12.33.0",
-    "lucide-react": "^0.563.0"
+    "gun": "^0.2020.1241",
+    "lucide-react": "^0.563.0",
+    "uuid": "^13.0.0"
   }
 }

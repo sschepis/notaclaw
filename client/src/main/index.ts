@@ -1,5 +1,16 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
+import { webcrypto } from 'node:crypto';
+
+// Polyfill crypto.getRandomValues for libraries like uuid
+if (!global.crypto) {
+    // @ts-ignore
+    global.crypto = webcrypto;
+} else if (!global.crypto.getRandomValues) {
+    // @ts-ignore
+    global.crypto.getRandomValues = webcrypto.getRandomValues.bind(webcrypto);
+}
+
 import { DSNNode } from './services/DSNNode';
 import { AIProviderManager } from './services/AIProviderManager';
 import { PersonalityManager } from './services/PersonalityManager';

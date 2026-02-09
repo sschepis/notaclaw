@@ -2,6 +2,7 @@
   "name": "@alephnet/entangled-chat",
   "version": "0.1.0",
   "description": "Non-local, resonance-based communication system using prime entanglement protocols.",
+  "type": "module",
   "main": "main/index.js",
   "scripts": {
     "build": "tsc"

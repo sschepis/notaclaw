@@ -2,6 +2,7 @@
   "name": "@alephnet/federated-trainer",
   "version": "0.1.0",
   "description": "Orchestrates distributed training rounds for fine-tuning SLMs across the mesh without sharing raw data.",
+  "type": "module",
   "main": "main/index.js",
   "scripts": {
     "build": "tsc"
