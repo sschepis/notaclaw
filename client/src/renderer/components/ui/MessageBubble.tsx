@@ -114,7 +114,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           {/* Bubble Container */}
           <div className="relative group/bubble">
             
-            <MessageActions 
+            <MessageActions
+              content={content}
               isUser={isUser}
               isGenerating={isGenerating}
               copied={copied}

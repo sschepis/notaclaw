@@ -139,6 +139,10 @@ export interface IElectronAPI {
   secretsStatus: () => Promise<VaultStatus>;
   secretsLock: () => Promise<void>;
   secretsUnlock: () => Promise<void>;
+
+  // App-level Command Invocation
+  onAppInvoke: (callback: (event: any, payload: { requestId: string, channel: string, data: any }) => void) => () => void;
+  sendAppResponse: (requestId: string, response: any) => Promise<void>;
 }
 
 declare global {

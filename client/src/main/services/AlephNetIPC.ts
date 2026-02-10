@@ -180,6 +180,7 @@ export function registerAlephNetIPC(
   // ═══════════════════════════════════════════════════════════════════
   handle('fs:list', (p) => client.fsList(p));
   handle('fs:read', (p) => client.fsRead(p));
+  handle('fs:write', (p) => client.fsWrite(p));
   handle('fs:home', () => client.fsHome());
 
   // ═══════════════════════════════════════════════════════════════════

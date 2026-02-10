@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Send, Heart, MessageSquare, Users, Bell, MoreHorizontal, Image as ImageIcon, Link as LinkIcon, ArrowUp, ArrowDown, Share2, Search, Ghost } from 'lucide-react';
+import { MessageSquare, Bell, MoreHorizontal, Image as ImageIcon, Link as LinkIcon, ArrowUp, ArrowDown, Share2, Ghost } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Card, CardContent } from '../../ui/card';
@@ -15,7 +14,7 @@ interface GroupDetailViewProps {
 export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId }) => {
   const {
     groups: { groups, activeGroupPosts },
-    createGroupPost, reactToPost, setActivePost, loadPostComments
+    createGroupPost, setActivePost, loadPostComments
   } = useAlephStore();
 
   const [postInput, setPostInput] = useState('');

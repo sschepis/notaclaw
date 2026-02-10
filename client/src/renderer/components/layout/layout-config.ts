@@ -43,7 +43,7 @@ export const defaultLayout: IJsonModel = {
                 children: [
                     {
                         type: "tab",
-                        name: "New Chat",
+                        name: "Chat",
                         component: "stage",
                         enableClose: true,
                         id: "stage",

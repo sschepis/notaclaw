@@ -20,7 +20,7 @@ interface PluginRegistryEntry {
   id: string; // Unique ID (e.g., @scope/name)
   name: string;
   description: string;
-  npmPackage: string; // e.g., "@notaclaw/plugin-awesome"
+  npmPackage: string; // e.g., "@alephnet/plugin-awesome"
   version: string;
   authorId: string; // AlephNet Identity
   

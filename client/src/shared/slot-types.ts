@@ -364,8 +364,8 @@ export interface SlotContextMap {
   'chat:message-before': ChatMessage;
   'chat:message-after': ChatMessage;
   'chat:message-action': ChatMessage;
-  'chat:input-before': undefined;
-  'chat:input-after': undefined;
+  'chat:input-before': InputContext;
+  'chat:input-after': InputContext;
   'chat:empty-state': undefined;
   
   // Overlay slots
@@ -375,6 +375,14 @@ export interface SlotContextMap {
   'fence:renderer': FenceContext;
   'settings:tab': undefined;
   'onboarding:step': undefined;
+}
+
+export interface InputContext {
+  content: string;
+  setContent: (content: string) => void;
+  metadata: Record<string, any>;
+  setMetadata: (key: string, value: any) => void;
+  onSend: () => void;
 }
 
 export interface NavRailContext {

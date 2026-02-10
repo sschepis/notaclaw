@@ -4,6 +4,41 @@ import { GatewayDefinition } from '../../../src/shared/service-types';
 export const activate = async (context: PluginContext) => {
     console.log('OpenClaw Gateway activating...');
 
+    // Register traits for AI to understand OpenClaw capabilities
+    context.traits.register({
+        id: 'openclaw-gateway:task-delegation',
+        name: 'OpenClaw Task Delegation',
+        description: 'Enables delegating compute tasks to the distributed OpenClaw network',
+        instruction: `You have access to the OpenClaw distributed compute network for delegating tasks.
+
+Available tools:
+- 'openclaw_submit_task': Submit a compute task to the OpenClaw network
+  Parameters: description (required), requirements (optional object with compute specs)
+  Returns: taskId for tracking
+
+- 'openclaw_get_task_status': Check status of a submitted task
+  Parameters: taskId (required)
+  Returns: task status, progress, and results when complete
+
+- 'openclaw_cancel_task': Cancel a running task
+  Parameters: taskId (required)
+
+- 'openclaw_list_nodes': List available OpenClaw compute nodes
+  Returns: array of connected nodes
+
+Use OpenClaw when:
+- User needs to run compute-intensive tasks (ML training, data processing)
+- Local resources are insufficient for the requested operation
+- Tasks can run asynchronously while waiting for results
+- Distributed computation would be more efficient
+
+Note: Tasks are executed on remote nodes. Results may take time depending on complexity.`,
+        activationMode: 'dynamic',
+        triggerKeywords: ['openclaw', 'distributed', 'compute', 'delegate', 'run task', 'offload', 'parallel', 'cluster'],
+        priority: 12,
+        source: 'openclaw-gateway'
+    });
+
     const config = context.manifest.alephConfig?.configuration || {};
     const endpoints: Array<{ name: string; url: string }> = config.endpoints || [];
 

@@ -85,7 +85,6 @@ export const FreeEnergyGraph: React.FC<FreeEnergyGraphProps> = ({
     const recent = values.slice(-10);
     let trend: 'decreasing' | 'increasing' | 'stable' = 'stable';
     if (recent.length >= 2) {
-      const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
       const firstHalf = recent.slice(0, Math.floor(recent.length / 2));
       const secondHalf = recent.slice(Math.floor(recent.length / 2));
       const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;

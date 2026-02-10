@@ -1,0 +1,18 @@
+{
+  "id": "auto-dash",
+  "name": "AutoDash",
+  "version": "1.0.0",
+  "description": "A generative runtime dashboard that updates dynamically based on context.",
+  "main": "main/index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": [
+    "ai:complete",
+    "dsn:register-tool",
+    "dsn:invoke-tool",
+    "store:read",
+    "store:write",
+    "exec:shell"
+  ],
+  "semanticDomain": "dashboard",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxsaW5lIHgxPSIzIiB5MT0iOSIgeDI9IjIxIiB5Mj0iOSIvPjxsaW5lIHgxPSI5IiB5MT0iMjEiIHgyPSI5IiB5Mj0iOSIvPjwvc3ZnPg=="
+}

@@ -117,6 +117,12 @@ const CAPABILITY_MATRIX: Partial<Record<Capability, Partial<Record<TrustLevel, M
     COMMUNITY: { decision: 'DENY' },
     UNKNOWN: { decision: 'DENY' },
   },
+  'memory:create-field': {
+    // SELF: ALLOW (default)
+    VOUCHED: { decision: 'CONFIRM', risk: 'medium' },
+    COMMUNITY: { decision: 'CONFIRM', risk: 'high' },
+    UNKNOWN: { decision: 'DENY' },
+  },
 };
 
 export class TrustGate implements ITrustGate {

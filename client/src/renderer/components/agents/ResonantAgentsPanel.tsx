@@ -7,7 +7,8 @@ import {
   ChevronRight, 
   Plus, 
   Users,
-  Trash2
+  Trash2,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAlephStore } from '../../store/useAlephStore';
@@ -18,7 +19,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/renderer/components/ui/dropdown-menu';
+} from '../ui/dropdown-menu';
 import { CreateAgentDialog } from './CreateAgentDialog';
 import { SRIAAgent, AgentStepResult } from '@/shared/alephnet-types';
 
@@ -40,9 +41,9 @@ const StatusDot: React.FC<{ status: string; freeEnergy?: number }> = ({ status, 
   }
 
   return (
-    <div className="relative flex h-2.5 w-2.5">
+    <div className="relative flex h-2 w-2">
       {pulse && <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${color}`}></span>}
-      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${color}`}></span>
+      <span className={`relative inline-flex rounded-full h-2 w-2 ${color}`}></span>
     </div>
   );
 };
@@ -52,15 +53,15 @@ const FreeEnergyMiniBar: React.FC<{ value: number; trend?: 'up' | 'down' | 'stab
   const color = value < 0.3 ? 'bg-emerald-500' : value < 0.7 ? 'bg-amber-500' : 'bg-red-500';
   
   return (
-    <div className="flex items-center gap-1.5 w-full max-w-[80px]">
-      <div className="h-1 flex-1 bg-gray-800 rounded-full overflow-hidden">
+    <div className="flex items-center gap-1.5 w-full max-w-[60px]">
+      <div className="h-0.5 flex-1 bg-gray-800 rounded-full overflow-hidden">
         <div 
           className={`h-full rounded-full transition-all duration-500 ${color}`}
           style={{ width: `${width}%` }}
         />
       </div>
       {trend && (
-        <span className={`text-[9px] ${trend === 'down' ? 'text-emerald-400' : trend === 'up' ? 'text-red-400' : 'text-gray-500'}`}>
+        <span className={`text-[8px] ${trend === 'down' ? 'text-emerald-400' : trend === 'up' ? 'text-red-400' : 'text-gray-500'}`}>
           {trend === 'down' ? '↓' : trend === 'up' ? '↑' : '→'}
         </span>
       )}
@@ -68,11 +69,18 @@ const FreeEnergyMiniBar: React.FC<{ value: number; trend?: 'up' | 'down' | 'stab
   );
 };
 
-const AgentCard: React.FC<{ 
-  agent: SRIAAgent; 
+interface AgentCardProps {
+  agent: SRIAAgent;
   onOpenDetail: (id: string) => void;
   stepLog: AgentStepResult[];
-}> = ({ agent, onOpenDetail, stepLog }) => {
+  selected: boolean;
+  onSelect: (id: string, multi: boolean) => void;
+  onContextMenu: (e: React.MouseEvent, id: string) => void;
+}
+
+const AgentCard: React.FC<AgentCardProps> = ({ 
+  agent, onOpenDetail, stepLog, selected, onSelect, onContextMenu 
+}) => {
   const { summonAgent, dismissAgent, deleteAgent, stepAgent } = useAlephStore();
   const [expanded, setExpanded] = useState(false);
   const [stepInput, setStepInput] = useState('');
@@ -97,56 +105,54 @@ const AgentCard: React.FC<{
   };
 
   return (
-    <div className="group bg-card hover:bg-muted/30 border border-border rounded-lg transition-all overflow-hidden">
-      {/* Header Row */}
-      <div 
-        className="flex items-center gap-3 p-3 cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
-      >
+    <div 
+      className={`group bg-card hover:bg-muted/30 border rounded transition-all overflow-hidden ${selected ? 'border-primary ring-1 ring-primary bg-muted/20' : 'border-border'}`}
+      onClick={(e) => {
+        onSelect(agent.id, e.metaKey || e.ctrlKey);
+      }}
+      onContextMenu={(e) => onContextMenu(e, agent.id)}
+    >
+      {/* Header Row - Ultra Compact */}
+      <div className="flex items-center gap-1.5 px-2 py-1 cursor-pointer">
         <StatusDot status={agent.status} freeEnergy={freeEnergy} />
         
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground truncate">{agent.name}</span>
-            {agent.status === 'active' && (
-              <FreeEnergyMiniBar value={freeEnergy} trend={trend} />
-            )}
-          </div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              {agent.status === 'active' ? 'PERCEIVING' : agent.status} {/* Mock state for now */}
-            </span>
-          </div>
-        </div>
+        <span className="flex-1 min-w-0 text-xs font-medium text-foreground truncate">{agent.name}</span>
+        
+        {agent.status === 'active' && (
+          <FreeEnergyMiniBar value={freeEnergy} trend={trend} />
+        )}
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
           <Button 
             variant="ghost" 
             size="icon" 
-            className="h-6 w-6 hover:bg-muted"
-            onClick={() => onOpenDetail(agent.id)}
+            className="h-4 w-4 hover:bg-muted"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
           >
-            <ChevronRight size={14} className="text-muted-foreground" />
+            <ChevronRight size={12} className={`text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
           </Button>
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-muted">
-                <MoreVertical size={14} className="text-muted-foreground" />
+              <Button variant="ghost" size="icon" className="h-4 w-4 hover:bg-muted">
+                <MoreVertical size={12} className="text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-32 bg-popover border-border">
               {agent.status !== 'active' ? (
                 <DropdownMenuItem onClick={() => summonAgent(agent.id)}>
-                  <Zap className="mr-2 h-3.5 w-3.5 text-emerald-400" /> Summon
+                  <Zap className="mr-2 h-3 w-3 text-emerald-400" /> Summon
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem onClick={() => dismissAgent(agent.id)}>
-                  <Square className="mr-2 h-3.5 w-3.5 text-amber-400" /> Dismiss
+                  <Square className="mr-2 h-3 w-3 text-amber-400" /> Dismiss
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={() => deleteAgent(agent.id)} className="text-destructive focus:text-destructive">
-                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                <Trash2 className="mr-2 h-3 w-3" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -161,49 +167,35 @@ const AgentCard: React.FC<{
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             className="border-t border-border bg-muted/10"
+            onClick={e => e.stopPropagation()}
           >
-            <div className="p-3 space-y-3">
-              {/* Lifecycle Pipeline (Mini) */}
-              <div className="flex justify-between items-center px-1">
-                {['D','P','D','A','L'].map((step, i) => (
-                  <div key={i} className="flex flex-col items-center gap-1">
-                    <div className={`w-1.5 h-1.5 rounded-full ${i === 1 ? 'bg-primary animate-pulse' : 'bg-muted'}`} />
-                    <span className="text-[8px] text-muted-foreground">{step}</span>
-                  </div>
-                ))}
-              </div>
-
+            <div className="px-2 py-1.5 space-y-1.5">
               {/* Beliefs Preview */}
-              <div className="space-y-1.5">
-                <p className="text-[10px] text-muted-foreground font-medium">Top Beliefs</p>
+              <div className="space-y-0.5">
+                <p className="text-[8px] text-muted-foreground font-medium uppercase tracking-wider">Beliefs</p>
                 {agent.beliefs.slice(0, 2).map(b => (
-                  <div key={b.id} className="text-xs">
-                    <div className="flex justify-between text-muted-foreground mb-0.5">
-                      <span className="truncate max-w-[140px]">{b.content}</span>
-                      <span>{b.probability.toFixed(2)}</span>
-                    </div>
-                    <div className="h-1 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary/50 rounded-full" style={{ width: `${b.probability * 100}%` }} />
-                    </div>
+                  <div key={b.id} className="text-[10px] flex items-center gap-1">
+                    <span className="truncate flex-1 text-muted-foreground">{b.content}</span>
+                    <span className="text-muted-foreground/60">{b.probability.toFixed(2)}</span>
                   </div>
                 ))}
                 {agent.beliefs.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic">No beliefs formed yet.</p>
+                  <p className="text-[9px] text-muted-foreground/60 italic">No beliefs yet</p>
                 )}
               </div>
 
               {/* Step Controls */}
               {agent.status === 'active' && (
-                <div className="flex gap-2">
+                <div className="flex gap-1">
                   <input 
                     value={stepInput}
                     onChange={e => setStepInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleStep()}
                     placeholder="Observation..." 
-                    className="flex-1 bg-muted/20 border border-border rounded px-2 py-1 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/50"
+                    className="flex-1 bg-muted/20 border border-border rounded px-1.5 py-0.5 text-[10px] text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/50"
                   />
-                  <Button size="sm" onClick={handleStep} className="h-6 px-2 bg-primary/80 hover:bg-primary text-[10px] text-primary-foreground">
-                    <Zap size={10} />
+                  <Button size="sm" onClick={handleStep} className="h-5 px-1.5 bg-primary/80 hover:bg-primary text-[9px] text-primary-foreground">
+                    <Zap size={9} />
                   </Button>
                 </div>
               )}
@@ -211,10 +203,10 @@ const AgentCard: React.FC<{
               <Button 
                 variant="outline" 
                 size="sm" 
-                className="w-full h-7 text-xs border-border hover:bg-muted text-muted-foreground"
+                className="w-full h-5 text-[9px] border-border hover:bg-muted text-muted-foreground"
                 onClick={() => onOpenDetail(agent.id)}
               >
-                Open Full Detail
+                Full Detail
               </Button>
             </div>
           </motion.div>
@@ -229,18 +221,34 @@ const AgentCard: React.FC<{
 export const ResonantAgentsPanel: React.FC = () => {
   const { 
     agents: { agents, teams, stepLog },
-    loadAgents, loadTeams
+    loading,
+    loadAgents, loadTeams, createTeam
   } = useAlephStore();
-  const { setLayoutAction } = useAppStore();
+  const { setLayoutAction, createConversation } = useAppStore();
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [teamsExpanded, setTeamsExpanded] = useState(true);
+  
+  // Selection State
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; agentIds: string[] } | null>(null);
 
   // Initial load
   React.useEffect(() => {
     loadAgents();
     loadTeams();
   }, []);
+
+  // Close context menu on click outside
+  React.useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
+  const isLoading = loading['agents'] || loading['teams'];
 
   const handleOpenDetail = (agentId: string) => {
     const agent = agents.find(a => a.id === agentId);
@@ -256,35 +264,101 @@ export const ResonantAgentsPanel: React.FC = () => {
     });
   };
 
+  const handleSelect = (id: string, multi: boolean) => {
+    const newSelection = new Set(multi ? selectedIds : []);
+    if (multi && selectedIds.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedIds(newSelection);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let targetIds = [id];
+    if (selectedIds.has(id)) {
+      // If right-clicked on a selected item, use current selection
+      targetIds = Array.from(selectedIds);
+    } else {
+      // If right-clicked on unselected item, select it (exclusive)
+      setSelectedIds(new Set([id]));
+    }
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      agentIds: targetIds
+    });
+  };
+
+  const handleChat = async () => {
+    if (!contextMenu) return;
+    const { agentIds } = contextMenu;
+    
+    if (agentIds.length === 1) {
+      // Single Agent Chat
+      const agent = agents.find(a => a.id === agentIds[0]);
+      if (agent) {
+        await createConversation(`Chat with ${agent.name}`);
+        // TODO: Associate agent with conversation and switch to chat view
+      }
+    } else {
+      // Group Chat
+      const names = agentIds.map(id => agents.find(a => a.id === id)?.name).join(', ');
+      await createConversation(`Group: ${names.substring(0, 30)}...`);
+      // TODO: Associate agents with conversation and switch to chat view
+    }
+    setContextMenu(null);
+  };
+
+  const handleCreateTeam = async () => {
+    if (!contextMenu) return;
+    const { agentIds } = contextMenu;
+    if (agentIds.length < 2) return;
+
+    await createTeam(`Team ${teams.length + 1}`, agentIds);
+    setContextMenu(null);
+  };
+
   return (
-    <div className="h-full flex flex-col bg-background text-foreground">
+    <div className="h-full flex flex-col bg-background text-foreground relative">
       {/* Header */}
-      <div className="p-4 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bot className="text-primary" size={18} />
-          <h2 className="font-semibold text-sm tracking-wide">SRIA Agents</h2>
+      <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <Bot className="text-primary" size={14} />
+          <h2 className="font-semibold text-xs tracking-wide">SRIA Agents</h2>
+          {selectedIds.size > 0 && (
+            <span className="text-[9px] text-muted-foreground bg-muted px-1 py-0.5 rounded-full">
+              {selectedIds.size}
+            </span>
+          )}
         </div>
         <Button 
           size="sm" 
           variant="ghost" 
-          className="h-7 w-7 p-0 hover:bg-muted rounded-full"
+          className="h-5 w-5 p-0 hover:bg-muted rounded"
           onClick={() => setIsCreateOpen(true)}
         >
-          <Plus size={16} className="text-muted-foreground" />
+          <Plus size={12} className="text-muted-foreground" />
         </Button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-6">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-4">
         
         {/* Agents List */}
-        <div className="space-y-2">
-          {agents.length === 0 ? (
-            <div className="text-center py-8 px-4 border border-dashed border-border rounded-lg">
-              <Bot className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-xs text-muted-foreground mb-3">No agents created yet.</p>
-              <Button size="sm" variant="outline" onClick={() => setIsCreateOpen(true)} className="text-xs">
-                Create First Agent
+        <div className="space-y-1">
+          {agents.length === 0 && isLoading ? (
+             <div className="text-center py-4 text-muted-foreground text-xs">Loading...</div>
+          ) : agents.length === 0 ? (
+            <div className="text-center py-4 px-3 border border-dashed border-border rounded">
+              <Bot className="mx-auto h-6 w-6 text-muted-foreground mb-1" />
+              <p className="text-[10px] text-muted-foreground mb-2">No agents yet</p>
+              <Button size="sm" variant="outline" onClick={() => setIsCreateOpen(true)} className="text-[10px] h-6">
+                Create Agent
               </Button>
             </div>
           ) : (
@@ -294,23 +368,26 @@ export const ResonantAgentsPanel: React.FC = () => {
                 agent={agent} 
                 onOpenDetail={handleOpenDetail}
                 stepLog={stepLog}
+                selected={selectedIds.has(agent.id)}
+                onSelect={handleSelect}
+                onContextMenu={handleContextMenu}
               />
             ))
           )}
         </div>
 
         {/* Teams Section */}
-        <div className="space-y-2">
+        <div className="space-y-1">
           <div 
-            className="flex items-center justify-between cursor-pointer group"
+            className="flex items-center justify-between cursor-pointer group py-0.5"
             onClick={() => setTeamsExpanded(!teamsExpanded)}
           >
-            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
-              <Users size={12} />
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
+              <Users size={10} />
               <span>Teams</span>
             </div>
             <ChevronRight 
-              size={12} 
+              size={10} 
               className={`text-muted-foreground transition-transform ${teamsExpanded ? 'rotate-90' : ''}`} 
             />
           </div>
@@ -321,21 +398,21 @@ export const ResonantAgentsPanel: React.FC = () => {
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="space-y-2"
+                className="space-y-1"
               >
                 {teams.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic px-2">No teams configured.</p>
+                  <p className="text-[10px] text-muted-foreground/60 italic px-1">No teams configured.</p>
                 ) : (
                   teams.map(team => (
-                    <div key={team.id} className="p-3 bg-card border border-border rounded-lg flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-foreground">{team.name}</div>
-                        <div className="text-[10px] text-muted-foreground">{team.agentIds.length} members</div>
+                    <div key={team.id} className="px-2 py-1 bg-card border border-border rounded flex items-center justify-between group">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-foreground">{team.name}</span>
+                        <span className="text-[9px] text-muted-foreground">{team.agentIds.length}</span>
                       </div>
                       <Button 
                         size="sm" 
                         variant="ghost" 
-                        className="h-6 w-6 p-0"
+                        className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => {
                           setLayoutAction({
                             type: 'open',
@@ -346,13 +423,13 @@ export const ResonantAgentsPanel: React.FC = () => {
                           });
                         }}
                       >
-                        <ChevronRight size={14} className="text-muted-foreground" />
+                        <ChevronRight size={12} className="text-muted-foreground" />
                       </Button>
                     </div>
                   ))
                 )}
-                <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground hover:text-foreground justify-start px-2 h-7">
-                  <Plus size={12} className="mr-2" /> Create Team
+                <Button variant="ghost" size="sm" className="w-full text-[10px] text-muted-foreground hover:text-foreground justify-start px-1 h-5">
+                  <Plus size={10} className="mr-1" /> Create Team
                 </Button>
               </motion.div>
             )}
@@ -361,6 +438,46 @@ export const ResonantAgentsPanel: React.FC = () => {
       </div>
 
       <CreateAgentDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
+
+      {/* Context Menu Portal */}
+      {contextMenu && (
+        <div 
+          className="fixed z-50 min-w-[160px] bg-popover border border-border rounded-md shadow-md p-1 animate-in fade-in-80 zoom-in-95"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div 
+            className="flex items-center px-2 py-1.5 text-sm rounded hover:bg-accent hover:text-accent-foreground cursor-pointer"
+            onClick={handleChat}
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            {contextMenu.agentIds.length > 1 ? 'Start Group Chat' : 'Chat with Agent'}
+          </div>
+          
+          {contextMenu.agentIds.length > 1 && (
+             <div 
+              className="flex items-center px-2 py-1.5 text-sm rounded hover:bg-accent hover:text-accent-foreground cursor-pointer"
+              onClick={handleCreateTeam}
+            >
+              <Users className="mr-2 h-4 w-4" />
+              Create Team
+            </div>
+          )}
+
+          <div className="h-px bg-border my-1" />
+          
+          <div 
+            className="flex items-center px-2 py-1.5 text-sm text-destructive rounded hover:bg-destructive/10 cursor-pointer"
+            onClick={() => {
+              // Handle delete multiple
+              setContextMenu(null);
+            }}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete {contextMenu.agentIds.length > 1 ? `(${contextMenu.agentIds.length})` : ''}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

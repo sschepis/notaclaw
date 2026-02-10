@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import * as FramerMotion from 'framer-motion';
 import * as LucideReact from 'lucide-react';
+import * as JSXRuntime from 'react/jsx-runtime';
 import { RendererPluginContext, PluginManifest } from '../../shared/plugin-types';
 import { UIExtensionAPI } from '../../shared/slot-types';
 import { usePluginStore } from '../store/usePluginStore';
@@ -91,7 +92,12 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
   protected async executePlugin(manifest: PluginManifest, _path: string, context: RendererPluginContext): Promise<any> {
       if (!manifest.renderer) return null;
       
-      const bundlePath = `${manifest.path}/${manifest.renderer.replace('index.js', 'bundle.js')}`;
+      // Try to find the bundle.js file
+      // The build script outputs bundle.js in the same directory as the renderer entry point
+      const rendererFile = manifest.renderer;
+      const lastSlash = rendererFile.lastIndexOf('/');
+      const rendererDir = lastSlash !== -1 ? rendererFile.substring(0, lastSlash) : '';
+      const bundlePath = `${manifest.path}/${rendererDir ? rendererDir + '/' : ''}bundle.js`;
       const indexPath = `${manifest.path}/${manifest.renderer}`;
       
       let code: string | undefined;
@@ -320,31 +326,40 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
         sandbox: {} as any
       },
       dsn: {
-        registerTool: (toolDefinition, handler) => {
-             window.electronAPI.pluginRegisterTool(plugin.id, toolDefinition.name);
-             window.electronAPI.onPluginMessage(plugin.id, 'tool-request', async (data: any) => {
-                 try {
-                     if (data.toolName === toolDefinition.name) {
-                         const result = await handler(data.args);
-                         window.electronAPI.sendPluginMessage(plugin.id, `tool-response:${data.requestId}`, {
-                             result
-                         });
-                     }
-                 } catch (e: any) {
-                     window.electronAPI.sendPluginMessage(plugin.id, `tool-response:${data.requestId}`, {
-                         error: e.message
-                     });
-                 }
-             });
-        },
-        registerService: (_svc, _handler) => console.warn("DSN services not supported in renderer yet"),
-        publishObservation: (_content, _smf) => console.warn("DSN observations not supported in renderer yet"),
-        getIdentity: async () => { throw new Error("Not implemented"); }
+      registerTool: (toolDefinition, handler) => {
+           window.electronAPI.pluginRegisterTool(plugin.id, toolDefinition.name);
+           window.electronAPI.onPluginMessage(plugin.id, 'tool-request', async (data: any) => {
+               try {
+                   if (data.toolName === toolDefinition.name) {
+                       const result = await handler(data.args);
+                       window.electronAPI.sendPluginMessage(plugin.id, `tool-response:${data.requestId}`, {
+                           result
+                       });
+                   }
+               } catch (e: any) {
+                   window.electronAPI.sendPluginMessage(plugin.id, `tool-response:${data.requestId}`, {
+                       error: e.message
+                   });
+               }
+           });
       },
+      invokeTool: async (_toolName, _args) => {
+          console.warn("dsn.invokeTool not implemented in renderer");
+          return null;
+      },
+      registerService: (_svc, _handler) => console.warn("DSN services not supported in renderer yet"),
+      publishObservation: (_content, _smf) => console.warn("DSN observations not supported in renderer yet"),
+      getIdentity: async () => { throw new Error("Not implemented"); }
+    },
       ai: {
         complete: async (request: any) => {
           return window.electronAPI.aiComplete(request);
         }
+      },
+
+      traits: {
+        register: (_trait: any) => {},
+        unregister: (_traitId: string) => {}
       },
       
       ui,
@@ -355,6 +370,7 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
       require: (id: string) => {
           switch(id) {
               case 'react': return React;
+              case 'react/jsx-runtime': return JSXRuntime;
               case 'react-dom': return ReactDOM;
               case 'framer-motion': return FramerMotion;
               case 'lucide-react': return LucideReact;

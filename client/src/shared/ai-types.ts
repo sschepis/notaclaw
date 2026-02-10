@@ -51,4 +51,6 @@ export interface AIResponse {
 export interface AISettings {
   providers: AIProviderConfig[];
   rules: AIRoutingRule[];
+  /** The currently selected model ID (e.g., 'claude-3-5-sonnet-20241022') */
+  selectedModel?: string | null;
 }

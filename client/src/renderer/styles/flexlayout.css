@@ -196,9 +196,46 @@
     fill: hsl(var(--foreground)) !important;
 }
 
-/* Hide trailing garbage */
+/* Close button on tabs */
 .flexlayout__tab_button_trailing {
-    display: none !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 16px !important;
+    height: 16px !important;
+    margin-left: 8px !important;
+    border-radius: 4px;
+    opacity: 0.5;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.flexlayout__tab_button_trailing:hover {
+    opacity: 1;
+    background-color: hsl(var(--destructive) / 0.2);
+}
+
+.flexlayout__tab_button_trailing:hover::before {
+    color: hsl(var(--destructive));
+}
+
+/* Style the X icon */
+.flexlayout__tab_button_trailing::before {
+    content: '×';
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    color: hsl(var(--muted-foreground));
+    transition: color 0.15s ease;
+}
+
+.flexlayout__tab_button--selected .flexlayout__tab_button_trailing {
+    opacity: 0.7;
+}
+
+.flexlayout__tab_button--selected .flexlayout__tab_button_trailing:hover {
+    opacity: 1;
 }
 
 /* Drag Rect */

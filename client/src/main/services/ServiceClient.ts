@@ -17,11 +17,11 @@ export class ServiceClient {
 
     async call<T>(serviceId: string, endpoint: string, params: any): Promise<T> {
         // 1. Get Definition
-        const service = await this.registry.getService(serviceId);
+        const service = await (this.registry as any).getService(serviceId);
         if (!service) throw new Error(`Service ${serviceId} not found`);
 
         // 2. Resolve Endpoint
-        const endpointDef = service.interface.endpoints.find(e => e.name === endpoint);
+        const endpointDef = service.interface.endpoints.find((e: any) => e.name === endpoint);
         if (!endpointDef) throw new Error(`Endpoint ${endpoint} not found on service ${serviceId}`);
 
         // 3. Check Auth

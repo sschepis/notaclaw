@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/
 import { MemoryFieldDetail } from './MemoryFieldDetail';
 import { FragmentBrowser } from './FragmentBrowser';
 import { SMFRadarChart } from '../visualizations/SMFRadarChart';
+import { MemoryGraphView } from './MemoryGraphView';
 import type { MemoryScope } from '../../../shared/alephnet-types';
 
 // Scope colors for consistency
@@ -57,7 +58,8 @@ export const MemoryFieldViewer: React.FC = () => {
         fragments,
         loadFields,
         setActiveView,
-        foldToUserField
+        foldToUserField,
+        selectField
     } = useMemoryStore();
     
     const selectedField = selectedFieldId ? fields[selectedFieldId] : null;
@@ -253,9 +255,9 @@ export const MemoryFieldViewer: React.FC = () => {
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: 20 }}
-                                className="h-full p-4"
+                                className="h-full"
                             >
-                                <DependencyGraphView />
+                                <MemoryGraphView onSelectField={selectField} />
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -341,106 +343,3 @@ const SemanticView: React.FC<{ field: any }> = ({ field }) => {
     );
 };
 
-// Dependency graph view using SVG
-const DependencyGraphView: React.FC = () => {
-    const { getFieldsByScope } = useMemoryStore();
-    
-    const userFields = getFieldsByScope('user');
-    const conversationFields = getFieldsByScope('conversation');
-    
-    // Calculate layout
-    const width = 800;
-    const height = 500;
-    const centerX = width / 2;
-    const userY = 100;
-    const convY = 300;
-    
-    const userNode = userFields[0]; // Assume primary user field for now
-    
-    // Distribute conversation nodes
-    const convNodes = conversationFields.map((field, i) => {
-        const total = conversationFields.length;
-        const x = centerX + (i - (total - 1) / 2) * 120;
-        return { ...field, x, y: convY };
-    });
-
-    return (
-        <div className="h-full flex flex-col items-center justify-center overflow-hidden">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Memory Dependency Graph</h3>
-            
-            <div className="bg-card rounded-xl border border-border overflow-hidden relative" style={{ width, height }}>
-                <svg width={width} height={height} className="absolute inset-0">
-                    <defs>
-                        <marker id="arrow" markerWidth="10" markerHeight="10" refX="10" refY="3" orient="auto">
-                            <path d="M0,0 L0,6 L9,3 z" fill="currentColor" className="text-muted-foreground" />
-                        </marker>
-                    </defs>
-                    
-                    {/* Links */}
-                    {userNode && convNodes.map(node => (
-                        <g key={node.id}>
-                            <path
-                                d={`M${node.x},${node.y - 20} C${node.x},${node.y - 80} ${centerX},${userY + 80} ${centerX},${userY + 20}`}
-                                fill="none"
-                                stroke={node.locked ? "currentColor" : "currentColor"}
-                                className={node.locked ? "text-primary" : "text-muted-foreground"}
-                                strokeWidth={node.locked ? 2 : 1}
-                                strokeDasharray={node.locked ? "none" : "5,5"}
-                                markerEnd={node.locked ? "url(#arrow)" : ""}
-                                opacity={0.6}
-                            />
-                        </g>
-                    ))}
-                    
-                    {/* User Node */}
-                    {userNode && (
-                        <g transform={`translate(${centerX}, ${userY})`}>
-                            <circle r="30" className="fill-primary stroke-primary/50" strokeWidth="2" />
-                            <text y="5" textAnchor="middle" fill="white" fontSize="20">👤</text>
-                            <text y="45" textAnchor="middle" className="fill-muted-foreground" fontSize="12">{userNode.name}</text>
-                        </g>
-                    )}
-                    
-                    {/* Conversation Nodes */}
-                    {convNodes.map(node => (
-                        <g key={node.id} transform={`translate(${node.x}, ${node.y})`}>
-                            <circle
-                                r="20"
-                                className={node.locked ? "fill-emerald-900 stroke-emerald-500" : "fill-secondary stroke-secondary-foreground"}
-                                strokeWidth="2"
-                            />
-                            <text y="5" textAnchor="middle" fill="white" fontSize="14">💬</text>
-                            <text y="35" textAnchor="middle" className="fill-muted-foreground" fontSize="10" style={{ maxWidth: 100 }}>
-                                {node.name.length > 15 ? node.name.substring(0, 12) + '...' : node.name}
-                            </text>
-                            {node.locked && (
-                                <text y="-25" textAnchor="middle" className="fill-primary" fontSize="10">FOLDED</text>
-                            )}
-                        </g>
-                    ))}
-                    
-                    {!userNode && (
-                        <text x={centerX} y={height/2} textAnchor="middle" className="fill-muted-foreground">
-                            No user memory field found
-                        </text>
-                    )}
-                </svg>
-            </div>
-            
-            <div className="flex gap-6 mt-4 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-primary border border-primary/50"></div>
-                    <span>User Field</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-secondary border border-secondary-foreground"></div>
-                    <span>Active Conversation</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-900 border border-emerald-500"></div>
-                    <span>Folded Conversation</span>
-                </div>
-            </div>
-        </div>
-    );
-};

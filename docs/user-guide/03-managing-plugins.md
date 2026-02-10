@@ -4,16 +4,19 @@ Plugins extend the functionality of your agent with additional capabilities, UI 
 
 ## Plugin Directory
 
-Plugins are loaded from the `plugins/` directory in the application root. Each plugin is a self-contained folder with its own manifest, code, and assets.
+Plugins are loaded from the `plugins/` and `plugins-extended/` directories. Each plugin is a self-contained folder with its own manifest, code, and assets.
 
 ```
-plugins/
-├── canvas-viz/          # Visualization canvas plugin
-├── elevenvoices/        # Voice synthesis integration
-├── theme-studio/        # Theme customization
-├── swarm-controller/    # Multi-agent orchestration
-├── secrets-manager/     # Secure credential storage
-└── your-plugin/         # Your custom plugins
+plugins/                    # Core plugins (always active)
+├── agent-essentials/       # Core agent capabilities
+├── auto-dash/              # Generative dashboard
+├── knowledge-graph/        # Memory field visualization
+├── notification-center/    # System notifications
+└── secrets-manager/        # Secure credential storage
+
+plugins-extended/           # Extended plugins (optional)
+├── openclaw-gateway/       # OpenClaw network integration
+└── openclaw-skills/        # OpenClaw skill manager
 ```
 
 ## Viewing Installed Plugins
@@ -90,30 +93,30 @@ Plugin-injected components are visually indicated and wrapped in error boundarie
 
 ### Core Plugins
 
-#### Canvas Visualization
-- **ID**: `com.aleph.canvas-viz`
-- **Purpose**: Visual canvas for node graphs and diagrams
-- **Slots**: Stage view
+#### Agent Essentials
+- **ID**: `@alephnet/agent-essentials`
+- **Purpose**: Core SRIA agent capabilities (tools, logging)
+- **Slots**: Inspector tab, sidebar panel
 
-#### ElevenVoices
-- **ID**: `com.aleph.elevenvoices`
-- **Purpose**: Text-to-speech with ElevenLabs integration
-- **Slots**: Message actions, settings tab
+#### Knowledge Graph
+- **ID**: `@alephnet/knowledge-graph`
+- **Purpose**: Memory field visualization and exploration
+- **Slots**: Stage view, sidebar panel
 
-#### Theme Studio
-- **ID**: `com.aleph.theme-studio`
-- **Purpose**: Customize application themes
-- **Slots**: Settings tab
-
-#### Swarm Controller
-- **ID**: `com.aleph.swarm-controller`
-- **Purpose**: Multi-agent orchestration and coordination
-- **Slots**: Inspector tab, stage view
+#### Notification Center
+- **ID**: `@alephnet/notification-center`
+- **Purpose**: Centralized system alerts and notifications
+- **Slots**: Sidebar panel
 
 #### Secrets Manager
-- **ID**: `com.aleph.secrets-manager`
+- **ID**: `@alephnet/secrets-manager`
 - **Purpose**: Secure credential and API key storage
 - **Slots**: Settings tab, sidebar view
+
+### Built-in Voice Features
+Voice capabilities are integrated directly into the chat interface:
+- **Speech-to-Text**: Microphone button in chat input area
+- **Text-to-Speech**: "Read Aloud" action on message bubbles
 
 ## Installing New Plugins
 

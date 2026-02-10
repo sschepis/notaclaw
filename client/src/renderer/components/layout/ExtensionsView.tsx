@@ -6,7 +6,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { PluginManifest, SkillManifest } from '../../../shared/plugin-types';
 import { PopupMenu, PopupMenuItem } from '../ui/PopupMenu';
-import { Trash2, Power, RefreshCw, Download, Copy, Settings, MoreVertical } from 'lucide-react';
+import { Trash2, Power, Download, Copy, Settings } from 'lucide-react';
 
 export const ExtensionsView: React.FC = () => {
     const { plugins, availableSkills, filter, setFilter, setPlugins, setAvailableSkills, updatePluginStatus, removePlugin } = usePluginStore();
@@ -128,14 +128,21 @@ export const ExtensionsView: React.FC = () => {
                 removePlugin(id);
                 console.log('Uninstalled plugin', id);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to uninstall plugin', error);
+            alert(error?.message || 'Failed to uninstall plugin');
         }
+    };
+
+    const isCorePlugin = (id: string): boolean => {
+        const plugin = plugins.find(p => p.id === id);
+        return plugin?.isCore === true;
     };
 
     const getMenuItems = (id: string): PopupMenuItem[] => {
         const plugin = plugins.find(p => p.id === id);
         const isDisabled = plugin?.status === 'disabled';
+        const isCore = isCorePlugin(id);
 
         return [
             {
@@ -164,9 +171,10 @@ export const ExtensionsView: React.FC = () => {
                 onClick: () => isDisabled ? handleEnable(id) : handleDisable(id),
             },
             {
-                label: 'Uninstall Extension',
+                label: isCore ? 'Uninstall Extension (Core)' : 'Uninstall Extension',
                 icon: <Trash2 size={14} />,
-                danger: true,
+                danger: !isCore,
+                disabled: isCore,
                 onClick: () => handleUninstall(id),
             },
         ];

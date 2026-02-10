@@ -13,6 +13,7 @@ import { StatusBar } from './components/layout/StatusBar';
 import { TerminalDrawer } from './components/layout/TerminalDrawer';
 import { PluginOverlays } from './components/ui/PluginOverlays';
 import { PanelRight } from 'lucide-react';
+import { useSlotRegistry } from './services/SlotRegistry';
 
 type OnboardingStep = 'welcome' | 'identity' | 'ai-setup';
 
@@ -24,7 +25,7 @@ function App() {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('welcome');
   
-  const { addMessage, setWallet, setAgentState, setSMF, setNetwork, hasIdentity, setHasIdentity, setIsGenerating, setGenerationProgress, loadConversations } = useAppStore();
+  const { addMessage, setWallet, setAgentState, setSMF, setNetwork, hasIdentity, setHasIdentity, setIsGenerating, setGenerationProgress, loadConversations, loadSelectedModelFromSettings } = useAppStore();
 
   useEffect(() => {
     const checkSetupState = async () => {
@@ -60,6 +61,7 @@ function App() {
         setNeedsOnboarding(false);
         setLoading(false);
         loadConversations(); // Load saved conversations
+        loadSelectedModelFromSettings(); // Load persisted model selection
       } catch (err) {
         console.error('Setup check failed:', err);
         // On error, assume needs full onboarding
@@ -78,47 +80,125 @@ function App() {
     });
 
     // Subscribe to IPC events
-    const cleanupMessage = window.electronAPI.onMessage((_event, msg) => {
-      addMessage(msg);
-      setIsGenerating(false);
-      setGenerationProgress(null);
-    });
-    const cleanupWallet = window.electronAPI.onWalletUpdate((_event, data) => setWallet(data));
-    const cleanupAgent = window.electronAPI.onAgentStateUpdate((_event, data) => setAgentState(data));
-    const cleanupSMF = window.electronAPI.onSMFUpdate((_event, data) => setSMF(data));
-    const cleanupNetwork = window.electronAPI.onNetworkUpdate((_event, data) => setNetwork(data));
+    let cleanupMessage: (() => void) | undefined;
+    let cleanupWallet: (() => void) | undefined;
+    let cleanupAgent: (() => void) | undefined;
+    let cleanupSMF: (() => void) | undefined;
+    let cleanupNetwork: (() => void) | undefined;
+    let cleanupDM: (() => void) | undefined;
+    let cleanupRoom: (() => void) | undefined;
+    let cleanupFriend: (() => void) | undefined;
+    let cleanupGroup: (() => void) | undefined;
+    let cleanupAgentStep: (() => void) | undefined;
+    let cleanupTx: (() => void) | undefined;
+    let cleanupLocalInference: (() => void) | undefined;
+    let cleanupAppInvoke: (() => void) | undefined;
 
-    // AlephNet Real-time Event Subscriptions
-    const aleph = useAlephStore.getState();
-    const cleanupDM = window.electronAPI.onDirectMessage?.((_event, dm) => aleph.handleIncomingDM(dm));
-    const cleanupRoom = window.electronAPI.onRoomMessage?.((_event, msg) => aleph.handleIncomingRoomMessage(msg));
-    const cleanupFriend = window.electronAPI.onFriendRequest?.((_event, req) => aleph.handleIncomingFriendRequest(req));
-    const cleanupGroup = window.electronAPI.onGroupPost?.((_event, post) => aleph.handleIncomingGroupPost(post));
-    const cleanupAgentStep = window.electronAPI.onAgentStep?.((_event, result) => aleph.handleAgentStepEvent(result));
-    const cleanupTx = window.electronAPI.onWalletTransaction?.((_event, tx) => aleph.handleWalletTransaction(tx));
+    try {
+        cleanupMessage = window.electronAPI.onMessage((_event, msg) => {
+          addMessage(msg);
+          setIsGenerating(false);
+          setGenerationProgress(null);
+        });
+        cleanupWallet = window.electronAPI.onWalletUpdate((_event, data) => setWallet(data));
+        cleanupAgent = window.electronAPI.onAgentStateUpdate((_event, data) => setAgentState(data));
+        cleanupSMF = window.electronAPI.onSMFUpdate((_event, data) => setSMF(data));
+        cleanupNetwork = window.electronAPI.onNetworkUpdate((_event, data) => setNetwork(data));
 
-    // WebLLM Delegate Listener
-    const cleanupLocalInference = window.electronAPI.onRequestLocalInference(async (_event, data) => {
-      try {
-          console.log("Received local inference request", data);
-          
-          if (!webLLMService.isInitialized()) {
-              const modelId = data.model || 'Llama-3-8B-Instruct-q4f32_1-MLC'; 
-              await webLLMService.initialize(modelId);
+        // AlephNet Real-time Event Subscriptions
+        const aleph = useAlephStore.getState();
+        cleanupDM = window.electronAPI.onDirectMessage?.((_event, dm) => aleph.handleIncomingDM(dm));
+        cleanupRoom = window.electronAPI.onRoomMessage?.((_event, msg) => aleph.handleIncomingRoomMessage(msg));
+        cleanupFriend = window.electronAPI.onFriendRequest?.((_event, req) => aleph.handleIncomingFriendRequest(req));
+        cleanupGroup = window.electronAPI.onGroupPost?.((_event, post) => aleph.handleIncomingGroupPost(post));
+        cleanupAgentStep = window.electronAPI.onAgentStep?.((_event, result) => aleph.handleAgentStepEvent(result));
+        cleanupTx = window.electronAPI.onWalletTransaction?.((_event, tx) => aleph.handleWalletTransaction(tx));
+
+        // WebLLM Delegate Listener
+        cleanupLocalInference = window.electronAPI.onRequestLocalInference(async (_event, data) => {
+          try {
+              console.log("Received local inference request", data);
+              
+              if (!webLLMService.isInitialized()) {
+                  const modelId = data.model || 'Llama-3-8B-Instruct-q4f32_1-MLC';
+                  await webLLMService.initialize(modelId);
+              }
+
+              const response: any = await webLLMService.chat([
+                  { role: 'user', content: data.content }
+              ]);
+
+              const reply = response.choices[0].message.content || "";
+              
+              await window.electronAPI.submitLocalAIResponse(reply);
+          } catch (error) {
+              console.error("Local inference failed:", error);
+              await window.electronAPI.submitLocalAIResponse(`[Error] Local inference failed: ${error}`);
           }
+        });
 
-          const response: any = await webLLMService.chat([
-              { role: 'user', content: data.content }
-          ]);
-
-          const reply = response.choices[0].message.content || "";
-          
-          await window.electronAPI.submitLocalAIResponse(reply);
-      } catch (error) {
-          console.error("Local inference failed:", error);
-          await window.electronAPI.submitLocalAIResponse(`[Error] Local inference failed: ${error}`);
-      }
-    });
+        // App-level Command Invocation (Main -> Renderer)
+        cleanupAppInvoke = window.electronAPI.onAppInvoke?.(async (_event, { requestId, channel, data }) => {
+            try {
+                let result;
+                if (channel === 'commands:list') {
+                    const commands = useSlotRegistry.getState().commands;
+                    result = Object.values(commands).map(c => ({
+                        id: c.id,
+                        label: c.label,
+                        category: c.category,
+                        description: c.label,
+                        shortcut: c.shortcut
+                    }));
+                } else if (channel === 'commands:execute') {
+                    const commands = useSlotRegistry.getState().commands;
+                    const cmd = commands[data.id];
+                    if (cmd) {
+                        cmd.action();
+                        result = { success: true };
+                    } else {
+                        throw new Error(`Command ${data.id} not found`);
+                    }
+                } else if (channel === 'commands:help') {
+                     const commands = useSlotRegistry.getState().commands;
+                     const cmd = commands[data.id];
+                     if (cmd) {
+                         result = {
+                            id: cmd.id,
+                            label: cmd.label,
+                            category: cmd.category,
+                            shortcut: cmd.shortcut,
+                            description: cmd.label
+                         };
+                     } else {
+                         throw new Error(`Command ${data.id} not found`);
+                     }
+                } else if (channel === 'file:open') {
+                    const filePath = data.path;
+                    try {
+                        const content = await window.electronAPI.fsRead({ path: filePath });
+                        useAppStore.getState().openTab({
+                            id: `file-${filePath}`,
+                            type: 'file',
+                            title: filePath.split('/').pop() || filePath,
+                            data: { path: filePath, content }
+                        });
+                        result = { success: true };
+                    } catch (err: any) {
+                        throw new Error(`Failed to open file: ${err.message}`);
+                    }
+                } else {
+                    throw new Error(`Unknown channel: ${channel}`);
+                }
+                
+                window.electronAPI.sendAppResponse(requestId, { result });
+            } catch (err: any) {
+                window.electronAPI.sendAppResponse(requestId, { error: err.message });
+            }
+        });
+    } catch (e) {
+        console.error('Failed to set up subscriptions:', e);
+    }
 
     return () => {
       cleanupMessage?.();
@@ -133,6 +213,7 @@ function App() {
       cleanupAgentStep?.();
       cleanupTx?.();
       cleanupLocalInference?.();
+      cleanupAppInvoke?.();
     };
 
   }, []);
@@ -160,6 +241,7 @@ function App() {
           inspectorOpen={inspectorOpen}
           setInspectorOpen={setInspectorOpen}
           onOpenSettings={() => setShowSettings(true)}
+          setMode={setMode}
         />
         <div className="flex-1 flex items-center justify-center">
           <span className="text-[10px] text-muted-foreground font-mono tracking-widest select-none">ALEPH<span className="text-primary">NET</span></span>

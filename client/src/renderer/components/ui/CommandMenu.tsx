@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Command } from 'cmdk';
 import { useAppStore } from '../../store/useAppStore';
+import { useCommands } from '../../services/SlotRegistry';
 import { 
   Calculator, 
   Settings, 
@@ -8,17 +9,19 @@ import {
   LayoutGrid,
   ListTodo,
   MessageSquare,
-  Box
+  Box,
+  Command as CommandIcon
 } from 'lucide-react';
 
 export const CommandMenu = () => {
   const [open, setOpen] = useState(false);
   const { setActiveSidebarView } = useAppStore();
+  const commands = useCommands();
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      // Check for Ctrl+Shift+K or Cmd+Shift+K
-      if ((e.key === 'k' || e.key === 'K') && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+      // Check for Ctrl+Shift+P or Cmd+Shift+P
+      if ((e.key === 'p' || e.key === 'P') && e.shiftKey && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setOpen((open) => !open);
       }
@@ -32,6 +35,14 @@ export const CommandMenu = () => {
     setOpen(false);
     command();
   };
+
+  // Group commands by category
+  const groupedCommands = commands.reduce((acc, cmd) => {
+    const category = cmd.category || 'Extensions';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(cmd);
+    return acc;
+  }, {} as Record<string, typeof commands>);
 
   return (
     <Command.Dialog 
@@ -47,7 +58,7 @@ export const CommandMenu = () => {
         />
         <div className="flex gap-1">
             <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-white/10 bg-white/5 px-1.5 font-mono text-[10px] font-medium text-gray-400">
-                <span className="text-xs">⌘⇧</span>K
+                <span className="text-xs">⌘⇧</span>P
             </kbd>
         </div>
       </div>
@@ -103,6 +114,34 @@ export const CommandMenu = () => {
                 <span>Run Diagnostics</span>
             </Command.Item>
         </Command.Group>
+
+        {Object.entries(groupedCommands).map(([category, cmds]) => (
+          <Command.Group key={category} heading={category} className="text-xs font-medium text-gray-500 px-2 py-1.5 mb-2">
+            {cmds.map((cmd) => {
+              const IconComponent = cmd.icon || CommandIcon;
+              // Safety check: ensure IconComponent is a function/object (component) and not a string
+              // If it's a string (e.g. from JSON manifest), fallback to CommandIcon to prevent crash
+              const SafeIcon = (typeof IconComponent === 'function' || typeof IconComponent === 'object') 
+                ? IconComponent 
+                : CommandIcon;
+
+              return (
+                <Command.Item 
+                  key={cmd.id}
+                  onSelect={() => runCommand(cmd.action)}
+                  className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-300 rounded-lg aria-selected:bg-blue-500/20 aria-selected:text-blue-400 cursor-pointer transition-colors"
+                >
+                  <SafeIcon className="w-4 h-4" />
+                  <span>{cmd.label}</span>
+                  {cmd.shortcut && (
+                    <span className="ml-auto text-xs text-gray-500 font-mono">{cmd.shortcut}</span>
+                  )}
+                </Command.Item>
+              );
+            })}
+          </Command.Group>
+        ))}
+
       </Command.List>
     </Command.Dialog>
   );

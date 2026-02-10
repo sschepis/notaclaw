@@ -1,0 +1,17 @@
+{
+  "name": "vscode-control",
+  "version": "0.1.0",
+  "main": "dist/plugins/vscode-control/src/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "ws": "^8.14.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "@types/ws": "^8.5.10",
+    "@types/uuid": "^9.0.7"
+  }
+}

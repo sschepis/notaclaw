@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Check } from 'lucide-react';
+import { useAppStore } from '../../store/useAppStore';
 
 interface MenuItem {
   label: string;
@@ -18,13 +19,16 @@ interface AppMenuBarProps {
   inspectorOpen: boolean;
   setInspectorOpen: (open: boolean) => void;
   onOpenSettings: () => void;
+  setMode: (mode: 'chat' | 'canvas') => void;
 }
 
 export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   inspectorOpen,
   setInspectorOpen,
   onOpenSettings,
+  setMode,
 }) => {
+  const { setActiveSidebarView, setLayoutAction, startDraftConversation } = useAppStore();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -32,7 +36,16 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
     {
       label: 'File',
       items: [
-        { label: 'New Conversation', shortcut: '⌘N', onClick: () => {} },
+        { 
+            label: 'New Conversation', 
+            shortcut: '⌘N', 
+            onClick: () => {
+                setActiveSidebarView('messages');
+                setMode('chat');
+                setLayoutAction({ type: 'open', component: 'stage', name: 'CHAT', icon: 'stage' });
+                startDraftConversation();
+            } 
+        },
         { separator: true, label: '' },
         { label: 'Settings...', shortcut: '⌘,', onClick: onOpenSettings },
       ],

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { ExtensionSlot } from '../ui/ExtensionSlot';
+import { useMemoryStore } from '../../store/useMemoryStore';
 import { ExtensionsView } from './ExtensionsView';
 import { TasksPanel } from './TasksPanel';
 import { ConversationsPanel } from '../messaging/ConversationsPanel';
@@ -9,9 +9,21 @@ import { GroupsPanel } from '../groups/GroupsPanel';
 import { ConnectionsPanel } from '../connections/ConnectionsPanel';
 import { FileTree } from '../files/FileTree';
 import { MemoryFieldPanel } from '../memory/MemoryFieldPanel';
+import { ResonantAgentsPanel } from '../agents/ResonantAgentsPanel';
+import { ServicesPanel } from '../services/ServicesPanel';
+import { SecretsPanel } from '../secrets/SecretsPanel';
+import { MarketplaceSidebar } from '../marketplace/MarketplaceSidebar';
 
 export const Sidebar: React.FC = () => {
   const { activeSidebarView } = useAppStore();
+  const { setActiveView } = useMemoryStore();
+
+  // When switching to coherence view, set memory view to graph mode
+  useEffect(() => {
+    if (activeSidebarView === 'coherence') {
+      setActiveView('graph');
+    }
+  }, [activeSidebarView, setActiveView]);
 
   return (
     <div className="w-full h-full bg-card/80 backdrop-blur-xl flex flex-col shadow-2xl z-40 relative overflow-hidden">
@@ -34,13 +46,15 @@ export const Sidebar: React.FC = () => {
         ) : activeSidebarView === 'memory' ? (
             <MemoryFieldPanel />
         ) : activeSidebarView === 'coherence' ? (
-            <div className="p-2 h-full"><ExtensionSlot name="sidebar:view:coherence" /></div>
+            <MemoryFieldPanel />
         ) : activeSidebarView === 'agents' ? (
-            <div className="p-2 h-full"><ExtensionSlot name="sidebar:view:agents" /></div>
+            <ResonantAgentsPanel />
         ) : activeSidebarView === 'secrets' ? (
-            <div className="p-2 h-full"><ExtensionSlot name="sidebar:view:secrets" /></div>
+            <SecretsPanel />
+        ) : activeSidebarView === 'marketplace' ? (
+            <MarketplaceSidebar />
         ) : activeSidebarView === 'services' ? (
-            <div className="p-2 h-full"><ExtensionSlot name="sidebar:view:services" /></div>
+            <ServicesPanel />
         ) : (
             <FileTree />
         )}

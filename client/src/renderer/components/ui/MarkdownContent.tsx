@@ -6,7 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useFenceStore } from '../../store/useFenceStore';
-import { MermaidRenderer, MERMAID_LANGUAGES } from './fences';
+import { MermaidRenderer, MERMAID_LANGUAGES, HtmlArtifactRenderer, HTML_LANGUAGES } from './fences';
 
 // KaTeX CSS is imported in index.css for proper math rendering
 
@@ -249,8 +249,16 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({
       priority: 0,
     });
 
+    const unregisterHtml = registerRenderer({
+      id: 'builtin:html-artifact',
+      languages: HTML_LANGUAGES,
+      component: HtmlArtifactRenderer,
+      priority: 0,
+    });
+
     return () => {
       unregisterMermaid();
+      unregisterHtml();
     };
   }, [registerRenderer]);
 

@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { AlephNetClient } from './AlephNetClient';
-import { ISocialGraphProvider, IReputationProvider } from './TrustEvaluator';
+import { ISocialGraphProvider, IReputationProvider } from '@sschepis/alephnet-node';
 import { StakingTier } from '../../shared/alephnet-types';
 
 export class AlephNetTrustAdapter implements ISocialGraphProvider, IReputationProvider {

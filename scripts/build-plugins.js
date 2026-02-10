@@ -35,7 +35,7 @@ async function buildPlugins() {
           bundle: true,
           format: 'cjs',
           platform: 'browser',
-          external: ['react', 'react-dom', 'framer-motion', 'lucide-react', 'alephnet'],
+          external: ['react', 'react-dom', 'alephnet'],
           alias: {
             '@': path.resolve(__dirname, '../client/src'),
             '@radix-ui/react-slot': path.resolve(__dirname, '../client/node_modules/@radix-ui/react-slot'),

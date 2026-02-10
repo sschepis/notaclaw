@@ -110,4 +110,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   secretsStatus: () => ipcRenderer.invoke('secrets:status'),
   secretsLock: () => ipcRenderer.invoke('secrets:lock'),
   secretsUnlock: () => ipcRenderer.invoke('secrets:unlock'),
+
+  // App-level Command Invocation (Main -> Renderer)
+  onAppInvoke: (callback: (event: any, payload: any) => void) => {
+    ipcRenderer.on('app:invoke', callback);
+    return () => { ipcRenderer.removeListener('app:invoke', callback); };
+  },
+  sendAppResponse: (requestId: string, response: any) => 
+    ipcRenderer.send(`app:response:${requestId}`, response),
+
+  // OpenClaw Gateway
+  openclawConnect: (options: { url?: string }) => 
+    ipcRenderer.invoke('openclaw:connect', options),
+  openclawDisconnect: () => 
+    ipcRenderer.invoke('openclaw:disconnect'),
+  openclawStatus: () => 
+    ipcRenderer.invoke('openclaw:status'),
+  openclawListNodes: () => 
+    ipcRenderer.invoke('openclaw:listNodes'),
+  openclawSubmitTask: (options: { description: string; requirements?: Record<string, unknown> }) =>
+    ipcRenderer.invoke('openclaw:submitTask', options),
+  openclawGetTaskStatus: (options: { taskId: string }) =>
+    ipcRenderer.invoke('openclaw:getTaskStatus', options),
+  openclawCancelTask: (options: { taskId: string }) =>
+    ipcRenderer.invoke('openclaw:cancelTask', options),
 });

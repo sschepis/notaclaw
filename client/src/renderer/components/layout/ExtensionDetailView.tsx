@@ -4,7 +4,7 @@ import { usePluginStore } from '../../store/usePluginStore';
 import { MarkdownContent } from '../ui/MarkdownContent';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Download, Trash2, Power, Settings } from 'lucide-react';
+import { Download, Trash2, Power } from 'lucide-react';
 import { ProgressSpinner } from '../ui/ProgressSpinner';
 
 export const ExtensionDetailView: React.FC = () => {

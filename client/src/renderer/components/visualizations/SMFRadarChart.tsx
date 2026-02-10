@@ -32,13 +32,6 @@ const DOMAIN_COLORS = {
   meta: '#8b5cf6'        // purple
 };
 
-const getDomainColor = (index: number): string => {
-  if (index < 4) return DOMAIN_COLORS.perceptual;
-  if (index < 8) return DOMAIN_COLORS.cognitive;
-  if (index < 12) return DOMAIN_COLORS.temporal;
-  return DOMAIN_COLORS.meta;
-};
-
 const SIZE_CONFIG = {
   sm: { width: 200, height: 200, fontSize: 8 },
   md: { width: 300, height: 300, fontSize: 10 },

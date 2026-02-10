@@ -40,7 +40,6 @@ const DEFAULT_CONFIG: AppConfig = {
 export class ConfigManager {
   private configPath: string | null = null;
   private config: AppConfig = DEFAULT_CONFIG;
-  private loaded = false;
 
   constructor() {
     // Don't access app.getPath() here - Electron may not be ready yet
@@ -61,12 +60,10 @@ export class ConfigManager {
       const userConfig = JSON.parse(data);
       // Deep merge with defaults
       this.config = this.deepMerge(DEFAULT_CONFIG, userConfig);
-      this.loaded = true;
     } catch {
       // Config doesn't exist, use defaults and create it
       this.config = DEFAULT_CONFIG;
       await this.save();
-      this.loaded = true;
     }
   }
 

@@ -6,6 +6,41 @@ module.exports = {
   activate: (context) => {
     console.log('[Agent Essentials] Main process activated');
 
+    // Register traits for AI to understand capabilities
+    context.traits.register({
+      id: '@alephnet/agent-essentials:web-search',
+      name: 'Web Search Capability',
+      description: 'Enables searching the web for current information and data',
+      instruction: `You have access to a web search capability via the 'web_search' tool. Use this when:
+- The user asks about current events, news, or time-sensitive information
+- You need factual data that may have changed since your training
+- Research or verification of claims is required
+- The user explicitly asks to search for something
+
+Call web_search with a 'query' parameter containing your search terms. Results include title, snippet, and URL.`,
+      activationMode: 'dynamic',
+      triggerKeywords: ['search', 'look up', 'find online', 'google', 'current', 'latest', 'news', 'today'],
+      priority: 15,
+      source: '@alephnet/agent-essentials'
+    });
+
+    context.traits.register({
+      id: '@alephnet/agent-essentials:url-reader',
+      name: 'URL Content Reader',
+      description: 'Enables reading and extracting content from web pages',
+      instruction: `You have access to a URL reading capability via the 'read_url' tool. Use this when:
+- You need to fetch content from a specific URL
+- The user shares a link and wants you to analyze its content
+- You need to verify information from a web source
+- Following up on search results to get full content
+
+Call read_url with a 'url' parameter. Returns the text content of the page (limited to first 5000 chars).`,
+      activationMode: 'dynamic',
+      triggerKeywords: ['read url', 'fetch page', 'visit', 'open link', 'http', 'https', 'website content'],
+      priority: 14,
+      source: '@alephnet/agent-essentials'
+    });
+
     // 1. Web Search Tool
     context.dsn.registerTool({
       name: 'web_search',

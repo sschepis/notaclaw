@@ -8,7 +8,7 @@ import { TaskResultMessage } from '../conversation/TaskResultMessage';
 import { ScheduledTask, TaskExecutionResult } from '../../../shared/alephnet-types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DecoratedMessage } from '../ui/DecoratedMessage';
-import { ChatInputBeforeSlot, ChatInputAfterSlot, ChatEmptyStateSlot } from '../ui/ExtensionSlotV2';
+import { ChatEmptyStateSlot } from '../ui/ExtensionSlotV2';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -251,15 +251,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
       </div>
       </div>
 
-      {/* Input Area - at bottom */}
+      {/* Input Area - at bottom (InputDeck handles its own extension slots internally) */}
       <div className="shrink-0 z-20">
-        {/* Plugin input extensions (before) */}
-        <ChatInputBeforeSlot className="px-3" />
-        
         <InputDeck onMessageSent={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })} />
-        
-        {/* Plugin input extensions (after) */}
-        <ChatInputAfterSlot className="px-3" />
       </div>
     </div>
   );

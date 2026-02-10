@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Bell, CheckCheck, Trash2, BellOff, BellRing } from 'lucide-react';
 
 export const activate = (context: any) => {
     console.log('[Notification Center] Renderer activated');
+    const { ui, useAppStore } = context;
 
     const NotificationPanel = () => {
         const [notifications, setNotifications] = useState<any[]>([]);
@@ -72,7 +74,7 @@ export const activate = (context: any) => {
     };
 
     const NotificationCenterButton = () => {
-        const { activeSidebarView, setActiveSidebarView } = context.useAppStore();
+        const { activeSidebarView, setActiveSidebarView } = useAppStore();
         const isActive = activeSidebarView === 'notification-center';
         
         return (
@@ -97,4 +99,69 @@ export const activate = (context: any) => {
         id: 'notification-center-panel',
         component: NotificationPanel
     });
+
+    // Register Commands for Command Menu
+    const cleanups: Array<() => void> = [];
+
+    if (ui?.registerCommand) {
+        cleanups.push(ui.registerCommand({
+            id: 'notifications:open',
+            label: 'Open Notification Center',
+            icon: Bell,
+            category: 'Notifications',
+            action: () => {
+                const store = useAppStore?.getState?.();
+                store?.setActiveSidebarView?.('notification-center');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'notifications:mark-all-read',
+            label: 'Mark All Notifications as Read',
+            icon: CheckCheck,
+            category: 'Notifications',
+            action: () => {
+                context.ipc?.invoke?.('notifications:markAllRead');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'notifications:clear-all',
+            label: 'Clear All Notifications',
+            icon: Trash2,
+            category: 'Notifications',
+            action: () => {
+                context.ipc?.invoke?.('notifications:clear');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'notifications:mute',
+            label: 'Mute Notifications',
+            icon: BellOff,
+            category: 'Notifications',
+            action: () => {
+                context.ipc?.invoke?.('notifications:mute');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'notifications:unmute',
+            label: 'Unmute Notifications',
+            icon: BellRing,
+            category: 'Notifications',
+            action: () => {
+                context.ipc?.invoke?.('notifications:unmute');
+            }
+        }));
+    }
+
+    context._cleanups = cleanups;
+};
+
+export const deactivate = (context: any) => {
+    console.log('[Notification Center] Renderer deactivated');
+    if (context._cleanups) {
+        context._cleanups.forEach((cleanup: any) => cleanup());
+    }
 };

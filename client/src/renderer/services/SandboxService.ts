@@ -217,8 +217,8 @@ export class SandboxService {
       }
 
       // Communication channel
-      const channel = new MessageChannel();
-      const port1 = channel.port1; // Our end
+      // const channel = new MessageChannel();
+      // const port1 = channel.port1; // Our end
       
       // Listen for ready or result
       const messageHandler = (e: MessageEvent) => {

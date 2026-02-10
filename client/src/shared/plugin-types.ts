@@ -3,6 +3,7 @@ import type { SkillDefinition, KeyTriplet } from './types';
 import type { ServiceDefinition, GatewayDefinition } from './service-types';
 import type { TrustAssessment } from './trust-types';
 import type { UIExtensionAPI } from './slot-types';
+import type { TraitDefinition } from './trait-types';
 
 export type PluginPermission = 
   | 'network:http'
@@ -57,6 +58,7 @@ export interface PluginManifest {
   alephConfig?: AlephExtension;
   trust?: TrustAssessment;
   status?: 'active' | 'error' | 'blocked' | 'pending-confirmation' | 'disabled';
+  isCore?: boolean; // True for core bundled plugins that cannot be uninstalled
 }
 
 export interface SkillManifest {
@@ -185,6 +187,12 @@ export interface PluginContext {
   // AI Access
   ai: {
     complete(request: any): Promise<{ text: string; raw?: any }>;
+  };
+
+  // Trait Registry
+  traits: {
+    register(trait: TraitDefinition): void;
+    unregister(traitId: string): void;
   };
 }
 

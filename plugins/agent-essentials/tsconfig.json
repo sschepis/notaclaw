@@ -1,13 +1,16 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "ESNext",
+    "module": "CommonJS",
     "moduleResolution": "Node",
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "alephnet": ["./types/alephnet.d.ts"]
-    }
+      "alephnet": ["./types/alephnet.d.ts"],
+      "@shared/*": ["../../client/src/shared/*"]
+    },
+    "esModuleInterop": true,
+    "skipLibCheck": true
   },
-  "include": ["renderer/**/*"]
+  "include": ["renderer/**/*", "main/**/*", "tests/**/*"]
 }

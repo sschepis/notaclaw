@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { ChatView } from './ChatView';
 import { ExtensionDetailView } from './ExtensionDetailView';
+import { TextEditorPanel } from './TextEditorPanel';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ConversationTabs } from './ConversationTabs';
 import { ConversationSidebar, TaskDetailDialog } from '../conversation';
@@ -12,8 +13,29 @@ interface StageProps {
 }
 
 export const Stage: React.FC<StageProps> = ({ mode }) => {
-  const { tabs, activeTabId } = useAppStore();
+  const { tabs, activeTabId, setActiveSidebarView } = useAppStore();
   const activeTab = tabs.find(t => t.id === activeTabId);
+
+  // Sync sidebar with active tab
+  React.useEffect(() => {
+    if (!activeTab) return;
+    
+    switch (activeTab.type) {
+        case 'chat':
+            setActiveSidebarView('messages');
+            break;
+        case 'group':
+        case 'feed':
+            setActiveSidebarView('groups');
+            break;
+        case 'extension':
+            setActiveSidebarView('extensions');
+            break;
+        case 'file':
+            setActiveSidebarView('explorer');
+            break;
+    }
+  }, [activeTabId, activeTab, setActiveSidebarView]);
 
   // Sidebar state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -77,13 +99,18 @@ export const Stage: React.FC<StageProps> = ({ mode }) => {
                     <div className="flex-1 min-w-0 min-h-0 relative">
                         {activeTab?.type === 'extension' ? (
                             <ExtensionDetailView />
+                        ) : activeTab?.type === 'file' ? (
+                            <TextEditorPanel 
+                                content={activeTab.data?.content || ''} 
+                                filePath={activeTab.data?.path || ''} 
+                            />
                         ) : (
                             <ChatView onTaskClick={handleTaskClick} />
                         )}
                     </div>
                     
                     {/* Collapsible Sidebar - Only show for chat views */}
-                    {activeTab?.type !== 'extension' && (
+                    {activeTab?.type !== 'extension' && activeTab?.type !== 'file' && (
                         <ConversationSidebar
                             isOpen={isSidebarOpen}
                             onToggle={handleToggleSidebar}
@@ -120,3 +147,4 @@ export const Stage: React.FC<StageProps> = ({ mode }) => {
     </div>
   );
 };
+

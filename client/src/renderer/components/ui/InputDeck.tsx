@@ -6,19 +6,33 @@ import { AttachmentPreview } from './input-deck/AttachmentPreview';
 import { InputArea } from './input-deck/InputArea';
 import { ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, MAX_FILE_SIZE, LARGE_TEXT_THRESHOLD } from './input-deck/constants';
 import { useSpeechToText } from '../../hooks/useSpeechToText';
+import { ChatInputBeforeSlot, ChatInputAfterSlot } from './ExtensionSlotV2';
+import { useCommandSystem } from '../../services/commands/useCommandSystem';
+import { CommandSuggestions } from './input-deck/CommandSuggestions';
 
 interface InputDeckProps {
   onMessageSent?: () => void;
 }
 
 export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
-  const [mode, setMode] = useState<'Chat' | 'Task' | 'Proposal'>('Chat');
+  const [mode] = useState<'Chat' | 'Task' | 'Proposal'>('Chat');
   const [resonance, setResonance] = useState(50);
   const [content, setContent] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [inputMetadata, setInputMetadata] = useState<Record<string, any>>({});
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const {
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+    setSelectedIndex,
+    updateSuggestions,
+    executeCommand,
+    setShowSuggestions
+  } = useCommandSystem();
   
   const {
     isGenerating,
@@ -34,6 +48,10 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
     selectedModel,
     setSelectedModel
   } = useAppStore();
+
+  const handleSetMetadata = useCallback((key: string, value: any) => {
+    setInputMetadata(prev => ({ ...prev, [key]: value }));
+  }, []);
 
   // Speech-to-text hook - appends transcribed text progressively
   const handleSpeechTranscript = useCallback((text: string) => {
@@ -190,6 +208,17 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
   // Handle send/stop
   const handleSend = async () => {
     if (!content.trim() && pendingAttachments.length === 0) return;
+    
+    // Check for slash command
+    if (content.trim().startsWith('/')) {
+      const handled = await executeCommand(content.trim());
+      if (handled) {
+        setContent('');
+        setShowSuggestions(false);
+        return;
+      }
+    }
+
     if (isGenerating) return;
 
     const controller = new AbortController();
@@ -205,6 +234,7 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
       sender: 'user',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       attachments: pendingAttachments.length > 0 ? [...pendingAttachments] : undefined,
+      metadata: inputMetadata, // Pass metadata to user message
     };
 
     addMessage(userMessage);
@@ -212,8 +242,10 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
     // Clear input immediately
     const sentContent = content;
     const sentAttachments = [...pendingAttachments];
+    const sentMetadata = { ...inputMetadata }; // Capture current metadata
     setContent('');
     clearPendingAttachments();
+    // Don't clear metadata here, as it might be a persistent toggle (like "secure mode")
 
     try {
       setGenerationProgress({ status: 'Connecting to AI provider...', step: 1 });
@@ -230,6 +262,7 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
           content: a.content,
           dataUrl: a.dataUrl,
         })),
+        ...sentMetadata, // Spread metadata into payload
       };
 
       setGenerationProgress({ status: 'Processing your message...', step: 2 });
@@ -261,6 +294,40 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
 
   // Handle keyboard shortcuts
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Handle command suggestions navigation
+    if (showSuggestions && suggestions.length > 0) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev > 0 ? prev - 1 : suggestions.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev < suggestions.length - 1 ? prev + 1 : 0));
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        const suggestion = suggestions[selectedIndex];
+        if (suggestion) {
+          // Replace content with suggestion
+          const newContent = suggestion.text;
+          setContent(newContent);
+          // If suggestion is complete/terminal, we might want to just set it
+          // But usually we want to keep typing args
+          setShowSuggestions(false);
+          
+          // Focus back on input if needed (usually automatic)
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSuggestions(false);
+        return;
+      }
+    }
+
     // Ctrl+Enter or Cmd+Enter to send
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -280,6 +347,16 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
       }
     }
   };
+
+  // Update suggestions when content changes
+  React.useEffect(() => {
+    if (content.startsWith('/')) {
+      const cursorPosition = content.length; // Simplified for now
+      updateSuggestions(content, cursorPosition);
+    } else {
+      setShowSuggestions(false);
+    }
+  }, [content, updateSuggestions, setShowSuggestions]);
 
   return (
     <TooltipProvider>
@@ -311,7 +388,20 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
           className="hidden"
         />
 
-        <InputArea 
+        <ChatInputBeforeSlot />
+
+        <CommandSuggestions
+          suggestions={suggestions}
+          selectedIndex={selectedIndex}
+          onSelect={(suggestion) => {
+            setContent(suggestion.text);
+            setShowSuggestions(false);
+            // Focus input logic if needed
+          }}
+          visible={showSuggestions}
+        />
+
+        <InputArea
           content={content}
           setContent={setContent}
           isGenerating={isGenerating}
@@ -334,6 +424,16 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
           interimTranscript={interimTranscript}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
+        />
+
+        <ChatInputAfterSlot 
+          context={{
+            content,
+            setContent,
+            metadata: inputMetadata,
+            setMetadata: handleSetMetadata,
+            onSend: handleSend
+          }}
         />
       </div>
     </motion.div>

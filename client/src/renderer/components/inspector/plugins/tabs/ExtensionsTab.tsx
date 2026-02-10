@@ -1,8 +1,11 @@
 import React from 'react';
 import { useSlotRegistry } from '../../../../services/SlotRegistry';
-import { Layers, Command, Layout, MessageSquare, Zap } from 'lucide-react';
+import { useAppStore } from '../../../../store/useAppStore';
+import { Layers, Command, Layout, MessageSquare } from 'lucide-react';
 
 export const ExtensionsTab: React.FC<{ pluginId: string }> = ({ pluginId }) => {
+    const { setLayoutAction } = useAppStore();
+    
     // We can't use the hook directly inside a loop or conditional, but we can get the state.
     // However, `useSlotRegistry` is a zustand store, so we can select what we need.
     const registrations = useSlotRegistry(state => {
@@ -32,6 +35,24 @@ export const ExtensionsTab: React.FC<{ pluginId: string }> = ({ pluginId }) => {
         return all;
     });
 
+    const handleExtensionClick = (reg: any) => {
+        if (reg.type === 'Panel') {
+            setLayoutAction({ 
+                type: 'open', 
+                component: reg.id, 
+                name: reg.label || reg.name || 'Panel',
+                icon: 'layout'
+            });
+        } else if (reg.type === 'Stage View') {
+            setLayoutAction({ 
+                type: 'open', 
+                component: reg.id, 
+                name: reg.label || reg.name || 'View',
+                icon: 'stage'
+            });
+        }
+    };
+
     if (registrations.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-zinc-500">
@@ -49,8 +70,14 @@ export const ExtensionsTab: React.FC<{ pluginId: string }> = ({ pluginId }) => {
                 else if (reg.type === 'Panel' || reg.type === 'Stage View') Icon = Layout;
                 else if (reg.type === 'Slot') Icon = MessageSquare; // Assuming mostly chat slots for now
 
+                const isClickable = reg.type === 'Panel' || reg.type === 'Stage View';
+
                 return (
-                    <div key={i} className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800 flex items-start gap-3">
+                    <div 
+                        key={i} 
+                        className={`bg-zinc-900/50 rounded-lg p-3 border border-zinc-800 flex items-start gap-3 ${isClickable ? 'cursor-pointer hover:bg-zinc-800/50 transition-colors' : ''}`}
+                        onClick={() => isClickable && handleExtensionClick(reg)}
+                    >
                         <div className="mt-1 p-1.5 bg-zinc-800 rounded text-zinc-400">
                             <Icon size={14} />
                         </div>

@@ -307,9 +307,11 @@ ChatInputBeforeSlot.displayName = 'ChatInputBeforeSlot';
  */
 export const ChatInputAfterSlot: React.FC<{
   className?: string;
-}> = memo(({ className }) => (
+  context?: any;
+}> = memo(({ className, context }) => (
   <ExtensionSlotV2
     name="chat:input-after"
+    context={context}
     layout="stack"
     gap={2}
     className={className}

@@ -1000,7 +1000,7 @@ export interface AlephNetIPCMap {
   'aleph:status': { params: void; result: NodeStatus };
 
   // AI Conversations
-  'ai:conversation:create': { params: { title?: string }; result: AIConversation };
+  'ai:conversation:create': { params: { title?: string; domainId?: string }; result: AIConversation };
   'ai:conversation:list': { params: void; result: AIConversation[] };
   'ai:conversation:get': { params: { id: string }; result: AIConversation };
   'ai:conversation:delete': { params: { id: string }; result: { deleted: boolean } };

@@ -1,0 +1,12 @@
+{
+  "name": "@alephnet/auto-dash",
+  "version": "1.0.0",
+  "description": "AutoDash plugin for AlephNet",
+  "main": "main/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": ["alephnet", "plugin", "dashboard", "generative-ui"],
+  "author": "AlephNet User",
+  "license": "MIT"
+}

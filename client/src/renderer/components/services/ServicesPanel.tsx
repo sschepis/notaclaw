@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useRISAServices } from '../../hooks/useRISAServices';
-import { RISAScript, RISATask, RISAEvent } from '../../../shared/risa/types';
-import { Play, Square, RefreshCw, Plus, Trash2, Activity, Clock, Terminal } from 'lucide-react';
+import { RISAScript } from '../../../shared/risa/types';
+import { Play, Square, RefreshCw, Plus, Trash2, Activity, Clock } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';

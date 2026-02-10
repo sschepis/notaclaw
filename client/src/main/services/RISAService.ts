@@ -9,10 +9,9 @@ import {
   RISATask, 
   RISAEvent, 
   RISAEventType, 
-  RISAScriptContext, 
-  InstallationSource 
+  RISAScriptContext
 } from '../../shared/risa/types';
-import { ServiceRegistry } from './ServiceRegistry'; 
+// import { ServiceRegistry } from './ServiceRegistry';
 import { logger } from './Logger';
 import { entropyMonitorScript } from './risa/system-scripts/entropy-monitor';
 import { coherenceTrackerScript } from './risa/system-scripts/coherence-tracker';
@@ -23,7 +22,7 @@ export class RISAService extends EventEmitter {
   private scripts: Map<string, RISAScript> = new Map();
   private tasks: Map<string, RISATask> = new Map();
   private activeIntervals: Map<string, NodeJS.Timeout> = new Map();
-  private eventSubscriptions: Map<string, Set<string>> = new Map(); // eventType -> Set<taskId>
+  // private eventSubscriptions: Map<string, Set<string>> = new Map(); // eventType -> Set<taskId>
   private log = logger.child({ category: 'RISAService' });
   private storagePath: string | null = null;
 
@@ -322,14 +321,14 @@ export class RISAService extends EventEmitter {
           this.log.info(`[Script ${script.name}] Contributing to ${fieldId}`);
           this.emitEvent('memory.contribution.added', { fieldId, key, value, primes });
         },
-        reinforce: async (fieldId, contributionId) => {
+        reinforce: async (_fieldId, contributionId) => {
            this.log.info(`[Script ${script.name}] Reinforcing ${contributionId}`);
         },
-        query: async (fieldId, query) => {
+        query: async (_fieldId, _query) => {
           return [];
         }
       },
-      invoke: async (targetId, method, args) => {
+      invoke: async (targetId, method, _args) => {
         // Find target script
         const target = this.scripts.get(targetId);
         if (!target) throw new Error(`Target script ${targetId} not found`);
@@ -338,14 +337,14 @@ export class RISAService extends EventEmitter {
         this.log.info(`[Script ${script.name}] Invoking ${targetId}.${method}`);
         return null;
       },
-      invokeAsync: async (targetId, method, args, timeout) => {
+      invokeAsync: async (_targetId, _method, _args, _timeout) => {
          return null;
       },
       emit: (type, payload) => {
         this.emitEvent(type, payload, script.id);
       },
-      subscribe: (type, callback) => {
-        // Subscription handling in VM is complex. 
+      subscribe: (_type, _callback) => {
+        // Subscription handling in VM is complex.
         // For now, we return a mock ID.
         return 'sub-id-placeholder';
       },
@@ -363,7 +362,7 @@ export class RISAService extends EventEmitter {
 
   // --- Event System ---
   
-  unsubscribe(id: string) {
+  unsubscribe(_id: string) {
     // Implement unsubscribe logic if we track subscriptions
   }
 

@@ -27,6 +27,8 @@ import type {
   DomainDefinition, DomainVisibility, DomainMembership, DomainRules
 } from './alephnet-types';
 
+import type { ServiceDefinition, ServiceSubscription } from './service-types';
+
 import type { RISAScript, RISATask, RISAEvent } from './risa/types';
 
 export interface IAlephNetAPI {
@@ -163,6 +165,12 @@ export interface IAlephNetAPI {
   contentRetrieve: (params: { hash: string }) => Promise<StoredContent>;
   contentList: (params?: { visibility?: Visibility; limit?: number }) => Promise<ContentListItem[]>;
 
+  // ─── Marketplace ───────────────────────────────────────────────
+  marketplacePublishService: (params: { definition: ServiceDefinition }) => Promise<{ success: boolean; serviceId: string }>;
+  marketplaceListServices: (params?: { category?: string; tags?: string[]; query?: string; limit?: number; offset?: number }) => Promise<{ services: ServiceDefinition[]; total: number }>;
+  marketplaceGetService: (params: { serviceId: string }) => Promise<ServiceDefinition | null>;
+  marketplaceSubscribe: (params: { serviceId: string; tierName: string }) => Promise<{ subscription: ServiceSubscription }>;
+
   // ─── Identity Extended ─────────────────────────────────────────
   identitySign: (params: { message: string }) => Promise<{ signature: string }>;
   identityVerify: (params: { message: string; signature: string; publicKey: string }) => Promise<{ valid: boolean }>;
@@ -171,6 +179,7 @@ export interface IAlephNetAPI {
   // ─── File System ───────────────────────────────────────────────
   fsList: (params: { path: string }) => Promise<FileSystemItem[]>;
   fsRead: (params: { path: string }) => Promise<string>;
+  fsWrite: (params: { path: string; content: string }) => Promise<{ success: boolean }>;
   fsHome: (params?: void) => Promise<string>;
 
   // ─── Network ───────────────────────────────────────────────────

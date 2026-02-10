@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Zap, Plus, RefreshCw, Settings, Download, Upload, List } from 'lucide-react';
 
 export const activate = (context: any) => {
     console.log('[OpenClaw Skills] Renderer activated');
+    const { ui, useAppStore } = context;
 
     const SkillsPanel = () => {
         const [skills, setSkills] = useState<any[]>([]);
@@ -40,7 +42,7 @@ export const activate = (context: any) => {
     };
 
     const SkillsButton = () => {
-        const { activeSidebarView, setActiveSidebarView } = context.useAppStore();
+        const { activeSidebarView, setActiveSidebarView } = useAppStore();
         const isActive = activeSidebarView === 'openclaw-skills';
         
         return (
@@ -65,4 +67,90 @@ export const activate = (context: any) => {
         id: 'openclaw-skills-panel',
         component: SkillsPanel
     });
+
+    // Register Commands for Command Menu
+    const cleanups: Array<() => void> = [];
+
+    if (ui?.registerCommand) {
+        cleanups.push(ui.registerCommand({
+            id: 'openclaw-skills:open',
+            label: 'Open OpenClaw Skills',
+            icon: Zap,
+            category: 'OpenClaw Skills',
+            action: () => {
+                const store = useAppStore?.getState?.();
+                store?.setActiveSidebarView?.('openclaw-skills');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'openclaw-skills:list',
+            label: 'List All Skills',
+            icon: List,
+            category: 'OpenClaw Skills',
+            action: () => {
+                const store = useAppStore?.getState?.();
+                store?.setActiveSidebarView?.('openclaw-skills');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'openclaw-skills:create',
+            label: 'Create New Skill',
+            icon: Plus,
+            category: 'OpenClaw Skills',
+            action: () => {
+                context.ipc?.invoke?.('skills:create');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'openclaw-skills:refresh',
+            label: 'Refresh Skills List',
+            icon: RefreshCw,
+            category: 'OpenClaw Skills',
+            action: () => {
+                context.ipc?.invoke?.('skills:refresh');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'openclaw-skills:import',
+            label: 'Import Skill',
+            icon: Download,
+            category: 'OpenClaw Skills',
+            action: () => {
+                context.ipc?.invoke?.('skills:import');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'openclaw-skills:export',
+            label: 'Export Skill',
+            icon: Upload,
+            category: 'OpenClaw Skills',
+            action: () => {
+                context.ipc?.invoke?.('skills:export');
+            }
+        }));
+
+        cleanups.push(ui.registerCommand({
+            id: 'openclaw-skills:settings',
+            label: 'Skill Settings',
+            icon: Settings,
+            category: 'OpenClaw Skills',
+            action: () => {
+                context.ipc?.invoke?.('skills:openSettings');
+            }
+        }));
+    }
+
+    context._cleanups = cleanups;
+};
+
+export const deactivate = (context: any) => {
+    console.log('[OpenClaw Skills] Renderer deactivated');
+    if (context._cleanups) {
+        context._cleanups.forEach((cleanup: any) => cleanup());
+    }
 };

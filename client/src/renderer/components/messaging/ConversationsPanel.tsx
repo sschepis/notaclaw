@@ -97,7 +97,7 @@ const ConversationList: React.FC<{
         .filter(c => {
             // Filter by domain
             if (domainId === 'public') return true; // Show all in public for now, or filter by public domain ID
-            return c.domainId === domainId;
+            return (c as any).domainId === domainId;
         })
         .sort((a, b) => b.updatedAt - a.createdAt);
 

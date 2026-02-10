@@ -1,17 +1,54 @@
-import { AlephGunBridge } from '@sschepis/alephnet-node';
-import { ServiceDefinition, ServiceInstance } from '../../shared/service-types';
+import { ServiceManager as LibServiceManager, AlephWallet } from '@sschepis/alephnet-node';
+import { ServiceDefinition, GatewayDefinition } from '../../shared/service-types';
 
-export class ServiceRegistry {
-    private bridge: AlephGunBridge;
+export class ServiceRegistry extends LibServiceManager {
     private toolHandlers: Map<string, Function> = new Map();
+    private toolDefinitions: Map<string, any> = new Map();
+    private gateways: Map<string, GatewayDefinition> = new Map();
 
-    constructor(bridge: AlephGunBridge) {
-        this.bridge = bridge;
+    constructor(
+        gun: any,
+        wallet: AlephWallet,
+        localNodeId: string
+    ) {
+        super(gun, wallet, localNodeId);
     }
 
-    registerToolHandler(name: string, handler: Function) {
+    registerToolHandler(name: string, handler: Function, definition?: any) {
         this.toolHandlers.set(name, handler);
+        if (definition) {
+            this.toolDefinitions.set(name, definition);
+        }
         console.log(`Registered handler for tool: ${name}`);
+    }
+
+    getToolDefinition(name: string): any | undefined {
+        return this.toolDefinitions.get(name);
+    }
+
+    getAllToolDefinitions(): any[] {
+        return Array.from(this.toolDefinitions.values());
+    }
+
+    async registerGateway(gateway: GatewayDefinition) {
+        this.gateways.set(gateway.id, gateway);
+        console.log(`Registered gateway: ${gateway.id} (${gateway.type})`);
+        
+        try {
+            await gateway.connect();
+            gateway.status = 'connected';
+        } catch (error) {
+            console.error(`Failed to connect gateway ${gateway.id}:`, error);
+            gateway.status = 'error';
+        }
+    }
+
+    getGateway(id: string): GatewayDefinition | undefined {
+        return this.gateways.get(id);
+    }
+
+    getGateways(): GatewayDefinition[] {
+        return Array.from(this.gateways.values());
     }
 
     async invokeTool(name: string, args: any): Promise<any> {
@@ -28,34 +65,11 @@ export class ServiceRegistry {
     }
 
     async register(service: ServiceDefinition): Promise<void> {
-        console.log('Registering service:', service.id);
-        
-        // 1. Store the full definition
-        await this.bridge.put(`services/${service.id}/definition`, service);
-        
-        // 2. Add to category index
-        await this.bridge.put(`indexes/services/categories/${service.category}/${service.id}`, true);
-        
-        // 3. Add to tag indices
-        for (const tag of service.tags) {
-            await this.bridge.put(`indexes/services/tags/${tag}/${service.id}`, true);
-        }
-
-        console.log(`Service ${service.id} registered successfully.`);
+        // Adapt to LibServiceManager
+        await this.registerService(service as any);
     }
 
-    async getService(serviceId: string): Promise<ServiceDefinition | null> {
-        return await this.bridge.get(`services/${serviceId}/definition`);
-    }
-
-    async updateHealth(serviceId: string, instance: ServiceInstance): Promise<void> {
-        await this.bridge.put(`services/${serviceId}/instances/${instance.nodeId}`, instance);
-    }
-
-    // A real search would require a proper search engine or a graph traversal strategy
-    // This is a stub for the interface
-    async search(_query: { text?: string; tags?: string[] }): Promise<ServiceDefinition[]> {
-        console.warn('Search not fully implemented in Gun bridge yet.');
-        return [];
+    getRegisteredTools(): string[] {
+        return Array.from(this.toolHandlers.keys());
     }
 }

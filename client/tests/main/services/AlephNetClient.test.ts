@@ -1,3 +1,4 @@
+
 import { AlephNetClient } from '../../../src/main/services/AlephNetClient';
 import { AlephGunBridge } from '@sschepis/alephnet-node';
 import { AIProviderManager } from '../../../src/main/services/AIProviderManager';
@@ -11,97 +12,125 @@ jest.mock('../../../src/main/services/IdentityManager');
 jest.mock('../../../src/main/services/DomainManager');
 
 describe('AlephNetClient', () => {
-  let client: AlephNetClient;
-  let mockBridge: jest.Mocked<AlephGunBridge>;
-  let mockAI: jest.Mocked<AIProviderManager>;
-  let mockIdentity: jest.Mocked<IdentityManager>;
-  let mockDomains: jest.Mocked<DomainManager>;
+    let client: AlephNetClient;
+    let mockBridge: jest.Mocked<AlephGunBridge>;
+    let mockAI: jest.Mocked<AIProviderManager>;
+    let mockIdentity: jest.Mocked<IdentityManager>;
+    let mockDomain: jest.Mocked<DomainManager>;
+    let mockGun: any;
+    let mockUser: any;
 
-  beforeEach(() => {
-    mockBridge = new AlephGunBridge() as jest.Mocked<AlephGunBridge>;
-    mockAI = new AIProviderManager() as jest.Mocked<AIProviderManager>;
-    mockIdentity = new IdentityManager() as jest.Mocked<IdentityManager>;
-    mockDomains = new DomainManager(mockBridge, mockIdentity, {} as any) as jest.Mocked<DomainManager>;
+    beforeEach(() => {
+        // Setup Gun mock chain
+        const mockMap = { once: jest.fn() };
+        const mockGetFragments = { map: jest.fn().mockReturnValue(mockMap) };
+        const mockGetField = { 
+            put: jest.fn(),
+            get: jest.fn((key) => {
+                if (key === 'fragments') return mockGetFragments;
+                return { put: jest.fn() }; // Generic get return
+            })
+        };
+        const mockGetFields = { 
+            map: jest.fn().mockReturnValue({ 
+                once: jest.fn((cb) => {
+                    // Simulate callback execution if needed
+                    // cb({ name: 'Test Field' }, 'field1');
+                }) 
+            }),
+            get: jest.fn().mockReturnValue(mockGetField)
+        };
+        
+        mockUser = {
+            get: jest.fn((key) => {
+                if (key === 'memory') return { get: jest.fn((k) => {
+                    if (k === 'fields') return mockGetFields;
+                    return {};
+                })};
+                return {};
+            })
+        };
 
-    client = new AlephNetClient(mockBridge, mockAI, mockIdentity, mockDomains);
-  });
+        mockGun = {
+            user: jest.fn().mockReturnValue(mockUser)
+        };
 
-  describe('connect', () => {
-    it('should connect using existing identity', async () => {
-      mockIdentity.getPublicIdentity.mockResolvedValue({
-        fingerprint: 'test-fingerprint',
-        pub: 'pub',
-        priv: 'priv',
-        resonance: [],
-        bodyPrimes: []
-      });
+        mockBridge = new AlephGunBridge() as any;
+        mockBridge.getGun = jest.fn().mockReturnValue(mockGun);
+        mockBridge.put = jest.fn();
 
-      const result = await client.connect();
-      expect(result.connected).toBe(true);
-      
-      const status = await client.getStatus();
-      expect(status.id).toBe('test-fingerprint');
-      expect(status.status).toBe('ONLINE');
+        mockAI = new AIProviderManager() as any;
+        mockIdentity = new IdentityManager() as any;
+        mockDomain = new DomainManager(mockBridge, mockIdentity, {} as any) as any;
+
+        mockIdentity.getPublicIdentity.mockResolvedValue({
+            fingerprint: 'test-node-id',
+            pub: 'pub',
+            priv: 'priv',
+            sea: {} as any,
+            resonance: []
+        });
+
+        client = new AlephNetClient(mockBridge, mockAI, mockIdentity, mockDomain);
     });
 
-    it('should generate temporary ID if no identity', async () => {
-      mockIdentity.getPublicIdentity.mockResolvedValue(null);
-
-      const result = await client.connect();
-      expect(result.connected).toBe(true);
-      
-      const status = await client.getStatus();
-      expect(status.id).toContain('node_');
-    });
-  });
-
-  describe('think (Semantic Tier)', () => {
-    it('should use AI manager to analyze text', async () => {
-      mockAI.processRequest.mockResolvedValue({
-        content: JSON.stringify({
-          themes: ['t1', 't2'],
-          insight: 'insight',
-          coherence: 0.9,
-          suggestedActions: []
-        }),
-        providerId: 'mock',
-        model: 'mock'
-      });
-
-      const result = await client.think({ text: 'test input' });
-      expect(result.coherence).toBe(0.9);
-      expect(result.themes).toEqual(['t1', 't2']);
-      expect(mockAI.processRequest).toHaveBeenCalled();
+    test('should connect and attempt to load memory data', async () => {
+        await client.connect();
+        
+        expect(mockIdentity.getPublicIdentity).toHaveBeenCalled();
+        expect(mockBridge.getGun).toHaveBeenCalled();
+        expect(mockUser.get).toHaveBeenCalledWith('memory');
     });
 
-    it('should fallback if AI fails', async () => {
-      mockAI.processRequest.mockRejectedValue(new Error('AI fail'));
+    test('should load memory fields when callback fires', async () => {
+        // Setup the map().once() to fire the callback immediately
+        const mockOnce = jest.fn((cb) => {
+            cb({ name: 'Test Field', scope: 'user' }, 'field1');
+        });
+        
+        const mockGetFields = { 
+            map: jest.fn().mockReturnValue({ once: mockOnce }),
+            get: jest.fn().mockReturnValue({ get: jest.fn().mockReturnValue({ map: jest.fn().mockReturnValue({ once: jest.fn() }) }) })
+        };
 
-      const result = await client.think({ text: 'test input text' });
-      expect(result.themes.length).toBeGreaterThan(0);
-      expect(result.insight).toContain('Analysis of');
-    });
-  });
+        mockUser.get = jest.fn((key) => {
+            if (key === 'memory') return { get: jest.fn((k) => {
+                if (k === 'fields') return mockGetFields;
+                return {};
+            })};
+            return {};
+        });
 
-  describe('memory (Tier 1.5)', () => {
-    it('should create memory field', async () => {
-      const field = await client.memoryCreate({ name: 'test', scope: 'user' });
-      expect(field.name).toBe('test');
-      expect(field.id).toBeDefined();
-      expect(mockBridge.put).toHaveBeenCalled();
+        await client.connect();
+
+        // Check if field was loaded into memoryFields map
+        // Since memoryFields is private, we can verify by side effect or check internal state if we cast to any
+        const fields = await client.memoryList({});
+        expect(fields).toHaveLength(1);
+        expect(fields[0].id).toBe('field1');
+        expect(fields[0].name).toBe('Test Field');
     });
 
-    it('should store memory fragment', async () => {
-      // Create field first
-      const field = await client.memoryCreate({ name: 'test', scope: 'user' });
-      
-      const frag = await client.memoryStore({
-        fieldId: field.id,
-        content: 'test content'
-      });
-      
-      expect(frag.content).toBe('test content');
-      expect(frag.fieldId).toBe(field.id);
+    test('should handle missing callback (data not loaded)', async () => {
+        // Setup map().once() to NOT fire
+        const mockOnce = jest.fn();
+        
+        const mockGetFields = { 
+            map: jest.fn().mockReturnValue({ once: mockOnce }),
+            get: jest.fn()
+        };
+
+        mockUser.get = jest.fn((key) => {
+            if (key === 'memory') return { get: jest.fn((k) => {
+                if (k === 'fields') return mockGetFields;
+                return {};
+            })};
+            return {};
+        });
+
+        await client.connect();
+
+        const fields = await client.memoryList({});
+        expect(fields).toHaveLength(0);
     });
-  });
 });

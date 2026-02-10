@@ -7,7 +7,6 @@ import 'gun/sea';
 import { KeyTriplet } from '../../shared/types';
 
 const IDENTITY_FILE = 'identity.json';
-const CONFIG_FILE = 'config.json';
 
 // First 16 primes for resonance field computation
 const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53];

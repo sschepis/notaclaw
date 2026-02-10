@@ -157,6 +157,12 @@ export const alephNetBridge = {
   contentRetrieve: invoke('content:retrieve'),
   contentList: invoke('content:list'),
 
+  // ─── Marketplace ───────────────────────────────────────────────
+  marketplacePublishService: invoke('marketplace:publishService'),
+  marketplaceListServices: invoke('marketplace:listServices'),
+  marketplaceGetService: invoke('marketplace:getService'),
+  marketplaceSubscribe: invoke('marketplace:subscribe'),
+
   // ─── Identity Extended ─────────────────────────────────────────
   identitySign: invoke('identity:sign'),
   identityVerify: invoke('identity:verify'),
@@ -165,6 +171,7 @@ export const alephNetBridge = {
   // ─── File System ───────────────────────────────────────────────
   fsList: invoke('fs:list'),
   fsRead: invoke('fs:read'),
+  fsWrite: invoke('fs:write'),
   fsHome: invoke('fs:home'),
 
   // ─── Network ───────────────────────────────────────────────────

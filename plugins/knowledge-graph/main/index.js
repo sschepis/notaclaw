@@ -22,6 +22,32 @@ class GraphStore {
     // Load persisted data
     await this.loadFromStorage();
 
+    // Register traits for AI to understand knowledge graph capabilities
+    this.context.traits.register({
+      id: '@alephnet/knowledge-graph:knowledge-management',
+      name: 'Knowledge Graph Capability',
+      description: 'Enables storing and querying structured knowledge as entities and relationships',
+      instruction: `You have access to a persistent Knowledge Graph for storing and retrieving structured information.
+
+Available tools:
+- 'query_knowledge': Query for entities and relationships using subject/predicate/object patterns
+- 'add_knowledge': Add new knowledge with entities and relationships (subject, predicate, object)
+- 'get_related_entities': Traverse the graph to find entities related to a given entity
+- 'search_knowledge': Search entities by text query and/or type
+
+Use the knowledge graph when:
+- Storing facts, concepts, or relationships mentioned in conversation
+- Building a persistent understanding of topics, people, or projects
+- Answering questions that require retrieving previously stored knowledge
+- Connecting ideas across different conversations or contexts
+
+Example relationships: "Alice" --[works_at]--> "Acme Corp", "Project X" --[uses_technology]--> "Python"`,
+      activationMode: 'dynamic',
+      triggerKeywords: ['remember', 'recall', 'knowledge', 'fact', 'relationship', 'entity', 'store', 'graph', 'connection', 'related to'],
+      priority: 18,
+      source: '@alephnet/knowledge-graph'
+    });
+
     // Set up IPC handlers for renderer communication
     this.context.ipc.handle('kg:query', async ({ subject, predicate, object }) => {
       return this.query(subject, predicate, object);

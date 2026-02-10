@@ -3,7 +3,7 @@
   "name": "OpenClaw Gateway",
   "version": "0.1.0",
   "description": "Gateway service to connect AlephNet with OpenClaw nodes",
-  "main": "dist/index.js",
+  "main": "dist/plugins/openclaw-gateway/src/index.js",
   "permissions": [
     "network:http",
     "dsn:register-service",

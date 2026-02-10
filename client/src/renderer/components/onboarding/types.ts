@@ -1,1 +1,1 @@
-export type OnboardingStep = 'welcome' | 'identity' | 'ai-setup' | 'complete';
+export type OnboardingStep = 'welcome' | 'identity' | 'ai-setup' | 'extensions' | 'complete';

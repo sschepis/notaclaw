@@ -102,16 +102,19 @@ const FileNode: React.FC<FileNodeProps> = ({ item, level, onSelect }) => {
   );
 };
 
-export const FileTree: React.FC = () => {
+export const FileTree: React.FC<{ rootPath?: string }> = ({ rootPath }) => {
   const [rootItems, setRootItems] = useState<FileSystemItem[]>([]);
   const [currentPath, setCurrentPath] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { openTab } = useAppStore();
 
   useEffect(() => {
     const loadRoot = async () => {
       try {
-        const home = await window.electronAPI.fsHome();
+        setLoading(true);
+        setError(null);
+        const home = rootPath || await window.electronAPI.fsHome();
         setCurrentPath(home);
         const list = await window.electronAPI.fsList({ path: home });
         const sorted = list.sort((a, b) => {
@@ -119,14 +122,15 @@ export const FileTree: React.FC = () => {
             return a.type === 'directory' ? -1 : 1;
         });
         setRootItems(sorted);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to load root:', err);
+        setError(err.message || 'Failed to load directory');
       } finally {
         setLoading(false);
       }
     };
     loadRoot();
-  }, []);
+  }, [rootPath]);
 
   const handleSelect = async (item: FileSystemItem) => {
     if (item.type === 'file') {
@@ -166,6 +170,11 @@ export const FileTree: React.FC = () => {
         {loading ? (
             <div className="flex items-center justify-center h-20 text-gray-500 text-xs">
                 Loading...
+            </div>
+        ) : error ? (
+            <div className="flex flex-col items-center justify-center h-20 text-red-500 text-xs px-4 text-center">
+                <p>Error loading directory</p>
+                <p className="text-[10px] opacity-70 mt-1">{error}</p>
             </div>
         ) : (
             rootItems.map((item) => (

@@ -4,7 +4,6 @@ import { IdentityManager } from './IdentityManager';
 import { DSNNodeConfig } from '../../shared/types';
 import { AIProviderManager } from './AIProviderManager';
 import { PersonalityManager } from './PersonalityManager';
-import { AIRequestOptions } from '../../shared/ai-types';
 import { DomainManager } from './DomainManager';
 import { SignedEnvelopeService } from './SignedEnvelopeService';
 import { configManager } from './ConfigManager';
@@ -15,18 +14,18 @@ export class DSNNode extends EventEmitter {
   private bridge: AlephGunBridge;
   private libNode: LibDSNNode | null = null;
   private identityManager: IdentityManager;
-  private aiManager: AIProviderManager;
+  // private aiManager: AIProviderManager;
   private personalityManager: PersonalityManager;
   private domainManager: DomainManager;
   private envelopeService: SignedEnvelopeService;
   private config: DSNNodeConfig | null = null;
   private gunInstance: any = null;
 
-  constructor(aiManager: AIProviderManager, personalityManager: PersonalityManager) {
+  constructor(_aiManager: AIProviderManager, personalityManager: PersonalityManager) {
     super();
     this.bridge = new AlephGunBridge();
     this.identityManager = new IdentityManager();
-    this.aiManager = aiManager;
+    // this.aiManager = aiManager;
     this.personalityManager = personalityManager;
     this.envelopeService = new SignedEnvelopeService(this.identityManager);
     this.domainManager = new DomainManager(this.bridge, this.identityManager, this.envelopeService);
@@ -102,6 +101,7 @@ export class DSNNode extends EventEmitter {
         model = modelParts.join(':');
     }
     
+    /*
     const options: AIRequestOptions = {
         contentType: metadata.mode === 'Code' ? 'code' : (metadata.mode === 'Agent' ? 'agent' : 'chat'),
         providerId,
@@ -109,6 +109,7 @@ export class DSNNode extends EventEmitter {
         temperature: metadata.resonance ? metadata.resonance / 100 : 0.7,
         maxTokens: 2048
     };
+    */
 
     try {
         // Delegate to PersonalityManager

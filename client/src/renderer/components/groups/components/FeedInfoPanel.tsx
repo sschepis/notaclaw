@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flame, Info, Home, Plus, ArrowUpRight } from 'lucide-react';
+import { Flame, Home } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 

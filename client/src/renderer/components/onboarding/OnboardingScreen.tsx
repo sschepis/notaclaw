@@ -6,6 +6,7 @@ import { StepIndicator } from './components/StepIndicator';
 import { WelcomeStep } from './steps/WelcomeStep';
 import { IdentityStep } from './steps/IdentityStep';
 import { AISetupStep } from './steps/AISetupStep';
+import { ExtensionsStep } from './steps/ExtensionsStep';
 import { CompleteStep } from './steps/CompleteStep';
 import { OnboardingStep } from './types';
 
@@ -23,6 +24,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ initialStep 
   }, []);
 
   const handleAIComplete = useCallback(() => {
+    setStep('extensions');
+  }, []);
+
+  const handleExtensionsComplete = useCallback(() => {
     setStep('complete');
   }, []);
 
@@ -65,6 +70,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ initialStep 
             )}
             {step === 'ai-setup' && (
               <AISetupStep key="ai-setup" onComplete={handleAIComplete} />
+            )}
+            {step === 'extensions' && (
+              <ExtensionsStep key="extensions" onComplete={handleExtensionsComplete} />
             )}
             {step === 'complete' && (
               <CompleteStep key="complete" onFinish={handleFinish} />

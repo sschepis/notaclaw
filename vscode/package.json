@@ -1,0 +1,177 @@
+{
+  "name": "vscode-agent-control",
+  "displayName": "VS Code Agent Control",
+  "description": "WebSocket-based remote control interface for AI agents to programmatically interact with VS Code",
+  "version": "0.1.0",
+  "publisher": "notaclaw",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/notaclaw/vscode-agent-control"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "agent",
+    "remote control",
+    "automation",
+    "ai",
+    "websocket"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentControl.start",
+        "title": "Start Agent Control Server",
+        "category": "Agent Control"
+      },
+      {
+        "command": "agentControl.stop",
+        "title": "Stop Agent Control Server",
+        "category": "Agent Control"
+      },
+      {
+        "command": "agentControl.status",
+        "title": "Show Server Status",
+        "category": "Agent Control"
+      },
+      {
+        "command": "agentControl.generateToken",
+        "title": "Generate New Authentication Token",
+        "category": "Agent Control"
+      },
+      {
+        "command": "agentControl.showConnections",
+        "title": "Show Connected Clients",
+        "category": "Agent Control"
+      }
+    ],
+    "configuration": {
+      "title": "Agent Control",
+      "properties": {
+        "agentControl.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the Agent Control server on startup"
+        },
+        "agentControl.port": {
+          "type": "number",
+          "default": 19876,
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "WebSocket server port"
+        },
+        "agentControl.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host address to bind to (use 127.0.0.1 for local only, 0.0.0.0 for all interfaces)"
+        },
+        "agentControl.token": {
+          "type": "string",
+          "default": "",
+          "description": "Authentication token (leave empty to generate one automatically)"
+        },
+        "agentControl.allowedOrigins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["*"],
+          "description": "Allowed WebSocket origins (* for any)"
+        },
+        "agentControl.rateLimit.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable rate limiting"
+        },
+        "agentControl.rateLimit.requestsPerSecond": {
+          "type": "number",
+          "default": 100,
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Maximum requests per second per client"
+        },
+        "agentControl.logging.level": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info",
+          "description": "Logging level"
+        },
+        "agentControl.logging.logToFile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also log to a file in the workspace"
+        },
+        "agentControl.security.allowFileSystemAccess": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow file system operations"
+        },
+        "agentControl.security.allowTerminalAccess": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow terminal operations"
+        },
+        "agentControl.security.allowCommandExecution": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow VS Code command execution"
+        },
+        "agentControl.security.restrictedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Glob patterns for paths that should not be accessible"
+        },
+        "agentControl.security.restrictedCommands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "VS Code commands that should not be executable"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./dist/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.55.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.2",
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6"
+  },
+  "dependencies": {
+    "ws": "^8.14.2",
+    "uuid": "^9.0.1"
+  }
+}

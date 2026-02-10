@@ -8,7 +8,7 @@ import { EventEmitter } from 'events';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { app } from 'electron';
-import { AlephGunBridge } from '@sschepis/alephnet-node';
+import { AlephGunBridge, gunObjectsToArrays } from '@sschepis/alephnet-node';
 import { AIProviderManager } from './AIProviderManager';
 import { IdentityManager } from './IdentityManager';
 import { DomainManager } from './DomainManager';
@@ -51,6 +51,16 @@ import type {
   NodeStatus,
 } from '../../shared/alephnet-types';
 
+const INITIAL_GROUPS: Partial<Group>[] = [
+  { name: 'AlephNet General', topic: 'General discussion about the AlephNet ecosystem', visibility: 'public' },
+  { name: 'Prompt Engineering', topic: 'Share and refine your prompt crafting skills', visibility: 'public' },
+  { name: 'Agent Development', topic: 'Building and deploying SRIA agents', visibility: 'public' },
+  { name: 'Coherence & Truth', topic: 'Verifying claims and building the truth graph', visibility: 'public' },
+  { name: 'Marketplace', topic: 'Trading plugins, skills, and resources', visibility: 'public' },
+  { name: 'Developers', topic: 'Technical discussion and SDK support', visibility: 'public' },
+  { name: 'Off-Topic', topic: 'Everything else', visibility: 'public' },
+];
+
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
 function generateId(prefix: string = ''): string {
@@ -59,6 +69,37 @@ function generateId(prefix: string = ''): string {
 
 function now(): number {
   return Date.now();
+}
+
+/**
+ * Sanitize data for Gun.js storage.
+ * Converts arrays to objects with numeric keys.
+ * Removes undefined values.
+ */
+function sanitizeForGun(data: any): any {
+    if (data === undefined) return null;
+    if (data === null) return null;
+    
+    if (Array.isArray(data)) {
+        const obj: any = {};
+        data.forEach((val, idx) => {
+            obj[idx] = sanitizeForGun(val);
+        });
+        return obj;
+    }
+    
+    if (typeof data === 'object') {
+        const obj: any = {};
+        for (const key in data) {
+            const val = sanitizeForGun(data[key]);
+            if (val !== undefined) {
+                obj[key] = val;
+            }
+        }
+        return obj;
+    }
+    
+    return data;
 }
 
 // ─── AlephNetClient ──────────────────────────────────────────────────────
@@ -70,7 +111,7 @@ export class AlephNetClient extends EventEmitter {
   private domainManager: DomainManager;
   private memorySecurityService: MemorySecurityService | null = null;
   private trustGate: TrustGate | null = null;
-  private _trustEvaluator: TrustEvaluator | null = null; // Reserved for future trust evaluation
+  // private _trustEvaluator: TrustEvaluator | null = null; // Reserved for future trust evaluation
   private connected = false;
   private nodeId: string = '';
   
@@ -143,8 +184,8 @@ export class AlephNetClient extends EventEmitter {
   /**
    * Inject the TrustEvaluator for trust assessment.
    */
-  setTrustEvaluator(evaluator: TrustEvaluator): void {
-    this._trustEvaluator = evaluator;
+  setTrustEvaluator(_evaluator: TrustEvaluator): void {
+    // this._trustEvaluator = evaluator;
     console.log('AlephNetClient: TrustEvaluator injected');
   }
 
@@ -231,9 +272,15 @@ export class AlephNetClient extends EventEmitter {
     const user = this.bridge.getGun().user();
     
     // Load fields
-    user.get('memory').get('fields').map().once((fieldData: any, fieldId: string) => {
-      if (!fieldData || !fieldId || fieldId === '_') return;
+    let fieldCount = 0;
+    user.get('memory').get('fields').map().once((rawFieldData: any, fieldId: string) => {
+      if (!rawFieldData || !fieldId || fieldId === '_') return;
       
+      const fieldData = gunObjectsToArrays(rawFieldData);
+      
+      fieldCount++;
+      if (fieldCount % 10 === 0) console.log(`AlephNetClient: Loaded ${fieldCount} memory fields...`);
+
       // Check if this is a valid field object
       if (typeof fieldData === 'object' && fieldData.name) {
         const field: MemoryField = {
@@ -260,8 +307,10 @@ export class AlephNetClient extends EventEmitter {
         }
         
         // Load fragments for this field
-        user.get('memory').get('fields').get(fieldId).get('fragments').map().once((fragData: any, fragId: string) => {
-             if (!fragData || !fragId || fragId === '_') return;
+        user.get('memory').get('fields').get(fieldId).get('fragments').map().once((rawFragData: any, fragId: string) => {
+             if (!rawFragData || !fragId || fragId === '_') return;
+             
+             const fragData = gunObjectsToArrays(rawFragData);
              
              // Handle encrypted fragments
              if (fragData.encrypted) {
@@ -295,11 +344,29 @@ export class AlephNetClient extends EventEmitter {
         });
       }
     });
+    
+    console.log('AlephNetClient: Memory data load initiated (async)');
   }
 
   // ═══════════════════════════════════════════════════════════════════════
   // Connection
   // ═══════════════════════════════════════════════════════════════════════
+
+  private async initializeDefaultGroups() {
+    if (this.groups.size > 0) return;
+
+    console.log('AlephNetClient: Initializing default groups...');
+    for (const g of INITIAL_GROUPS) {
+        const exists = [...this.groups.values()].some(existing => existing.name === g.name);
+        if (!exists) {
+            await this.groupsCreate({
+                name: g.name!,
+                topic: g.topic!,
+                visibility: g.visibility as 'public' | 'private'
+            });
+        }
+    }
+  }
 
   async connect(): Promise<{ connected: boolean }> {
     const identity = await this.identityManager.getPublicIdentity();
@@ -310,6 +377,7 @@ export class AlephNetClient extends EventEmitter {
       
       // Load persistent data
       this.loadMemoryData();
+      this.initializeDefaultGroups();
     } else {
       console.warn('AlephNetClient: No identity found, generating temporary ID');
       this.nodeId = generateId('node');
@@ -462,7 +530,7 @@ export class AlephNetClient extends EventEmitter {
     // Persist to GunDB graph
     // We store the full object so it can be rehydrated
     const user = this.bridge.getGun().user();
-    user.get('memory').get('fields').get(field.id).put(field);
+    user.get('memory').get('fields').get(field.id).put(sanitizeForGun(field));
     
     return field;
   }
@@ -498,7 +566,7 @@ export class AlephNetClient extends EventEmitter {
     
     // Persist to GunDB
     const user = this.bridge.getGun().user();
-    user.get('memory').get('fields').get(field.id).put(field);
+    user.get('memory').get('fields').get(field.id).put(sanitizeForGun(field));
     
     return field;
   }
@@ -632,27 +700,27 @@ export class AlephNetClient extends EventEmitter {
           
           // Persist encrypted version to Gun.js (only ciphertext)
           const user = this.bridge.getGun().user();
-          user.get('memory').get('fields').get(params.fieldId).get('fragments').get(frag.id).put({
+          user.get('memory').get('fields').get(params.fieldId).get('fragments').get(frag.id).put(sanitizeForGun({
             encrypted: true,
             ciphertext: encryptedFrag.ciphertext,
             nonce: encryptedFrag.nonce,
             timestamp: frag.timestamp
-          });
+          }));
           console.log(`memoryStore: Encrypted fragment ${frag.id} for ${authorizedReaders.length} readers`);
         } else {
           // No authorized readers - store plaintext
           const user = this.bridge.getGun().user();
-          user.get('memory').get('fields').get(params.fieldId).get('fragments').get(frag.id).put(frag);
+          user.get('memory').get('fields').get(params.fieldId).get('fragments').get(frag.id).put(sanitizeForGun(frag));
         }
       } catch (error) {
         console.warn('memoryStore: Failed to encrypt fragment, storing plaintext:', error);
         const user = this.bridge.getGun().user();
-        user.get('memory').get('fields').get(params.fieldId).get('fragments').get(frag.id).put(frag);
+        user.get('memory').get('fields').get(params.fieldId).get('fragments').get(frag.id).put(sanitizeForGun(frag));
       }
     } else {
       // Public or restricted visibility - store plaintext
       const user = this.bridge.getGun().user();
-      user.get('memory').get('fields').get(params.fieldId).get('fragments').get(frag.id).put(frag);
+      user.get('memory').get('fields').get(params.fieldId).get('fragments').get(frag.id).put(sanitizeForGun(frag));
     }
     
     return frag;
@@ -1995,6 +2063,11 @@ export class AlephNetClient extends EventEmitter {
 
   async fsRead(params: { path: string }): Promise<string> {
     return fs.readFile(params.path, 'utf-8');
+  }
+
+  async fsWrite(params: { path: string; content: string }): Promise<{ success: boolean }> {
+    await fs.writeFile(params.path, params.content, 'utf-8');
+    return { success: true };
   }
 
   async fsHome(): Promise<string> {

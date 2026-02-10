@@ -18,8 +18,7 @@ const RailButton: React.FC<{
     onClick: () => void;
     icon: React.ReactNode;
     label: string;
-    color?: string;
-}> = ({ isActive, onClick, icon, label, color = "blue" }) => (
+}> = ({ isActive, onClick, icon, label }) => (
     <Tooltip>
         <TooltipTrigger asChild>
             <motion.button
@@ -77,8 +76,8 @@ const NAV_ITEMS: Record<string, { label: string; icon: React.ReactNode; color?: 
     label: "SRIA Agents",
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
   },
-  services: {
-    label: "RISA Services",
+  marketplace: {
+    label: "Marketplace",
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
   },
   connections: {
@@ -190,6 +189,7 @@ export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode, onOpenSe
                     onClick = () => {
                         setActiveSidebarView('messages');
                         setMode('chat');
+                        // Always open chat stage when clicking messages
                         setLayoutAction({ type: 'open', component: 'stage', name: 'CHAT', icon: 'stage' });
                         if (!activeConversationId) {
                             startDraftConversation();
@@ -205,23 +205,26 @@ export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode, onOpenSe
                         setActiveSidebarView('memory');
                         setLayoutAction({ type: 'open', component: 'memory-viewer', name: 'MEMORY', icon: 'database' });
                     };
-                } else if (id === 'services') {
+                } else if (id === 'coherence') {
                     onClick = () => {
-                        setActiveSidebarView('services');
-                        setLayoutAction({ type: 'open', component: 'services', name: 'SERVICES', icon: 'activity' });
+                        setActiveSidebarView('coherence');
+                        // Open memory viewer with graph view for knowledge graph visualization
+                        setLayoutAction({ type: 'open', component: 'memory-viewer', name: 'KNOWLEDGE GRAPH', icon: 'database' });
+                    };
+                } else if (id === 'marketplace') {
+                    onClick = () => {
+                        setActiveSidebarView('marketplace');
+                        setLayoutAction({ type: 'open', component: 'marketplace-stage', name: 'MARKETPLACE', icon: 'zap' });
                     };
                 }
 
-                const color = item.color || "blue";
-
                 return (
                     <Reorder.Item key={id} value={id} className="relative z-10">
-                        <RailButton 
+                        <RailButton
                             label={item.label}
                             isActive={isActive}
                             onClick={onClick}
                             icon={item.icon}
-                            color={color}
                         />
                     </Reorder.Item>
                 );

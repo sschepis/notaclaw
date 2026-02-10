@@ -1,6 +1,6 @@
 import React from 'react';
 import { PluginManifest } from '../../../../../shared/plugin-types';
-import { Shield, FileText, Link, Package, Info } from 'lucide-react';
+import { Shield, FileText, Package, Info } from 'lucide-react';
 
 export const OverviewTab: React.FC<{ plugin: PluginManifest }> = ({ plugin }) => {
     return (
@@ -82,7 +82,7 @@ export const OverviewTab: React.FC<{ plugin: PluginManifest }> = ({ plugin }) =>
                         <div className="flex justify-between">
                             <span className="text-zinc-500">Loaded At</span>
                             <span className="text-zinc-300">
-                                {plugin.loadedAt ? new Date(plugin.loadedAt).toLocaleString() : 'N/A'}
+                                {(plugin as any).loadedAt ? new Date((plugin as any).loadedAt).toLocaleString() : 'N/A'}
                             </span>
                         </div>
                     </div>

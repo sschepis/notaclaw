@@ -1,4 +1,4 @@
-import { PromptContext, PromptEngineConfig, RunnerOptions, PromptTemplate, ToolDefinition, AIProvider } from './types';
+import { PromptContext, PromptEngineConfig, RunnerOptions } from './types';
 import { PromptBuilder } from './PromptBuilder';
 import { promptRegistry } from './PromptRegistry';
 import { interpolate, safeEvaluate, EnhancedEventEmitter } from './utils';
@@ -38,6 +38,10 @@ export class PromptEngine extends EnhancedEventEmitter {
 
         const builder = new PromptBuilder(context);
         
+        if (this.config.tools && this.config.tools.length > 0) {
+            builder.addToolDefinitions(this.config.tools);
+        }
+
         // Add template content
         builder.addSection({
             id: 'template-system',
@@ -77,18 +81,22 @@ export class PromptEngine extends EnhancedEventEmitter {
         // 3. Execute
         let response;
         try {
+            console.log('[PromptEngine] Sending request to provider...');
             response = await provider.request({
                 messages,
                 tools,
                 options: provider.requestObject.getOptions(options)
             });
+            console.log('[PromptEngine] Got response:', JSON.stringify(response, null, 2).substring(0, 500));
         } catch (error) {
+            console.error('[PromptEngine] Request error:', error);
             this.emit('requestError', { error });
             throw new AIError('Provider request failed', error);
         }
 
         // 4. Parse Response
         const content = provider.responseFormat.getContent(response);
+        console.log('[PromptEngine] Extracted content:', content?.substring(0, 200));
         let parsedContent;
         
         if (!template.responseFormat || template.responseFormat === 'text') {
@@ -106,24 +114,46 @@ export class PromptEngine extends EnhancedEventEmitter {
 
         // 5. Handle Tool Calls (if any)
         const toolCall = provider.responseFormat.getToolCall(response);
+        console.log('[PromptEngine] Tool call detected:', toolCall ? JSON.stringify(toolCall) : 'none');
         if (toolCall) {
             const toolName = toolCall.function.name;
-            const toolArgs = JSON.parse(toolCall.function.arguments);
+            let toolArgs: any;
+            try {
+                toolArgs = JSON.parse(toolCall.function.arguments);
+            } catch {
+                toolArgs = toolCall.function.arguments || {};
+            }
             
             this.emit('toolCall', { toolName, toolArgs });
             
             const toolDef = this.config.tools.find(t => t.function.name === toolName);
+            console.log('[PromptEngine] Looking for tool:', toolName, 'Found:', !!toolDef, 'Has script:', !!(toolDef?.function?.script));
             if (toolDef && toolDef.function.script) {
                 try {
+                    console.log('[PromptEngine] Executing tool:', toolName, 'with args:', JSON.stringify(toolArgs));
                     const result = await toolDef.function.script(toolArgs, context);
-                    // Recursive call with tool result?
-                    // For simplicity, we just return the result combined with state for now,
-                    // or we could re-prompt. The software-factory engine re-prompts.
-                    // Let's just return the result for this MVP.
-                    return { ...parsedContent, toolResult: result };
+                    console.log('[PromptEngine] Tool result:', JSON.stringify(result)?.substring(0, 500));
+                    
+                    // Return the tool result for the caller to handle re-prompting
+                    // Include any text from the initial response as well
+                    return { 
+                        text: parsedContent.text || '', 
+                        toolResult: result,
+                        toolName: toolName,
+                        raw: response
+                    };
                 } catch (err) {
+                    console.error('[PromptEngine] Tool execution error:', err);
                     throw new AIError(`Tool execution failed: ${toolName}`, err);
                 }
+            } else {
+                console.warn('[PromptEngine] Tool not found:', toolName);
+                // Tool not found - return an error message
+                return {
+                    text: `[Error] Tool "${toolName}" not found or has no implementation.`,
+                    toolResult: null,
+                    raw: response
+                };
             }
         }
 

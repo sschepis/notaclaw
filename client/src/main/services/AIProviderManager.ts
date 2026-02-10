@@ -15,7 +15,8 @@ const DEFAULT_SETTINGS: AISettings = {
     { id: 'default-agent', contentType: 'agent', providerId: '', priority: 0 },
     { id: 'default-code', contentType: 'code', providerId: '', priority: 0 },
     { id: 'default-embedding', contentType: 'embedding', providerId: '', priority: 0 },
-  ]
+  ],
+  selectedModel: null
 };
 
 // Cache TTL: 24 hours in milliseconds
@@ -218,7 +219,9 @@ export class AIProviderManager {
         providers: settings.providers.map(p => ({
           ...p,
           models: [] // Clear models before saving
-        }))
+        })),
+        // Preserve selectedModel in the saved settings
+        selectedModel: settings.selectedModel
       };
       
       const configPath = this.getConfigPath();
@@ -663,6 +666,13 @@ export class AIProviderManager {
     const modelToUse = options.model || ruleModel || provider.models[0] || 'gpt-4';
 
     try {
+        // Handle Vertex AI providers manually (not supported by SDK directly)
+        if (provider.type === 'vertex') {
+            return await this.callVertexAIChat(provider, messages, tools, modelToUse, options);
+        } else if (provider.type === 'vertex-anthropic') {
+            return await this.callVertexAnthropicChat(provider, messages, modelToUse, options);
+        }
+        
         const sdkModel = this.getSDKModel(provider, modelToUse);
         if (sdkModel) {
             // Convert tools to Vercel AI SDK format if needed
@@ -826,6 +836,229 @@ export class AIProviderManager {
         max_tokens: options.maxTokens ?? 2048,
         temperature: options.temperature ?? 0.7
       })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Vertex Anthropic error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const contentBlock = data.content?.[0];
+    
+    return {
+      content: contentBlock?.text || '',
+      model: data.model || model,
+      providerId: provider.id,
+      usage: {
+        promptTokens: data.usage?.input_tokens || 0,
+        completionTokens: data.usage?.output_tokens || 0,
+        totalTokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0)
+      }
+    };
+  }
+
+  /**
+   * Call Vertex AI with chat messages format (for multi-turn conversations)
+   */
+  private async callVertexAIChat(
+    provider: AIProviderConfig,
+    messages: any[],
+    tools: any[],
+    model: string,
+    options: AIRequestOptions
+  ): Promise<AIResponse> {
+    // Route Claude models through the Anthropic-on-Vertex endpoint
+    if (model.startsWith('claude-')) {
+      return await this.callVertexAnthropicChat(provider, messages, model, options);
+    }
+
+    const project = provider.projectId;
+    const location = provider.location || 'us-central1';
+    if (!project) throw new Error('Vertex AI provider requires a projectId');
+
+    const accessToken = await this.getVertexAccessToken(provider);
+    const host = this.vertexHost(location);
+    const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
+
+    // Extract system message - but filter out tool descriptions since we're passing native tools
+    const systemMessage = messages.find((m: any) => m.role === 'system');
+    const nonSystemMessages = messages.filter((m: any) => m.role !== 'system');
+
+    // Convert messages to Vertex AI format
+    const contents = nonSystemMessages.map((msg: any) => ({
+      role: msg.role === 'assistant' ? 'model' : msg.role,
+      parts: [{ text: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) }]
+    }));
+
+    const requestBody: any = {
+        contents,
+        generationConfig: {
+          temperature: options.temperature ?? 0.7,
+          maxOutputTokens: options.maxTokens ?? 2048
+        }
+    };
+
+    // Add system instruction if present
+    if (systemMessage) {
+        // Strip out the "## Tooling" section since we're passing native tools
+        let systemContent = typeof systemMessage.content === 'string'
+            ? systemMessage.content
+            : JSON.stringify(systemMessage.content);
+        
+        // Remove tool descriptions from system prompt (they're now native tools)
+        const toolingIndex = systemContent.indexOf('## Tooling');
+        if (toolingIndex !== -1) {
+            // Find the next ## section or end of string
+            const nextSectionMatch = systemContent.substring(toolingIndex + 10).match(/\n## /);
+            if (nextSectionMatch && nextSectionMatch.index !== undefined) {
+                systemContent = systemContent.substring(0, toolingIndex) +
+                    systemContent.substring(toolingIndex + 10 + nextSectionMatch.index);
+            } else {
+                systemContent = systemContent.substring(0, toolingIndex);
+            }
+        }
+        
+        requestBody.systemInstruction = {
+            parts: [{ text: systemContent.trim() }]
+        };
+    }
+
+    // Convert OpenAI-style tools to Vertex AI format
+    if (tools && tools.length > 0) {
+        const functionDeclarations = tools.map((tool: any) => {
+            const fn = tool.function || tool;
+            return {
+                name: fn.name,
+                description: fn.description || '',
+                parameters: fn.parameters || { type: 'object', properties: {} }
+            };
+        });
+        
+        requestBody.tools = [{
+            functionDeclarations
+        }];
+        
+        // Enable automatic function calling mode
+        requestBody.toolConfig = {
+            functionCallingConfig: {
+                mode: 'AUTO'
+            }
+        };
+        
+        console.log('[Vertex AI Chat] Tools:', functionDeclarations.map((f: any) => f.name).join(', '));
+    }
+
+    console.log('[Vertex AI Chat] Request to:', endpoint);
+    console.log('[Vertex AI Chat] Request body:', JSON.stringify(requestBody, null, 2).substring(0, 2000));
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    const responseText = await response.text();
+    console.log('[Vertex AI Chat] Response status:', response.status);
+    console.log('[Vertex AI Chat] Response body:', responseText.substring(0, 2000));
+
+    if (!response.ok) {
+      throw new Error(`Vertex AI error: ${response.status} - ${responseText}`);
+    }
+
+    const data = JSON.parse(responseText);
+    const candidate = data.candidates?.[0];
+    const parts = candidate?.content?.parts || [];
+    
+    // Extract text and function calls from parts
+    let text = '';
+    const toolCalls: any[] = [];
+    
+    for (const part of parts) {
+        if (part.text) {
+            text += part.text;
+        }
+        if (part.functionCall) {
+            // Convert Vertex AI function call format to OpenAI-style
+            toolCalls.push({
+                id: `call_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                type: 'function',
+                function: {
+                    name: part.functionCall.name,
+                    arguments: JSON.stringify(part.functionCall.args || {})
+                }
+            });
+        }
+    }
+    
+    console.log('[Vertex AI Chat] Extracted text:', text?.substring(0, 200) || '(empty)');
+    console.log('[Vertex AI Chat] Tool calls:', toolCalls.length > 0 ? JSON.stringify(toolCalls) : 'none');
+    console.log('[Vertex AI Chat] Finish reason:', candidate?.finishReason);
+
+    return {
+      content: text,
+      model: data.modelVersion || model,
+      providerId: provider.id,
+      usage: {
+        promptTokens: data.usageMetadata?.promptTokenCount || 0,
+        completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+        totalTokens: data.usageMetadata?.totalTokenCount || 0
+      },
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined
+    };
+  }
+
+  /**
+   * Call Vertex Anthropic with chat messages format (for multi-turn conversations)
+   */
+  private async callVertexAnthropicChat(
+    provider: AIProviderConfig,
+    messages: any[],
+    model: string,
+    options: AIRequestOptions
+  ): Promise<AIResponse> {
+    const project = provider.projectId;
+    const location = provider.location || 'us-central1';
+    if (!project) throw new Error('Vertex AI provider requires a projectId');
+
+    const accessToken = await this.getVertexAccessToken(provider);
+    const host = this.vertexHost(location);
+    // Anthropic on Vertex uses rawPredict or streamRawPredict
+    const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/anthropic/models/${model}:rawPredict`;
+
+    // Convert messages to Anthropic format
+    const anthropicMessages = messages.map((msg: any) => ({
+      role: msg.role === 'system' ? 'user' : msg.role,
+      content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+    }));
+
+    // Extract system message if present
+    const systemMessage = messages.find((m: any) => m.role === 'system');
+    const nonSystemMessages = anthropicMessages.filter((m: any) => m.role !== 'system' || m === anthropicMessages[0]);
+
+    const requestBody: any = {
+      anthropic_version: "vertex-2023-10-16",
+      messages: nonSystemMessages,
+      max_tokens: options.maxTokens ?? 2048,
+      temperature: options.temperature ?? 0.7
+    };
+
+    if (systemMessage) {
+      requestBody.system = typeof systemMessage.content === 'string'
+        ? systemMessage.content
+        : JSON.stringify(systemMessage.content);
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {

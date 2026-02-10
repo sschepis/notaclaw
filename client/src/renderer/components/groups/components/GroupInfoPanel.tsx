@@ -2,7 +2,7 @@ import React from 'react';
 import { useAlephStore } from '../../../store/useAlephStore';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
-import { Users, Calendar, Shield, Info } from 'lucide-react';
+import { Calendar, Shield, Info } from 'lucide-react';
 
 export const GroupInfoPanel: React.FC = () => {
   const {

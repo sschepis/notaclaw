@@ -1,22 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ArrowLeft, 
-  Zap, 
-  Play, 
-  Square, 
-  Settings,
+import React, { useState } from 'react';
+import {
+  ArrowLeft,
+  Zap,
+  Play,
+  Square,
   Activity,
   Brain,
   Target,
   Eye,
   MessageSquare
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useAlephStore } from '../../store/useAlephStore';
 import { Button } from '../ui/button';
 import { FreeEnergyGraph } from '../visualizations/FreeEnergyGraph';
 import { SMFRadarChart } from '../visualizations/SMFRadarChart';
-import { AgentStepResult } from '../../../shared/alephnet-types';
 
 interface AgentDetailStageProps {
   agentId: string;

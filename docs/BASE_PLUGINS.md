@@ -107,7 +107,7 @@ These plugins enhance the utility of the agent and the user's interaction with t
     *   `sidebar:nav-item`: Chat/Comms Icon.
     *   `stage:view`: Messaging Interface (distinct from the main Agent chat).
 
-### 8. Service Marketplace (`@alephnet/marketplace`)
+### 8. Service Marketplace (Built-in Service)
 
 **Purpose**: Discovery and subscription management for SRIA services.
 
@@ -115,9 +115,8 @@ These plugins enhance the utility of the agent and the user's interaction with t
     *   **Service Registry**: Browse available services from other nodes (e.g., "Deep Research", "Image Gen").
     *   **Subscription Manager**: Manage active subscriptions and payments.
     *   **Provider Dashboard**: For users offering services, view usage and revenue.
-*   **Permissions**: `network:http`, `store:read`, `store:write` (for payments).
-*   **Extension Slots**:
-    *   `stage:view`: App Store-like interface for Services.
+*   **Implementation**: Built into core application as `MarketplaceService.ts`
+*   **Note**: Uses AlephGunBridge for decentralized service discovery rather than a plugin.
 
 ### 9. OpenClaw Skill Manager (`@alephnet/openclaw-skills`)
 
@@ -224,17 +223,15 @@ These plugins provide specialized functionality for power users, developers, and
 *   **Extension Slots**:
     *   `settings:tab`: Backup Configuration.
 
-### 17. Voice Interface (`@alephnet/voice-interface`)
+### 17. Voice Capabilities (Built-in)
 
-**Purpose**: Adds speech-to-text (STT) and text-to-speech (TTS) capabilities.
+**Purpose**: Speech-to-text (STT) and text-to-speech (TTS) capabilities are integrated directly into the chat interface.
 
 *   **Functionality**:
-    *   **Wake Word**: "Hey Aleph" activation.
-    *   **Voice Mode**: Hands-free conversation with the agent.
-    *   **Audio Notes**: Record and transcribe voice memos into the GMF.
-*   **Permissions**: `ui:audio`.
-*   **Extension Slots**:
-    *   `sidebar:nav-item`: Microphone Toggle.
+    *   **Speech-to-Text**: Voice input via microphone button in the chat input area (uses Web Speech API).
+    *   **Text-to-Speech**: "Read Aloud" action on any message (uses browser speechSynthesis).
+*   **Location**: Integrated into `InputArea.tsx` (mic button) and `MessageActions.tsx` (read aloud).
+*   **Note**: These features are built into the core chat UI rather than a separate plugin.
 
 ### 18. API Gateway (`@alephnet/api-gateway`)
 
@@ -288,28 +285,31 @@ These plugins provide specialized functionality for power users, developers, and
 
 ## Implementation Structure
 
-We should establish a `plugins/` directory in the repository root to house these core plugins as monorepo packages.
+The project uses two plugin directories:
+
+### Core Plugins (`plugins/`)
+These are always loaded and provide essential functionality.
 
 ```
 plugins/
-├── wallet/
-├── network-visualizer/
-├── agent-essentials/
-├── knowledge-graph/
-├── coherence-monitor/
-├── governance/
-├── secure-comms/
-├── marketplace/
-├── openclaw-skills/
-├── document-reader/
-├── semantic-search/
-├── swarm-controller/
-├── code-interpreter/
-├── reputation-manager/
-├── prime-tuner/
-├── secure-backup/
-├── voice-interface/
-├── api-gateway/
-├── theme-studio/
-└── notification-center/
+├── agent-essentials/     # SRIA agent tools (fs, search, system info)
+├── auto-dash/            # Generative runtime dashboard
+├── knowledge-graph/      # Semantic knowledge graph explorer
+├── notification-center/  # System alerts and notifications
+└── secrets-manager/      # API key and credential storage
 ```
+
+### Extended Plugins (`plugins-extended/`)
+Optional plugins for advanced integrations.
+
+```
+plugins-extended/
+├── openclaw-gateway/     # OpenClaw network gateway connection
+└── openclaw-skills/      # OpenClaw skill definition manager
+```
+
+### Built-in Features (No Plugin)
+Some functionality is built directly into the core application:
+
+- **Voice Input/Output**: STT and TTS in the chat interface
+- **Marketplace Service**: Service discovery via `MarketplaceService.ts`

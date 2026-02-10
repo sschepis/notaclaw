@@ -5,7 +5,8 @@ import { OnboardingStep } from '../types';
 const STEPS: { key: OnboardingStep; label: string }[] = [
   { key: 'welcome', label: 'Welcome' },
   { key: 'identity', label: 'Identity' },
-  { key: 'ai-setup', label: 'Intelligence' },
+  { key: 'ai-setup', label: 'AI' },
+  { key: 'extensions', label: 'Extensions' },
   { key: 'complete', label: 'Ready' },
 ];
 

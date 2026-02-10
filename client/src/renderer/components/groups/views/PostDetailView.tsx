@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Send, MessageSquare, Heart, Share2, MoreHorizontal, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Share2, MoreHorizontal, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Card, CardContent } from '../../ui/card';
 import { useAlephStore } from '../../../store/useAlephStore';
@@ -14,7 +14,7 @@ interface PostDetailViewProps {
 export const PostDetailView: React.FC<PostDetailViewProps> = ({ groupId, postId, onBack }) => {
   const {
     groups: { activeGroupPosts, activePostComments },
-    commentOnPost, reactToPost
+    commentOnPost
   } = useAlephStore();
 
   const [commentInput, setCommentInput] = useState('');

@@ -615,6 +615,7 @@ export const MEMORY_ACCESS_RULES: Record<string, MemoryAccessRules> = {
     scope: 'user',
     visibility: 'private',
     allowedOperations: {
+      create: ['memory:create-field'],
       read: ['memory:read'],
       write: ['memory:write'],
       delete: ['memory:delete-field']
@@ -624,6 +625,7 @@ export const MEMORY_ACCESS_RULES: Record<string, MemoryAccessRules> = {
     scope: 'conversation',
     visibility: 'private',
     allowedOperations: {
+      create: ['memory:create-field'],
       read: ['memory:read'],
       write: ['memory:write'],
       fold: ['memory:fold'],

@@ -21,7 +21,7 @@ export const PluginDetail: React.FC<PluginDetailProps> = ({ plugin }) => {
     const handleReload = async () => {
         setIsReloading(true);
         try {
-            await window.electronAPI.pluginReload(plugin.id);
+            await (window.electronAPI as any).pluginReload(plugin.id);
         } catch (e) {
             console.error("Failed to reload plugin:", e);
         } finally {

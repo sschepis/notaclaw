@@ -162,7 +162,7 @@ class CronParser {
  */
 export class TaskScheduler extends EventEmitter {
     private bridge: AlephGunBridge;
-    private identity: IdentityManager;
+    // private identity: IdentityManager;
     private aiManager: AIProviderManager;
     private conversationManager: ConversationManager;
     private alephNetClient: AlephNetClient;
@@ -172,14 +172,14 @@ export class TaskScheduler extends EventEmitter {
 
     constructor(
         bridge: AlephGunBridge,
-        identity: IdentityManager,
+        _identity: IdentityManager,
         aiManager: AIProviderManager,
         conversationManager: ConversationManager,
         alephNetClient: AlephNetClient
     ) {
         super();
         this.bridge = bridge;
-        this.identity = identity;
+        // this.identity = identity;
         this.aiManager = aiManager;
         this.conversationManager = conversationManager;
         this.alephNetClient = alephNetClient;

@@ -25,7 +25,10 @@ export class AIProviderManagerAdapter implements AIProvider {
             maxTokens: req.options?.maxTokens
         };
 
+        console.log('[AIProviderManagerAdapter] Processing chat request...');
         const response = await this.manager.processChatRequest(req.messages, req.tools || [], options);
+        console.log('[AIProviderManagerAdapter] Raw response content:', response.content?.substring(0, 200));
+        console.log('[AIProviderManagerAdapter] Tool calls:', response.toolCalls ? JSON.stringify(response.toolCalls) : 'none');
         
         return { 
             text: response.content, 

@@ -6,7 +6,7 @@ import { Stage } from './Stage';
 import { Inspector } from './Inspector';
 import { GroupsStage } from '../groups/GroupsStage';
 import { MemoryFieldViewer } from '../memory/MemoryFieldViewer';
-import { ServicesPanel } from '../services/ServicesPanel';
+import { MarketplaceStage } from '../marketplace/MarketplaceStage';
 import { defaultLayout } from './layout-config';
 import { useAppStore } from '../../store/useAppStore';
 import { useSlotRegistry, usePluginPanels } from '../../services/SlotRegistry';
@@ -23,15 +23,30 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
     const { activeSidebarView, layoutAction, setLayoutAction } = useAppStore();
 
     useEffect(() => {
+        // Clear old layout versions to ensure clean slate
+        localStorage.removeItem('alephnet-layout-v4');
+        localStorage.removeItem('alephnet-layout-v3');
+        localStorage.removeItem('alephnet-layout-v2');
+        localStorage.removeItem('alephnet-layout');
+        
         // Load from local storage or use default
-        const savedLayout = localStorage.getItem('alephnet-layout-v4');
+        // Bump version to v5 to reset corrupted layouts
+        const savedLayout = localStorage.getItem('alephnet-layout-v5');
         let jsonModel: IJsonModel = defaultLayout;
 
         if (savedLayout) {
             try {
-                jsonModel = JSON.parse(savedLayout);
+                const parsed = JSON.parse(savedLayout);
+                // Validate that the layout has required structure - must have stage-panel
+                if (parsed && parsed.layout && JSON.stringify(parsed).includes('stage-panel')) {
+                    jsonModel = parsed;
+                } else {
+                    console.log("Saved layout missing stage-panel, using default");
+                    localStorage.removeItem('alephnet-layout-v5');
+                }
             } catch (e) {
-                console.error("Failed to parse saved layout", e);
+                console.error("Failed to parse saved layout, using default", e);
+                localStorage.removeItem('alephnet-layout-v5');
             }
         }
 
@@ -48,9 +63,27 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
             if (existingNode) {
                 model.doAction(Actions.selectTab(layoutAction.component));
             } else {
-                // Add to stage-panel (center)
-                // If stage-panel doesn't exist (e.g. user closed all tabs), add to root
-                const parentId = model.getNodeById("stage-panel") ? "stage-panel" : "root";
+                // Find a suitable parent to add the tab to
+                // Priority: stage-panel > sidebar's sibling area > root
+                let parentId = "root";
+                let dockLocation = DockLocation.CENTER;
+                
+                const stagePanelNode = model.getNodeById("stage-panel");
+                if (stagePanelNode) {
+                    parentId = "stage-panel";
+                } else {
+                    // No stage-panel exists - add to the right of sidebar's parent
+                    const sidebarNode = model.getNodeById("sidebar");
+                    if (sidebarNode) {
+                        const sidebarParent = sidebarNode.getParent();
+                        const sidebarGrandparent = sidebarParent?.getParent();
+                        if (sidebarGrandparent) {
+                            // Add to the row containing the sidebar, docking to the right
+                            parentId = sidebarGrandparent.getId() || "root";
+                            dockLocation = DockLocation.RIGHT;
+                        }
+                    }
+                }
                 
                 model.doAction(Actions.addNode({
                     type: "tab",
@@ -60,16 +93,34 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
                     id: layoutAction.component,
                     // @ts-ignore
                     icon: layoutAction.icon || "stage"
-                }, parentId, DockLocation.CENTER, -1));
+                }, parentId, dockLocation, -1));
             }
             setLayoutAction(null);
         }
     }, [layoutAction, model, setLayoutAction]);
 
-    // Sync Sidebar Tab Name with Active View
+    // Sync Sidebar Tab Name with Active View and ensure it's open
     useEffect(() => {
         if (!model) return;
-        const sidebarNode = model.getNodeById('sidebar') as TabNode;
+        
+        // Ensure sidebar exists
+        let sidebarNode = model.getNodeById('sidebar') as TabNode;
+        if (!sidebarNode) {
+             model.doAction(Actions.addNode({
+                type: "tab",
+                name: "SIDEBAR",
+                component: "sidebar",
+                enableClose: true,
+                id: "sidebar",
+                // @ts-ignore
+                icon: "sidebar"
+            }, "root", DockLocation.LEFT, 0.2));
+            sidebarNode = model.getNodeById('sidebar') as TabNode;
+        } else {
+            // Ensure it's visible/selected if it exists but might be in background
+            model.doAction(Actions.selectTab("sidebar"));
+        }
+
         if (sidebarNode) {
             const nameMap: Record<string, string> = {
                 'extensions': 'EXTENSIONS',
@@ -79,7 +130,9 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
                 'groups': 'GROUPS',
                 'memory': 'MEMORY',
                 'coherence': 'COHERENCE',
-                'agents': 'AGENTS'
+                'agents': 'AGENTS',
+                'services': 'SERVICES',
+                'marketplace': 'MARKETPLACE'
             };
             const newName = nameMap[activeSidebarView] || 'SIDEBAR';
             if (sidebarNode.getName() !== newName) {
@@ -129,6 +182,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
                 return <div className="flex-1 min-h-0 w-full overflow-hidden bg-background flex flex-col"><GroupsStage /></div>;
             case "memory-viewer":
                 return <div className="flex-1 min-h-0 w-full overflow-hidden bg-background flex flex-col"><MemoryFieldViewer /></div>;
+            case "marketplace-stage":
+                return <div className="flex-1 min-h-0 w-full overflow-hidden bg-background flex flex-col"><MarketplaceStage /></div>;
         }
         
         // Check for plugin-registered panels
@@ -174,11 +229,13 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
              else if (nodeName === 'MEMORY') Icon = Database;
              else if (nodeName === 'AGENTS') Icon = Bot;
              else if (nodeName === 'COHERENCE') Icon = Zap;
+             else if (nodeName === 'MARKETPLACE') Icon = Zap;
              else Icon = SidebarIcon;
         }
         else if (iconName === "stage") Icon = AppWindow;
         else if (iconName === "groups") Icon = Users;
         else if (iconName === "inspector") Icon = Activity;
+        else if (iconName === "zap") Icon = Zap;
         
         if (Icon) {
              renderValues.content = (
@@ -197,7 +254,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
     }, []);
 
     const onModelChange = useCallback((newModel: Model) => {
-        localStorage.setItem('alephnet-layout-v4', JSON.stringify(newModel.toJson()));
+        localStorage.setItem('alephnet-layout-v5', JSON.stringify(newModel.toJson()));
     }, []);
 
     const onAction = useCallback((action: Action) => {

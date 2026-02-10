@@ -48,13 +48,18 @@ export class ConversationManager {
         
         // NOTE: We do NOT include messages: [] here because GunDB does not support empty arrays in put().
         // We will treat the missing 'messages' node as an empty list in getConversation.
+        // Also, we must NOT include undefined values as GunDB rejects them.
         const conversationData: any = {
             id,
             title: conversationTitle,
-            domainId, // Associate conversation with a domain if provided
             createdAt: Date.now(),
             updatedAt: Date.now()
         };
+        
+        // Only add domainId if it's defined (GunDB doesn't accept undefined values)
+        if (domainId !== undefined) {
+            conversationData.domainId = domainId;
+        }
 
         // Auto-create memory field for this conversation
         let memoryFieldId: string | undefined;
@@ -161,9 +166,12 @@ export class ConversationManager {
             throw new Error('User not authenticated');
         }
 
+        // Sanitize message to remove undefined values which GunDB rejects
+        const sanitizedMessage = JSON.parse(JSON.stringify(message));
+
         // Use message.id as the key for direct access
         await new Promise<void>((resolve, reject) => {
-            this.user.get('conversations').get(conversationId).get('messages').get(message.id).put(message, (ack: any) => {
+            this.user.get('conversations').get(conversationId).get('messages').get(message.id).put(sanitizedMessage, (ack: any) => {
                 if (ack.err) reject(new Error(ack.err));
                 else resolve();
             });

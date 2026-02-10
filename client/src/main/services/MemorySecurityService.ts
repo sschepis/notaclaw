@@ -182,7 +182,7 @@ const LOG_CATEGORY = 'MemorySecurity';
 export class MemorySecurityService implements IMemorySecurityService {
   private identityManager: IdentityManager;
   private envelopeService: SignedEnvelopeService;
-  private _trustEvaluator: TrustEvaluator; // Reserved for consensus validation
+  // private _trustEvaluator: TrustEvaluator; // Reserved for consensus validation
   private trustGate: TrustGate;
   private bridge: AlephGunBridge | null = null;
   
@@ -190,7 +190,10 @@ export class MemorySecurityService implements IMemorySecurityService {
   private provenanceStore = new Map<string, ProvenanceChainEntry[]>();
   
   // Nonce store for replay protection (backed by Gun.js when bridge is set)
-  private nonceStore = new Map<string, number>(); // Maps nonce -> timestamp
+  // Maps nonceKey -> { timestamp, verified: boolean }
+  // verified=false means nonce was stored during creation but not yet verified
+  // verified=true means nonce has been verified once (subsequent verifications are replay attacks)
+  private nonceStore = new Map<string, { timestamp: number; verified: boolean }>();
   
   // Epoch store for monotonic counters (backed by Gun.js when bridge is set)
   private epochStore = new Map<string, number>();
@@ -207,12 +210,12 @@ export class MemorySecurityService implements IMemorySecurityService {
   constructor(
     identityManager: IdentityManager,
     envelopeService: SignedEnvelopeService,
-    trustEvaluator: TrustEvaluator,
+    _trustEvaluator: TrustEvaluator,
     trustGate: TrustGate
   ) {
     this.identityManager = identityManager;
     this.envelopeService = envelopeService;
-    this._trustEvaluator = trustEvaluator;
+    // this._trustEvaluator = trustEvaluator;
     this.trustGate = trustGate;
   }
   
@@ -282,8 +285,8 @@ export class MemorySecurityService implements IMemorySecurityService {
     const now = Date.now();
     const expiredNonces: string[] = [];
     
-    for (const [nonce, timestamp] of this.nonceStore) {
-      if (now - timestamp > NONCE_EXPIRY_MS) {
+    for (const [nonce, entry] of this.nonceStore) {
+      if (now - entry.timestamp > NONCE_EXPIRY_MS) {
         expiredNonces.push(nonce);
       }
     }
@@ -291,7 +294,7 @@ export class MemorySecurityService implements IMemorySecurityService {
     // Enforce memory limit - remove oldest if over limit
     if (this.nonceStore.size > MEMORY_LIMITS.maxNonces) {
       const sortedByTime = [...this.nonceStore.entries()]
-        .sort((a, b) => a[1] - b[1]);
+        .sort((a, b) => a[1].timestamp - b[1].timestamp);
       const excessCount = this.nonceStore.size - MEMORY_LIMITS.maxNonces;
       for (let i = 0; i < excessCount; i++) {
         expiredNonces.push(sortedByTime[i][0]);
@@ -359,8 +362,11 @@ export class MemorySecurityService implements IMemorySecurityService {
   
   /**
    * Persist a nonce to Gun.js.
+   * @param nonceKey - The unique nonce key
+   * @param timestamp - When the nonce was created
+   * @param verified - Whether the nonce has been verified (false on creation, true after first verification)
    */
-  private async persistNonce(nonceKey: string, timestamp: number): Promise<void> {
+  private async persistNonce(nonceKey: string, timestamp: number, verified: boolean = false): Promise<void> {
     // Validate input
     if (!nonceKey || typeof nonceKey !== 'string') {
       throw new ValidationError('Nonce key must be a non-empty string');
@@ -369,11 +375,11 @@ export class MemorySecurityService implements IMemorySecurityService {
       throw new ValidationError('Timestamp must be a positive number');
     }
     
-    this.nonceStore.set(nonceKey, timestamp);
+    this.nonceStore.set(nonceKey, { timestamp, verified });
     
     if (this.bridge) {
       try {
-        await this.bridge.put(`security/nonces/${nonceKey}`, { timestamp, expiresAt: timestamp + NONCE_EXPIRY_MS });
+        await this.bridge.put(`security/nonces/${nonceKey}`, { timestamp, expiresAt: timestamp + NONCE_EXPIRY_MS, verified });
       } catch (error) {
         logger.warn(LOG_CATEGORY, 'NoncePersistFailed',
           'Failed to persist nonce to Gun.js',
@@ -383,17 +389,21 @@ export class MemorySecurityService implements IMemorySecurityService {
   }
   
   /**
-   * Check if a nonce has been used (in-memory or Gun.js).
+   * Check if a nonce has been used for verification.
+   * Returns { exists: boolean, verified: boolean }
+   * - exists: true if nonce is in the store
+   * - verified: true if nonce has already been verified (replay attack)
    */
-  private async isNonceUsed(nonceKey: string): Promise<boolean> {
+  private async checkNonceStatus(nonceKey: string): Promise<{ exists: boolean; verified: boolean }> {
     // Validate input
     if (!nonceKey || typeof nonceKey !== 'string') {
       throw new ValidationError('Nonce key must be a non-empty string');
     }
     
     // Check in-memory first
-    if (this.nonceStore.has(nonceKey)) {
-      return true;
+    const inMemory = this.nonceStore.get(nonceKey);
+    if (inMemory) {
+      return { exists: true, verified: inMemory.verified };
     }
     
     // Check Gun.js if bridge is available
@@ -402,8 +412,8 @@ export class MemorySecurityService implements IMemorySecurityService {
         const entry = await this.bridge.get(`security/nonces/${nonceKey}`);
         if (entry && entry.timestamp) {
           // Re-add to in-memory cache
-          this.nonceStore.set(nonceKey, entry.timestamp);
-          return true;
+          this.nonceStore.set(nonceKey, { timestamp: entry.timestamp, verified: entry.verified || false });
+          return { exists: true, verified: entry.verified || false };
         }
       } catch (error) {
         logger.warn(LOG_CATEGORY, 'NonceCheckFailed',
@@ -412,7 +422,7 @@ export class MemorySecurityService implements IMemorySecurityService {
       }
     }
     
-    return false;
+    return { exists: false, verified: false };
   }
   
   /**
@@ -611,10 +621,16 @@ export class MemorySecurityService implements IMemorySecurityService {
         };
       }
       
-      // Check nonce hasn't been used (persistent check across restarts)
+      // Check nonce status for replay protection
+      // A nonce can be in one of three states:
+      // 1. Not in store: First time seeing this fragment (allow verification)
+      // 2. In store but not verified: Fragment was just created (allow first verification)
+      // 3. In store and verified: Fragment already verified once (replay attack)
       const nonceKey = `${signedFragment.envelope.contentHash}:${replayProtection.nonce}`;
-      const nonceUsed = await this.isNonceUsed(nonceKey);
-      if (nonceUsed) {
+      const nonceStatus = await this.checkNonceStatus(nonceKey);
+      
+      if (nonceStatus.verified) {
+        // This nonce has already been verified - replay attack
         logger.warn(LOG_CATEGORY, 'ReplayAttack',
           'Replay attack detected: nonce already used',
           { contentHash: signedFragment.envelope.contentHash });
@@ -627,9 +643,11 @@ export class MemorySecurityService implements IMemorySecurityService {
         };
       }
       
-      // Check epoch is increasing
+      // Check epoch is increasing (only if this is not the creator verifying their own fragment)
+      // If the nonce exists but wasn't verified, this is the creator's first verification
       const lastEpoch = this.epochStore.get(signedFragment.envelope.author.fingerprint) || 0;
-      if (replayProtection.epoch <= lastEpoch) {
+      if (!nonceStatus.exists && replayProtection.epoch <= lastEpoch) {
+        // Only check epoch for fragments we didn't create ourselves
         logger.warn(LOG_CATEGORY, 'ReplayAttack',
           'Replay attack detected: epoch not increasing',
           { contentHash: signedFragment.envelope.contentHash, epochReceived: replayProtection.epoch, lastEpoch });
@@ -642,11 +660,13 @@ export class MemorySecurityService implements IMemorySecurityService {
         };
       }
       
-      // Record nonce as used (persistent storage)
-      await this.persistNonce(nonceKey, Date.now());
+      // Mark nonce as verified (with verified=true to detect future replay attempts)
+      await this.persistNonce(nonceKey, Date.now(), true);
       
-      // Update epoch tracking
-      await this.persistEpoch(signedFragment.envelope.author.fingerprint, replayProtection.epoch);
+      // Update epoch tracking only for new fragments (not our own that we're verifying)
+      if (!nonceStatus.exists) {
+        await this.persistEpoch(signedFragment.envelope.author.fingerprint, replayProtection.epoch);
+      }
     }
     
     // Verify provenance chain integrity

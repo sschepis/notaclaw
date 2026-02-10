@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    Clock, Play, Pause, Trash2, RefreshCw, Plus, 
+import {
+    Clock, Play, Pause, Trash2, RefreshCw, Plus,
     Calendar, CheckCircle, XCircle, AlertCircle,
-    ChevronDown, ChevronRight, Settings, History
+    ChevronDown, ChevronRight, History
 } from 'lucide-react';
-import { useTaskStore, useFilteredTasks, useActiveTask } from '../../store/useTaskStore';
+import { useTaskStore, useFilteredTasks } from '../../store/useTaskStore';
 import { ScheduledTask, ScheduledTaskStatus, TaskExecutionResult } from '../../../shared/alephnet-types';
 
 // ─── Status Badge ───────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import { DSNNode } from './DSNNode';
 import { AIProviderManager } from './AIProviderManager';
 import { SecretsManager } from './SecretsManager';
 import { ServiceRegistry } from './ServiceRegistry';
+import { PersonalityManager } from './PersonalityManager';
 import { SkillDefinition } from '../../shared/types';
 import { ServiceDefinition } from '../../shared/service-types';
 import { SignedEnvelopeService } from './SignedEnvelopeService';
@@ -15,11 +16,14 @@ import { TrustEvaluator } from './TrustEvaluator';
 import { TrustGate } from './TrustGate';
 import { SignedEnvelope, Capability, TrustAssessment, CapabilityCheckResult } from '../../shared/trust-types';
 import { BasePluginManager } from '../../shared/plugin-core/BasePluginManager';
+import { TraitDefinition } from '../../shared/trait-types';
 
 export class PluginManager extends BasePluginManager<PluginContext> {
   private pluginsDir: string;
   private bundledPluginsDir: string;
+  private extendedPluginsDir: string;
   private resolvedBundledDir: string | null = null;
+  private resolvedExtendedDir: string | null = null;
   private storagePath: string;
   private dsnNode: DSNNode;
   private aiManager: AIProviderManager;
@@ -27,6 +31,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
   private trustEvaluator: TrustEvaluator;
   private trustGate: TrustGate;
   private serviceRegistry: ServiceRegistry;
+  private personalityManager: PersonalityManager;
   private storageCache: Record<string, any> | null = null;
 
   constructor(
@@ -35,7 +40,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
     signedEnvelopeService: SignedEnvelopeService,
     trustEvaluator: TrustEvaluator,
     trustGate: TrustGate,
-    serviceRegistry: ServiceRegistry
+    serviceRegistry: ServiceRegistry,
+    personalityManager: PersonalityManager
   ) {
     super();
     this.dsnNode = dsnNode;
@@ -44,16 +50,19 @@ export class PluginManager extends BasePluginManager<PluginContext> {
     this.trustEvaluator = trustEvaluator;
     this.trustGate = trustGate;
     this.serviceRegistry = serviceRegistry;
+    this.personalityManager = personalityManager;
     this.pluginsDir = path.join(app.getPath('userData'), 'plugins');
     this.bundledPluginsDir = path.join(process.cwd(), 'plugins');
+    this.extendedPluginsDir = path.join(process.cwd(), 'plugins-extended');
     this.storagePath = path.join(app.getPath('userData'), 'plugin-storage.json');
   }
 
   async initialize() {
-    console.log(`Initializing PluginManager. User plugins: ${this.pluginsDir}, Bundled plugins: ${this.bundledPluginsDir}`);
+    console.log(`Initializing PluginManager. User plugins: ${this.pluginsDir}, Core plugins: ${this.bundledPluginsDir}, Extended plugins: ${this.extendedPluginsDir}`);
     await this.ensurePluginsDir();
     await this.loadStorage();
     await this.scanBundledPlugins();
+    await this.scanExtendedPlugins();
     await this.scanPlugins();
     this.setupIPC();
   }
@@ -94,23 +103,55 @@ export class PluginManager extends BasePluginManager<PluginContext> {
     for (const p of potentialPaths) {
         try {
             await fs.access(p);
-            console.log(`Scanning bundled plugins in ${p}`);
+            console.log(`Scanning core bundled plugins in ${p}`);
             this.resolvedBundledDir = path.resolve(p);
             const entries = await fs.readdir(p, { withFileTypes: true });
             for (const entry of entries) {
                 if (entry.isDirectory()) {
-                    await this.loadPlugin(path.join(p, entry.name));
+                    await this.loadPlugin(path.join(p, entry.name), true); // isCore = true
                 }
             }
             found = true;
-            break; 
+            break;
         } catch {
             continue;
         }
     }
 
     if (!found) {
-      console.log('Bundled plugins directory not found or inaccessible:', this.bundledPluginsDir);
+      console.log('Core plugins directory not found or inaccessible:', this.bundledPluginsDir);
+    }
+  }
+
+  private async scanExtendedPlugins() {
+    const potentialPaths = [
+        this.extendedPluginsDir,
+        path.join(app.getAppPath(), 'plugins-extended'),
+        path.join(path.dirname(app.getAppPath()), 'plugins-extended'),
+        path.join(process.cwd(), '..', 'plugins-extended')
+    ];
+
+    let found = false;
+    for (const p of potentialPaths) {
+        try {
+            await fs.access(p);
+            console.log(`Scanning extended plugins in ${p}`);
+            this.resolvedExtendedDir = path.resolve(p);
+            const entries = await fs.readdir(p, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory()) {
+                    await this.loadPlugin(path.join(p, entry.name), false); // isCore = false
+                }
+            }
+            found = true;
+            break;
+        } catch {
+            continue;
+        }
+    }
+
+    if (!found) {
+      console.log('Extended plugins directory not found or inaccessible:', this.extendedPluginsDir);
     }
   }
 
@@ -127,7 +168,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
     }
   }
 
-  async loadPlugin(pluginPath: string): Promise<boolean> {
+  async loadPlugin(pluginPath: string, isCore: boolean = false): Promise<boolean> {
     try {
       const manifestPath = path.join(pluginPath, 'manifest.json');
       const packagePath = path.join(pluginPath, 'package.json');
@@ -178,6 +219,9 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         manifest.alephConfig = JSON.parse(alephContent);
         manifest.isAlephExtension = true;
       } catch {}
+
+      // Set isCore flag on manifest
+      manifest.isCore = isCore;
 
       // Trust verification
       let trust: TrustAssessment | undefined;
@@ -273,8 +317,19 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       const plugin = this.plugins.get(id);
       if (!plugin) return false;
       
-      if (!plugin.path.startsWith(this.pluginsDir)) {
-          throw new Error("Cannot uninstall bundled plugins");
+      // Core plugins cannot be uninstalled
+      if (plugin.manifest.isCore) {
+          throw new Error("Cannot uninstall core plugins. You can disable them instead.");
+      }
+      
+      // User plugins (in userData/plugins) can always be uninstalled
+      const isUserPlugin = plugin.path.startsWith(this.pluginsDir);
+      
+      // Extended plugins (in plugins-extended/) can be uninstalled
+      const isExtendedPlugin = this.resolvedExtendedDir && plugin.path.startsWith(this.resolvedExtendedDir);
+      
+      if (!isUserPlugin && !isExtendedPlugin) {
+          throw new Error("Cannot uninstall this plugin");
       }
 
       await this.unloadPlugin(id);
@@ -380,7 +435,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         registerTool: (toolDefinition: SkillDefinition, handler: Function) => {
             check('dsn:register-tool');
             console.log(`Plugin ${manifest.id} registering tool: ${toolDefinition.name}`);
-            this.serviceRegistry.registerToolHandler(toolDefinition.name, handler);
+            this.serviceRegistry.registerToolHandler(toolDefinition.name, handler, toolDefinition);
         },
         registerService: (serviceDef: ServiceDefinition, _handler: Function) => {
             check('dsn:register-service');
@@ -405,9 +460,11 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       ai: {
         complete: async (request: any) => {
             check('ai:complete');
-            const prompt = request.systemPrompt 
-                ? `System: ${request.systemPrompt}\n\nUser: ${request.userPrompt}`
-                : request.userPrompt;
+            // Support both 'prompt' and 'userPrompt' for flexibility
+            const userPrompt = request.userPrompt || request.prompt || '';
+            const prompt = request.systemPrompt
+                ? `System: ${request.systemPrompt}\n\nUser: ${userPrompt}`
+                : userPrompt;
             const response = await this.aiManager.processRequest(prompt, {
                 contentType: request.contentType || 'chat',
                 temperature: request.temperature,
@@ -417,6 +474,25 @@ export class PluginManager extends BasePluginManager<PluginContext> {
                 text: response.content,
                 raw: response
             };
+        }
+      },
+      traits: {
+        register: (trait: TraitDefinition) => {
+            // check('traits:register'); // TODO: Add permission check
+            console.log(`Plugin ${manifest.id} registering trait: ${trait.name}`);
+            this.personalityManager.getTraitRegistry().register({
+                ...trait,
+                source: manifest.id // Enforce source
+            });
+        },
+        unregister: (traitId: string) => {
+            // check('traits:write');
+            const trait = this.personalityManager.getTraitRegistry().get(traitId);
+            if (trait && trait.source === manifest.id) {
+                this.personalityManager.getTraitRegistry().unregister(traitId);
+            } else {
+                console.warn(`Plugin ${manifest.id} tried to unregister trait ${traitId} which it does not own.`);
+            }
         }
       }
     };
@@ -433,7 +509,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         isAlephExtension: !!p.alephConfig,
         alephConfig: p.alephConfig,
         trust: p.trust,
-        status: p.status
+        status: p.status,
+        isCore: p.manifest.isCore || false
       }));
     });
 

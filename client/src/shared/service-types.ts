@@ -65,6 +65,7 @@ export interface ServiceDefinition {
       inputSchema: Record<string, any>;
       outputSchema: Record<string, any>;
       costMultiplier: number;
+      examples?: Array<{ name: string; input: any; output: any }>;
     }>;
     semanticDomain: SemanticDomain;
     smfAxes: number[];
@@ -86,6 +87,18 @@ export interface ServiceDefinition {
   
   tags: string[];
   category: string;
+  
+  metadata?: {
+    richDescription?: string; // Markdown supported
+    screenshots?: Array<{ url: string; caption?: string }>;
+    demoUrls?: Array<{ title: string; url: string }>;
+  };
+
+  verification?: {
+    proofs: Array<{ type: string; value: string; signature: string }>;
+    audits?: Array<{ auditorId: string; reportUrl: string; date: number }>;
+  };
+
   documentationUrl?: string;
   iconUrl?: string;
   status: 'DRAFT' | 'ACTIVE' | 'DEPRECATED' | 'SUSPENDED';
