@@ -1,6 +1,9 @@
 import { PluginContext } from '../../../src/shared/plugin-types';
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface JsonRpcRequest {
     jsonrpc: '2.0';
@@ -27,6 +30,117 @@ interface JsonRpcNotification {
 }
 
 // ============================================================================
+// Pairing token persistence
+// ============================================================================
+
+interface PairedTokenData {
+    token: string;
+    deviceId: string;
+    pairedAt: string;
+    host: string;
+    port: number;
+}
+
+class PairingTokenStore {
+    private filePath: string;
+
+    constructor(dataDir: string) {
+        this.filePath = path.join(dataDir, 'vscode-pairing.json');
+    }
+
+    /**
+     * Load stored pairing tokens keyed by host:port
+     */
+    load(): Map<string, PairedTokenData> {
+        try {
+            if (fs.existsSync(this.filePath)) {
+                const data = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
+                return new Map(Object.entries(data));
+            }
+        } catch (e) {
+            console.error('Failed to load pairing tokens:', e);
+        }
+        return new Map();
+    }
+
+    /**
+     * Save pairing token for a host:port
+     */
+    save(key: string, data: PairedTokenData): void {
+        const tokens = this.load();
+        tokens.set(key, data);
+        try {
+            const dir = path.dirname(this.filePath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.writeFileSync(this.filePath, JSON.stringify(Object.fromEntries(tokens), null, 2), 'utf8');
+        } catch (e) {
+            console.error('Failed to save pairing token:', e);
+        }
+    }
+
+    /**
+     * Remove pairing token for a host:port
+     */
+    remove(key: string): void {
+        const tokens = this.load();
+        tokens.delete(key);
+        try {
+            fs.writeFileSync(this.filePath, JSON.stringify(Object.fromEntries(tokens), null, 2), 'utf8');
+        } catch (e) {
+            console.error('Failed to remove pairing token:', e);
+        }
+    }
+
+    /**
+     * Get pairing token for a host:port
+     */
+    get(key: string): PairedTokenData | undefined {
+        return this.load().get(key);
+    }
+}
+
+// ============================================================================
+// ECDH crypto helpers (client side)
+// ============================================================================
+
+function generateClientECDHKeyPair(): { publicKey: string; privateKey: string } {
+    const ecdh = crypto.createECDH('prime256v1');
+    ecdh.generateKeys();
+    return {
+        publicKey: ecdh.getPublicKey('base64'),
+        privateKey: ecdh.getPrivateKey('base64'),
+    };
+}
+
+function deriveClientSharedSecret(ourPrivateKeyBase64: string, theirPublicKeyBase64: string): Buffer {
+    const ecdh = crypto.createECDH('prime256v1');
+    ecdh.setPrivateKey(Buffer.from(ourPrivateKeyBase64, 'base64'));
+    const shared = ecdh.computeSecret(Buffer.from(theirPublicKeyBase64, 'base64'));
+    return crypto.createHash('sha256').update(shared).digest();
+}
+
+function decryptWithSharedSecret(encryptedData: string, sharedSecret: Buffer): string {
+    const combined = Buffer.from(encryptedData, 'base64');
+    const iv = combined.subarray(0, 12);
+    const authTag = combined.subarray(12, 28);
+    const ciphertext = combined.subarray(28);
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', sharedSecret, iv);
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(ciphertext, undefined, 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+}
+
+function generateClientFingerprint(): string {
+    const hostInfo = `${process.env.USER || 'unknown'}-${process.pid}-${Date.now()}`;
+    return crypto.createHash('sha256').update(hostInfo).digest('hex').substring(0, 16);
+}
+
+// ============================================================================
 // WebSocket Client with auth gate, exponential backoff, and notifications
 // ============================================================================
 
@@ -43,11 +157,49 @@ class VSCodeClient {
     private authReject: ((err: Error) => void) | null = null;
     private disposed = false;
 
+    // Pairing support
+    private tokenStore: PairingTokenStore | null = null;
+    private pairedToken: string | null = null;
+    private clientFingerprint: string;
+
     // Notification handlers
     private notificationHandlers = new Map<string, Array<(params: any) => void>>();
+    
+    // Log handler
+    public onLog?: (entry: any) => void;
 
-    constructor(config: { host: string; port: number; token: string; useTls?: boolean }) {
+    constructor(config: { host: string; port: number; token: string; useTls?: boolean }, dataDir?: string) {
         this.config = config;
+        this.clientFingerprint = generateClientFingerprint();
+
+        // Initialize pairing token store
+        if (dataDir) {
+            this.tokenStore = new PairingTokenStore(dataDir);
+            // Load existing paired token for this host:port
+            const key = `${config.host}:${config.port}`;
+            const stored = this.tokenStore.get(key);
+            if (stored) {
+                this.pairedToken = stored.token;
+                this.log('connection', `Loaded paired token for ${key} (device: ${stored.deviceId})`);
+            }
+        }
+    }
+
+    private log(type: string, message: string, details?: any) {
+        const entry = {
+            id: uuidv4(),
+            timestamp: Date.now(),
+            type,
+            message,
+            details
+        };
+        // Console log for debugging
+        console.log(`[${type}] ${message}`, details || '');
+        
+        // Emit to UI
+        if (this.onLog) {
+            this.onLog(entry);
+        }
     }
 
     connect() {
@@ -56,18 +208,21 @@ class VSCodeClient {
         // WSS support (3.2.1)
         const protocol = this.config.useTls ? 'wss' : 'ws';
         const url = `${protocol}://${this.config.host}:${this.config.port}`;
-        console.log(`Connecting to VS Code at ${url}...`);
+        this.log('connection', `Connecting to VS Code at ${url}...`);
 
-        // Create auth gate promise
+        // Create auth gate promise (with catch to prevent unhandled rejection)
         this.authPromise = new Promise<void>((resolve, reject) => {
             this.authResolve = resolve;
             this.authReject = reject;
+        });
+        this.authPromise.catch(() => {
+            // Handled: auth failure is logged in handleMessage; this prevents UnhandledPromiseRejectionWarning
         });
 
         this.ws = new WebSocket(url);
 
         this.ws.on('open', () => {
-            console.log('Connected to VS Code WebSocket');
+            this.log('connection', 'Connected to VS Code WebSocket');
             this.isConnected = true;
             this.reconnectAttempts = 0; // Reset backoff on successful connection
         });
@@ -77,12 +232,12 @@ class VSCodeClient {
                 const message = JSON.parse(data.toString());
                 this.handleMessage(message);
             } catch (e) {
-                console.error('Failed to parse message from VS Code:', e);
+                this.log('error', 'Failed to parse message from VS Code', e);
             }
         });
 
         this.ws.on('close', () => {
-            console.log('Disconnected from VS Code');
+            this.log('connection', 'Disconnected from VS Code');
             this.cleanup();
             if (!this.disposed) {
                 this.scheduleReconnect();
@@ -90,7 +245,7 @@ class VSCodeClient {
         });
 
         this.ws.on('error', (err) => {
-            console.error('VS Code WebSocket error:', err.message);
+            this.log('error', `VS Code WebSocket error: ${err.message}`);
             this.cleanup();
             if (!this.disposed) {
                 this.scheduleReconnect();
@@ -132,7 +287,7 @@ class VSCodeClient {
 
         this.reconnectAttempts++;
 
-        console.log(`Reconnecting to VS Code in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})...`);
+        this.log('connection', `Reconnecting to VS Code in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})...`);
 
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
@@ -143,21 +298,60 @@ class VSCodeClient {
     private async handleMessage(message: any) {
         // Handle Auth Challenge (notification from server, no id)
         if (message.method === 'auth.challenge' && !message.id) {
+            // Determine which token to use: paired token > config token > env token
+            const authToken = this.pairedToken || this.config.token;
+
+            if (!authToken) {
+                this.log('auth', 'VS Code auth challenge received but no token available. Skipping authentication.');
+                // Resolve auth anyway so tools can attempt to work (server may allow unauthenticated access)
+                this.isAuthenticated = true;
+                this.authResolve?.();
+                return;
+            }
+            if (!message.params?.nonce) {
+                this.log('auth', 'VS Code auth challenge missing nonce. Skipping authentication.');
+                this.isAuthenticated = true;
+                this.authResolve?.();
+                return;
+            }
             try {
                 const result = await this.sendRaw('auth.authenticate', {
-                    token: this.config.token,
+                    token: authToken,
                     nonce: message.params.nonce
                 });
                 if (result.authenticated) {
-                    console.log('Authenticated with VS Code');
+                    const method = this.pairedToken ? 'paired token' : 'config token';
+                    this.log('auth', `Authenticated with VS Code via ${method}`);
                     this.isAuthenticated = true;
                     this.authResolve?.();
                 } else {
-                    console.error('Authentication failed:', result.error);
-                    this.authReject?.(new Error(result.error || 'Authentication failed'));
+                    // If paired token failed, try config token as fallback
+                    if (this.pairedToken && this.config.token && this.pairedToken !== this.config.token) {
+                        this.log('auth', 'Paired token rejected, falling back to config token...');
+                        const fallback = await this.sendRaw('auth.authenticate', {
+                            token: this.config.token,
+                            nonce: message.params.nonce
+                        });
+                        if (fallback.authenticated) {
+                            this.log('auth', 'Authenticated with VS Code via fallback config token');
+                            this.isAuthenticated = true;
+                            // Clear invalid paired token
+                            this.pairedToken = null;
+                            if (this.tokenStore) {
+                                this.tokenStore.remove(`${this.config.host}:${this.config.port}`);
+                            }
+                            this.authResolve?.();
+                        } else {
+                            this.log('auth', 'Authentication failed (both paired and config tokens)', fallback.error);
+                            this.authReject?.(new Error(fallback.error || 'Authentication failed'));
+                        }
+                    } else {
+                        this.log('auth', 'Authentication failed', result.error);
+                        this.authReject?.(new Error(result.error || 'Authentication failed'));
+                    }
                 }
             } catch (e) {
-                console.error('Error during authentication:', e);
+                this.log('error', 'Error during authentication', e);
                 this.authReject?.(e instanceof Error ? e : new Error(String(e)));
             }
             return;
@@ -194,6 +388,11 @@ class VSCodeClient {
     }
 
     private dispatchNotification(method: string, params: any): void {
+        // Log notifications
+        if (method !== 'terminal.output') { // Too noisy
+            this.log('notification', `Received ${method}`, params);
+        }
+
         const handlers = this.notificationHandlers.get(method);
         if (handlers) {
             for (const handler of handlers) {
@@ -254,7 +453,17 @@ class VSCodeClient {
             await this.authPromise;
         }
 
-        return this.sendRaw(method, params, timeoutMs);
+        this.log('tool-call', method, params);
+        try {
+            const result = await this.sendRaw(method, params, timeoutMs);
+            // Don't log large results
+            const resultPreview = JSON.stringify(result).length > 200 ? '(large result)' : result;
+            this.log('tool-result', `${method} success`, resultPreview);
+            return result;
+        } catch (e) {
+            this.log('error', `${method} failed`, e);
+            throw e;
+        }
     }
 
     /**
@@ -262,6 +471,125 @@ class VSCodeClient {
      */
     get ready(): boolean {
         return this.isConnected && this.isAuthenticated;
+    }
+
+    /**
+     * Public getters for UI
+     */
+    get isConnectedPublic(): boolean { return this.isConnected; }
+    get isAuthenticatedPublic(): boolean { return this.isAuthenticated; }
+    get configPublic(): { host: string; port: number } { return { host: this.config.host, port: this.config.port }; }
+
+    getPairedTokenData(): PairedTokenData | undefined {
+        if (!this.tokenStore) return undefined;
+        return this.tokenStore.get(`${this.config.host}:${this.config.port}`);
+    }
+
+    updateConfig(host: string, port: number) {
+        if (this.config.host === host && this.config.port === port) return;
+        
+        this.config.host = host;
+        this.config.port = port;
+        this.log('connection', `Configuration updated to ${host}:${port}. Reconnecting...`);
+        
+        // Disconnect and let reconnect logic handle it
+        if (this.ws) {
+            this.ws.close();
+        } else {
+            this.connect();
+        }
+    }
+
+    unpair() {
+        this.pairedToken = null;
+        if (this.tokenStore) {
+            this.tokenStore.remove(`${this.config.host}:${this.config.port}`);
+            this.log('auth', 'Unpaired device');
+        }
+        // Reconnect to try without paired token
+        if (this.ws) {
+            this.ws.close();
+        }
+    }
+
+    /**
+     * Initiate pairing with VS Code using a 6-digit code.
+     * The user must first run "Pair a Device" in VS Code to get the code.
+     * 
+     * @param code The 6-digit pairing code displayed in VS Code
+     * @param clientName Friendly name for this client (optional)
+     * @returns Pairing result
+     */
+    async pair(code: string, clientName?: string): Promise<{ success: boolean; message: string }> {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            // Need an active connection to pair
+            throw new Error('Not connected to VS Code. Connect first, then pair.');
+        }
+
+        // Generate ECDH key pair
+        const keyPair = generateClientECDHKeyPair();
+
+        const name = clientName || `AlephNet-${process.env.USER || 'client'}-${process.pid}`;
+
+        this.log('auth', `Initiating pairing with code ${code}...`);
+
+        try {
+            // Send pair.initiate (unauthenticated — code is the credential)
+            const result = await this.sendRaw('pair.initiate', {
+                code,
+                clientPublicKey: keyPair.publicKey,
+                clientName: name,
+                clientFingerprint: this.clientFingerprint,
+            }, 120000); // 2 minute timeout (user needs to approve)
+
+            if (result.paired === false) {
+                return { success: false, message: result.reason || 'Pairing rejected' };
+            }
+
+            // Successfully paired — decrypt the token using ECDH shared secret
+            const sharedSecret = deriveClientSharedSecret(keyPair.privateKey, result.serverPublicKey);
+            const token = decryptWithSharedSecret(result.encryptedToken, sharedSecret);
+
+            // Store the token for future connections
+            this.pairedToken = token;
+            if (this.tokenStore) {
+                this.tokenStore.save(`${this.config.host}:${this.config.port}`, {
+                    token,
+                    deviceId: result.deviceId,
+                    pairedAt: new Date().toISOString(),
+                    host: this.config.host,
+                    port: this.config.port,
+                });
+            }
+
+            this.log('auth', `Paired successfully! Device ID: ${result.deviceId}`);
+
+            // Now authenticate with the new token
+            // We need to wait for the next auth challenge (reconnect)
+            // Or if already challenged, authenticate immediately
+            if (!this.isAuthenticated && this.authResolve) {
+                // We're still in the initial connection, auth challenge already received
+                // We'll re-authenticate on next reconnect with the paired token
+                this.log('auth', 'Paired token stored. Reconnecting to authenticate...');
+                this.ws?.close();
+            }
+
+            return {
+                success: true,
+                message: `Paired with VS Code as "${name}" (device: ${result.deviceId}). Token stored for future connections.`,
+            };
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.log('error', 'Pairing failed', msg);
+            return { success: false, message: `Pairing failed: ${msg}` };
+        }
+    }
+
+    /**
+     * Check if this client has a paired token stored
+     */
+    get isPaired(): boolean {
+        return this.pairedToken !== null;
     }
 
     /**
@@ -297,8 +625,64 @@ export const activate = async (context: PluginContext) => {
     const token = config.token || process.env.VSCODE_CONTROL_TOKEN || '';
     const useTls = config.useTls ?? (process.env.VSCODE_CONTROL_TLS === 'true');
 
-    client = new VSCodeClient({ host, port, token, useTls });
+    // Determine data directory for persisting pairing tokens
+    const dataDir = config.dataDir || path.join(process.env.HOME || '/tmp', '.aleph', 'plugins', 'vscode-control');
+
+    client = new VSCodeClient({ host, port, token, useTls }, dataDir);
+    
+    // Wire up logging
+    client.onLog = (entry) => {
+        // Emit log event to renderer
+        // Use a custom event name or mechanism if context.ipc.send isn't available for arbitrary events
+        // Assuming context.ipc has a way to send events to renderer, or we use a specific channel
+        // Since PluginContext definition shows `ipc.send(channel, data)`, we use that.
+        try {
+            context.ipc.send('vscode-control:log', entry);
+        } catch (e) {
+            console.error('Failed to send log to renderer:', e);
+        }
+    };
+
     client.connect();
+
+    // ─── IPC Handlers ──────────────────────────────────────────────────
+    
+    context.ipc.handle('vscode-control:status', async () => {
+        if (!client) return { connected: false, authenticated: false, paired: false, host: '127.0.0.1', port: 19876 };
+        
+        const stored = client.getPairedTokenData();
+        
+        return {
+            connected: client.isConnectedPublic,
+            authenticated: client.isAuthenticatedPublic,
+            paired: client.isPaired,
+            host: client.configPublic.host,
+            port: client.configPublic.port,
+            deviceId: stored?.deviceId,
+            pairedAt: stored?.pairedAt
+        };
+    });
+
+    context.ipc.handle('vscode-control:pair', async (args: any) => {
+        if (!client) throw new Error('Client not initialized');
+        return await client.pair(args.code, args.clientName);
+    });
+
+    context.ipc.handle('vscode-control:unpair', async () => {
+        if (!client) throw new Error('Client not initialized');
+        client.unpair();
+        return { success: true };
+    });
+
+    context.ipc.handle('vscode-control:config', async (args: any) => {
+        if (!client) throw new Error('Client not initialized');
+        
+        if (args && (args.host || args.port)) {
+            client.updateConfig(args.host || client.configPublic.host, args.port || client.configPublic.port);
+        }
+        
+        return client.configPublic;
+    });
 
     // ─── Notification handlers ─────────────────────────────────────────
     client.onNotification('terminal.output', (params) => {
@@ -1051,6 +1435,86 @@ export const activate = async (context: PluginContext) => {
         },
         ['requests'],
         async (args) => client!.send('batch', { requests: args.requests })
+    );
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Pairing tools
+    // ═══════════════════════════════════════════════════════════════════
+
+    registerTool(
+        'vscode_pair',
+        'Pair this client with a VS Code instance using a 6-digit code. First run "Pair a Device" in VS Code (Ctrl+Shift+P > "Aleph Agent Control: Pair a Device") to get the code, then use this tool with that code.',
+        {
+            code: { type: 'string', description: 'The 6-digit pairing code displayed in VS Code' },
+            clientName: { type: 'string', description: 'Friendly name for this client (optional)' }
+        },
+        ['code'],
+        async (args) => {
+            if (!client) {
+                return { success: false, message: 'VS Code client not initialized' };
+            }
+            return client.pair(args.code, args.clientName);
+        }
+    );
+
+    registerTool(
+        'vscode_pairing_status',
+        'Check whether this client is paired with VS Code',
+        {},
+        [],
+        async () => {
+            if (!client) {
+                return { paired: false, connected: false, authenticated: false };
+            }
+            return {
+                paired: client.isPaired,
+                connected: client.ready,
+                authenticated: client.ready,
+            };
+        }
+    );
+
+    registerTool(
+        'vscode_pairing_setup',
+        'Show an interactive inline pairing form in the conversation so the user can pair with VS Code. Call this when the user asks to set up, pair, or connect VS Code. Returns a custom code fence that renders a pairing UI widget.',
+        {
+            host: { type: 'string', description: 'Default host for the connection (optional, defaults to 127.0.0.1)' },
+            port: { type: 'number', description: 'Default port for the connection (optional, defaults to 19876)' },
+            title: { type: 'string', description: 'Custom title for the pairing widget (optional)' }
+        },
+        [],
+        async (args: any) => {
+            const cfg: Record<string, any> = {};
+            if (args.host) cfg.host = args.host;
+            if (args.port) cfg.port = args.port;
+            if (args.title) cfg.title = args.title;
+
+            const configJson = Object.keys(cfg).length > 0 ? JSON.stringify(cfg) : '';
+
+            // Return the custom fence block that will be rendered inline
+            const fenceBlock = [
+                '```vscode-pairing',
+                configJson,
+                '```',
+            ].join('\n');
+
+            // Also include current status for context
+            let statusInfo = '';
+            if (client) {
+                const isPaired = client.isPaired;
+                const isConnected = client.ready;
+                statusInfo = isPaired && isConnected
+                    ? '\n\n✅ You are already paired and connected to VS Code.'
+                    : isPaired
+                        ? '\n\n🔗 You have a saved pairing but are not currently connected.'
+                        : '\n\n🔌 Not yet paired. Use the form above to connect.';
+            }
+
+            return {
+                content: fenceBlock + statusInfo,
+                display: 'inline',
+            };
+        }
     );
 
     console.log('VS Code Control Plugin activated.');

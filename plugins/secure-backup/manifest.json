@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "name": "Secure Backup",
   "description": "Automated, encrypted backups of local graph and identity.",
-  "main": "main/index.js",
+  "main": "dist/main/index.js",
   "renderer": "renderer/index.js",
   "permissions": [
     "fs:write",

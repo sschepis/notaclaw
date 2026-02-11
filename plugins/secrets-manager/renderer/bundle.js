@@ -1,4 +1,6 @@
 "use strict";
+
+// plugins/secrets-manager/renderer/bundle.js
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -26,42 +28,26 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// plugins/secrets-manager/renderer/index.tsx
 var index_exports = {};
 __export(index_exports, {
   activate: () => activate,
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(index_exports);
-
-// node_modules/lucide-react/dist/esm/createLucideIcon.js
 var import_react2 = require("react");
-
-// node_modules/lucide-react/dist/esm/shared/src/utils/mergeClasses.js
 var mergeClasses = (...classes) => classes.filter((className, index, array) => {
   return Boolean(className) && className.trim() !== "" && array.indexOf(className) === index;
 }).join(" ").trim();
-
-// node_modules/lucide-react/dist/esm/shared/src/utils/toKebabCase.js
 var toKebabCase = (string) => string.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
-
-// node_modules/lucide-react/dist/esm/shared/src/utils/toCamelCase.js
 var toCamelCase = (string) => string.replace(
   /^([A-Z])|[\s-_]+(\w)/g,
   (match, p1, p2) => p2 ? p2.toUpperCase() : p1.toLowerCase()
 );
-
-// node_modules/lucide-react/dist/esm/shared/src/utils/toPascalCase.js
 var toPascalCase = (string) => {
   const camelCase = toCamelCase(string);
   return camelCase.charAt(0).toUpperCase() + camelCase.slice(1);
 };
-
-// node_modules/lucide-react/dist/esm/Icon.js
 var import_react = require("react");
-
-// node_modules/lucide-react/dist/esm/defaultAttributes.js
 var defaultAttributes = {
   xmlns: "http://www.w3.org/2000/svg",
   width: 24,
@@ -73,8 +59,6 @@ var defaultAttributes = {
   strokeLinecap: "round",
   strokeLinejoin: "round"
 };
-
-// node_modules/lucide-react/dist/esm/shared/src/utils/hasA11yProp.js
 var hasA11yProp = (props) => {
   for (const prop in props) {
     if (prop.startsWith("aria-") || prop === "role" || prop === "title") {
@@ -83,8 +67,6 @@ var hasA11yProp = (props) => {
   }
   return false;
 };
-
-// node_modules/lucide-react/dist/esm/Icon.js
 var Icon = (0, import_react.forwardRef)(
   ({
     color = "currentColor",
@@ -114,8 +96,6 @@ var Icon = (0, import_react.forwardRef)(
     ]
   )
 );
-
-// node_modules/lucide-react/dist/esm/createLucideIcon.js
 var createLucideIcon = (iconName, iconNode) => {
   const Component = (0, import_react2.forwardRef)(
     ({ className, ...props }, ref) => (0, import_react2.createElement)(Icon, {
@@ -132,37 +112,27 @@ var createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-
-// node_modules/lucide-react/dist/esm/icons/key.js
 var __iconNode = [
   ["path", { d: "m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4", key: "g0fldk" }],
   ["path", { d: "m21 2-9.6 9.6", key: "1j0ho8" }],
   ["circle", { cx: "7.5", cy: "15.5", r: "5.5", key: "yqb3hr" }]
 ];
 var Key = createLucideIcon("key", __iconNode);
-
-// node_modules/lucide-react/dist/esm/icons/lock-open.js
 var __iconNode2 = [
   ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
   ["path", { d: "M7 11V7a5 5 0 0 1 9.9-1", key: "1mm8w8" }]
 ];
 var LockOpen = createLucideIcon("lock-open", __iconNode2);
-
-// node_modules/lucide-react/dist/esm/icons/lock.js
 var __iconNode3 = [
   ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
   ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
 ];
 var Lock = createLucideIcon("lock", __iconNode3);
-
-// node_modules/lucide-react/dist/esm/icons/plus.js
 var __iconNode4 = [
   ["path", { d: "M5 12h14", key: "1ays0h" }],
   ["path", { d: "M12 5v14", key: "s699le" }]
 ];
 var Plus = createLucideIcon("plus", __iconNode4);
-
-// node_modules/lucide-react/dist/esm/icons/refresh-cw.js
 var __iconNode5 = [
   ["path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", key: "v9h5vc" }],
   ["path", { d: "M21 3v5h-5", key: "1q7to0" }],
@@ -170,15 +140,11 @@ var __iconNode5 = [
   ["path", { d: "M8 16H3v5", key: "1cv678" }]
 ];
 var RefreshCw = createLucideIcon("refresh-cw", __iconNode5);
-
-// node_modules/lucide-react/dist/esm/icons/search.js
 var __iconNode6 = [
   ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
   ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
 ];
 var Search = createLucideIcon("search", __iconNode6);
-
-// node_modules/lucide-react/dist/esm/icons/shield.js
 var __iconNode7 = [
   [
     "path",
@@ -189,8 +155,6 @@ var __iconNode7 = [
   ]
 ];
 var Shield = createLucideIcon("shield", __iconNode7);
-
-// node_modules/lucide-react/dist/esm/icons/trash-2.js
 var __iconNode8 = [
   ["path", { d: "M10 11v6", key: "nco0om" }],
   ["path", { d: "M14 11v6", key: "outv1u" }],
@@ -199,15 +163,11 @@ var __iconNode8 = [
   ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
 ];
 var Trash2 = createLucideIcon("trash-2", __iconNode8);
-
-// node_modules/lucide-react/dist/esm/icons/x.js
 var __iconNode9 = [
   ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
   ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
 ];
 var X = createLucideIcon("x", __iconNode9);
-
-// plugins/secrets-manager/renderer/components/SecretsSidebar.tsx
 var import_react3 = __toESM(require("react"));
 var NAMESPACES = [
   "user",
@@ -416,8 +376,6 @@ var SecretsSidebar = () => {
     /* @__PURE__ */ import_react3.default.createElement(Trash2, { className: "w-3.5 h-3.5" })
   ))))), /* @__PURE__ */ import_react3.default.createElement("div", { className: "p-2 border-t border-gray-800 bg-gray-900 text-[10px] text-gray-500 flex justify-between" }, /* @__PURE__ */ import_react3.default.createElement("span", null, filteredSecrets.length, " secrets"), /* @__PURE__ */ import_react3.default.createElement("span", null, status.entryCount, " total in vault"))));
 };
-
-// plugins/secrets-manager/renderer/index.tsx
 var activate = (context) => {
   console.log("[Secrets Manager] Activated");
   const { ui } = context;

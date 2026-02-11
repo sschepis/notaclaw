@@ -25,6 +25,12 @@ describe('VS Code Control Plugin', () => {
         registerTool: jest.fn((def, handler) => {
           registeredTools[def.name] = handler;
         })
+      },
+      ipc: {
+        send: jest.fn(),
+        on: jest.fn(),
+        handle: jest.fn(),
+        invoke: jest.fn()
       }
     };
 
@@ -59,6 +65,39 @@ describe('VS Code Control Plugin', () => {
     expect(registeredTools['vscode_open_file']).toBeDefined();
     expect(registeredTools['vscode_read_file']).toBeDefined();
     expect(registeredTools['vscode_edit_file']).toBeDefined();
+    expect(registeredTools['vscode_pairing_setup']).toBeDefined();
+  });
+
+  it('should return a vscode-pairing fence block from vscode_pairing_setup', async () => {
+    await activate(mockContext);
+
+    const handler = registeredTools['vscode_pairing_setup'];
+    const result = await handler({});
+
+    expect(result).toBeDefined();
+    expect(result.content).toContain('```vscode-pairing');
+    expect(result.display).toBe('inline');
+  });
+
+  it('should include config in vscode_pairing_setup fence block when provided', async () => {
+    await activate(mockContext);
+
+    const handler = registeredTools['vscode_pairing_setup'];
+    const result = await handler({ host: '192.168.1.100', port: 9999, title: 'My VS Code' });
+
+    expect(result.content).toContain('```vscode-pairing');
+    expect(result.content).toContain('192.168.1.100');
+    expect(result.content).toContain('9999');
+    expect(result.content).toContain('My VS Code');
+  });
+
+  it('should register IPC handlers for pairing', async () => {
+    await activate(mockContext);
+
+    expect(mockContext.ipc.handle).toHaveBeenCalledWith('vscode-control:status', expect.any(Function));
+    expect(mockContext.ipc.handle).toHaveBeenCalledWith('vscode-control:pair', expect.any(Function));
+    expect(mockContext.ipc.handle).toHaveBeenCalledWith('vscode-control:unpair', expect.any(Function));
+    expect(mockContext.ipc.handle).toHaveBeenCalledWith('vscode-control:config', expect.any(Function));
   });
 
   it('should send messages via websocket when tool is called', async () => {

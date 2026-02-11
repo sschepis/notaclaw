@@ -227,6 +227,59 @@ export interface AuthResult {
 }
 
 // ============================================================================
+// Pairing Types
+// ============================================================================
+
+export interface PairInitiateParams {
+  /** The 6-digit pairing code displayed in VS Code */
+  code: string;
+  /** Client's ECDH public key (base64-encoded) */
+  clientPublicKey: string;
+  /** Human-friendly client device name */
+  clientName: string;
+  /** Client identity fingerprint */
+  clientFingerprint: string;
+}
+
+export interface PairCompleteResult {
+  /** Server's ECDH public key (base64-encoded) */
+  serverPublicKey: string;
+  /** Pairing token encrypted with ECDH shared secret (base64) */
+  encryptedToken: string;
+  /** Unique identifier for this VS Code instance */
+  instanceId: string;
+  /** Human-friendly name for this VS Code instance */
+  instanceName: string;
+  /** Port the server is running on */
+  port: number;
+}
+
+export interface PairRejectedResult {
+  /** Reason the pairing was rejected */
+  reason: string;
+}
+
+export interface PairedDeviceInfo {
+  id: string;
+  name: string;
+  fingerprint: string;
+  pairedAt: number;
+  lastSeen: number;
+}
+
+export interface PairListResult {
+  devices: PairedDeviceInfo[];
+}
+
+export interface PairRevokeParams {
+  deviceId: string;
+}
+
+export interface PairRevokeResult {
+  revoked: boolean;
+}
+
+// ============================================================================
 // Session Types
 // ============================================================================
 
@@ -597,6 +650,11 @@ export interface AgentControlConfig {
 
 export const METHOD_CATEGORIES = {
   auth: ['auth.authenticate'],
+  pair: [
+    'pair.initiate',
+    'pair.list',
+    'pair.revoke',
+  ],
   editor: [
     'editor.openFile',
     'editor.closeFile',
@@ -682,6 +740,7 @@ export const METHOD_CATEGORIES = {
 
 export type MethodName = 
   | typeof METHOD_CATEGORIES.auth[number]
+  | typeof METHOD_CATEGORIES.pair[number]
   | typeof METHOD_CATEGORIES.editor[number]
   | typeof METHOD_CATEGORIES.fs[number]
   | typeof METHOD_CATEGORIES.terminal[number]

@@ -5,10 +5,42 @@
 
 import * as vscode from 'vscode';
 import { AgentControlServer } from './server/WebSocketServer';
+import { PairingService } from './services/PairingService';
 import { logger } from './utils/logger';
 import { getConfig, onConfigChange, getOrGenerateToken, validateConfig } from './utils/config';
+import { WelcomePanel } from './panels/WelcomePanel';
+import { ConnectionSidebarProvider } from './panels/ConnectionSidebarProvider';
 
 let server: AgentControlServer | null = null;
+let pairingService: PairingService | null = null;
+
+/**
+ * Lazily create the server instance, catching constructor errors gracefully.
+ * Also creates and wires the PairingService.
+ */
+function ensureServer(context?: vscode.ExtensionContext): AgentControlServer | null {
+  if (!server) {
+    try {
+      server = new AgentControlServer();
+
+      // Create and wire PairingService if we have a context
+      if (context && !pairingService) {
+        pairingService = new PairingService(context);
+        server.setPairingService(pairingService);
+        logger.info('PairingService created and wired to server');
+      }
+    } catch (error) {
+      logger.error('Failed to create AgentControlServer', error);
+      vscode.window.showErrorMessage(`Agent Control: failed to initialise server — ${error}`);
+    }
+  } else if (context && !pairingService) {
+    // Server already exists but pairing service not yet wired
+    pairingService = new PairingService(context);
+    server.setPairingService(pairingService);
+    logger.info('PairingService created and wired to existing server');
+  }
+  return server;
+}
 
 /**
  * Called when the extension is activated
@@ -17,8 +49,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   logger.info('Agent Control extension activating...');
 
   // Initialize configuration
-  const config = getConfig();
-  logger.configure(config.logging.level, config.logging.logToFile);
+  let config: ReturnType<typeof getConfig>;
+  try {
+    config = getConfig();
+    logger.configure(config.logging.level, config.logging.logToFile);
+  } catch (error) {
+    logger.error('Failed to read configuration', error);
+    config = {
+      enabled: false,
+      port: 19876,
+      host: '127.0.0.1',
+      token: '',
+      allowedOrigins: ['*'],
+      tls: { enabled: false, certPath: '', keyPath: '', caPath: '' },
+      rateLimit: { enabled: true, requestsPerSecond: 100 },
+      logging: { level: 'info', logToFile: false },
+      security: {
+        allowFileSystemAccess: true,
+        allowTerminalAccess: true,
+        allowCommandExecution: true,
+        restrictedPaths: [],
+        restrictedCommands: [],
+        allowedCommands: [],
+        requireApproval: false,
+        allowedMethodCategories: [],
+      },
+    };
+  }
 
   // Validate configuration
   const validation = validateConfig();
@@ -28,10 +85,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   }
 
-  // Create server instance
-  server = new AgentControlServer();
-
-  // Create status bar item (before commands so handlers can reference it)
+  // Create status bar item FIRST (before anything that could fail)
   const statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
     100
@@ -39,12 +93,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   statusBarItem.command = 'agentControl.toggle';
   context.subscriptions.push(statusBarItem);
 
-  // Register commands
+  // -----------------------------------------------------------------------
+  // Register commands BEFORE creating the server so they are always available
+  // even if server construction fails.
+  // -----------------------------------------------------------------------
   context.subscriptions.push(
     vscode.commands.registerCommand('agentControl.start', async () => {
-      if (server) {
+      const srv = ensureServer();
+      if (srv) {
         try {
-          await server.start();
+          await srv.start();
           updateStatusBar(statusBarItem);
         } catch (error) {
           vscode.window.showErrorMessage(`Failed to start server: ${error}`);
@@ -61,14 +119,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
 
     vscode.commands.registerCommand('agentControl.toggle', async () => {
-      if (server) {
-        const status = server.getStatus();
+      const srv = ensureServer();
+      if (srv) {
+        const status = srv.getStatus();
         if (status.running) {
-          await server.stop();
+          await srv.stop();
           vscode.window.showInformationMessage('Agent Control server stopped');
         } else {
           try {
-            await server.start();
+            await srv.start();
           } catch (error) {
             vscode.window.showErrorMessage(`Failed to start server: ${error}`);
           }
@@ -87,15 +146,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         } else {
           vscode.window.showInformationMessage('Agent Control server is not running');
         }
+      } else {
+        vscode.window.showInformationMessage('Agent Control server has not been initialised');
       }
     }),
 
     vscode.commands.registerCommand('agentControl.generateToken', async () => {
-      const config = vscode.workspace.getConfiguration('agentControl');
+      const agentConfig = vscode.workspace.getConfiguration('agentControl');
       const crypto = await import('crypto');
       const newToken = crypto.randomBytes(32).toString('hex');
       
-      await config.update('token', newToken, vscode.ConfigurationTarget.Global);
+      await agentConfig.update('token', newToken, vscode.ConfigurationTarget.Global);
       
       const action = await vscode.window.showInformationMessage(
         'New token generated! Copy to clipboard?',
@@ -114,6 +175,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
 
+    vscode.commands.registerCommand('agentControl.showWelcome', () => {
+      WelcomePanel.show(context.extensionUri);
+    }),
+
     vscode.commands.registerCommand('agentControl.showConnections', () => {
       if (server) {
         const clients = server.getConnectedClients();
@@ -129,9 +194,43 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             placeHolder: 'Select a client to see details',
           });
         }
+      } else {
+        vscode.window.showInformationMessage('Agent Control server has not been initialised');
       }
+    }),
+
+    // --- Pairing commands ---
+    vscode.commands.registerCommand('agentControl.pairDevice', async () => {
+      if (!pairingService) {
+        vscode.window.showErrorMessage('Pairing service is not available. Start the server first.');
+        return;
+      }
+      await pairingService.startPairing();
+    }),
+
+    vscode.commands.registerCommand('agentControl.cancelPairing', () => {
+      if (!pairingService) {
+        vscode.window.showErrorMessage('Pairing service is not available.');
+        return;
+      }
+      pairingService.cancelPairing();
+      vscode.window.showInformationMessage('Pairing cancelled.');
+    }),
+
+    vscode.commands.registerCommand('agentControl.managePairedDevices', async () => {
+      if (!pairingService) {
+        vscode.window.showErrorMessage('Pairing service is not available. Start the server first.');
+        return;
+      }
+      await pairingService.showManageDevices();
     })
   );
+
+  // -----------------------------------------------------------------------
+  // Now create the server instance (after commands are registered)
+  // Also creates and wires the PairingService
+  // -----------------------------------------------------------------------
+  ensureServer(context);
 
   // Watch for configuration changes
   context.subscriptions.push(
@@ -189,7 +288,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   // Auto-start if enabled
-  if (config.enabled) {
+  if (config.enabled && server) {
     try {
       await server.start();
       updateStatusBar(statusBarItem);
@@ -199,7 +298,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   // Ensure token exists
-  await getOrGenerateToken();
+  try {
+    await getOrGenerateToken();
+  } catch (error) {
+    logger.error('Failed to generate token', error);
+  }
+
+  // Show welcome page on first install or version upgrade
+  WelcomePanel.showIfNew(context);
+
+  // Register sidebar provider
+  const sidebarProvider = new ConnectionSidebarProvider(
+    context.extensionUri,
+    () => server,
+    () => pairingService
+  );
+  
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      ConnectionSidebarProvider.viewType,
+      sidebarProvider
+    )
+  );
 
   logger.info('Agent Control extension activated');
 }
@@ -229,6 +349,11 @@ function updateStatusBar(item: vscode.StatusBarItem): void {
 export function deactivate(): void {
   logger.info('Agent Control extension deactivating...');
   
+  if (pairingService) {
+    pairingService.dispose();
+    pairingService = null;
+  }
+
   if (server) {
     server.dispose();
     server = null;

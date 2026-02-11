@@ -29,6 +29,7 @@ import {
   createErrorResponse,
 } from '../protocol/errors';
 import { AuthService } from '../services/AuthService';
+import { PairingService, PairInitiateParams, PairCompleteResult, PairRejectedResult } from '../services/PairingService';
 import { EditorService } from '../services/EditorService';
 import { FileSystemService } from '../services/FileSystemService';
 import { TerminalService } from '../services/TerminalService';
@@ -57,6 +58,7 @@ export class AgentControlServer {
   
   // Services
   private authService: AuthService;
+  private pairingService: PairingService | null = null;
   private editorService: EditorService;
   private fileSystemService: FileSystemService;
   private terminalService: TerminalService;
@@ -92,6 +94,22 @@ export class AgentControlServer {
     this.fileSystemService.setFileChangeCallback((filePath, type) => {
       this.broadcastNotification('file.changed', { path: filePath, type });
     });
+  }
+
+  /**
+   * Inject the PairingService (set from extension.ts after construction).
+   * Also wires the pairing service into the auth service for token validation.
+   */
+  setPairingService(pairingService: PairingService): void {
+    this.pairingService = pairingService;
+    this.authService.setPairingService(pairingService);
+  }
+
+  /**
+   * Get the auth service (used by extension.ts to wire dependencies).
+   */
+  getAuthService(): AuthService {
+    return this.authService;
   }
 
   /**
@@ -348,6 +366,11 @@ export class AgentControlServer {
       return this.handleAuthentication(client, request);
     }
 
+    // Handle pairing initiation (does NOT require authentication)
+    if (request.method === 'pair.initiate') {
+      return this.handlePairInitiate(client, request);
+    }
+
     // Check authentication for all other methods
     if (!this.authService.isAuthenticated(client.id)) {
       return unauthorized(request.id);
@@ -391,6 +414,39 @@ export class AgentControlServer {
   }
 
   /**
+   * Handle pairing initiation (unauthenticated — code-verified instead)
+   */
+  private async handlePairInitiate(_client: Client, request: JsonRpcRequest): Promise<JsonRpcSuccessResponse | JsonRpcErrorResponse> {
+    if (!this.pairingService) {
+      return createErrorResponse(request.id, ErrorCode.FeatureDisabled, 'Pairing is not available');
+    }
+
+    const params = request.params as unknown as PairInitiateParams | undefined;
+
+    if (!params || !params.code || !params.clientPublicKey || !params.clientName || !params.clientFingerprint) {
+      return invalidParams(request.id, 'Missing required pairing parameters (code, clientPublicKey, clientName, clientFingerprint)');
+    }
+
+    const result = await this.pairingService.handlePairInitiateSafe(params);
+
+    // Check if it's a rejection
+    if ('reason' in result) {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: { paired: false, reason: (result as PairRejectedResult).reason },
+      };
+    }
+
+    // Success
+    return {
+      jsonrpc: '2.0',
+      id: request.id,
+      result: { paired: true, ...(result as PairCompleteResult) },
+    };
+  }
+
+  /**
    * Route a request to the appropriate handler
    */
   private async routeRequest(client: Client, request: JsonRpcRequest): Promise<JsonRpcSuccessResponse | JsonRpcErrorResponse> {
@@ -412,6 +468,9 @@ export class AgentControlServer {
       let result: unknown;
 
       switch (category) {
+        case 'pair':
+          result = await this.handlePairMethod(method, request);
+          break;
         case 'editor':
           result = await this.handleEditorMethod(method, request);
           break;
@@ -500,6 +559,38 @@ export class AgentControlServer {
   // =========================================================================
   // Method handlers with parameter validation
   // =========================================================================
+
+  /**
+   * Handle pair methods (authenticated — pair.initiate is handled separately before auth check)
+   */
+  private async handlePairMethod(method: string, request: JsonRpcRequest): Promise<unknown> {
+    if (!this.pairingService) {
+      throw new ProtocolError(ErrorCode.FeatureDisabled, 'Pairing is not available');
+    }
+
+    switch (method) {
+      case 'list': {
+        const devices = this.pairingService.getPairedDevices();
+        return {
+          devices: devices.map(d => ({
+            id: d.id,
+            name: d.name,
+            fingerprint: d.fingerprint,
+            pairedAt: d.pairedAt,
+            lastSeen: d.lastSeen,
+          })),
+        };
+      }
+      case 'revoke': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'deviceId', request.id);
+        const revoked = await this.pairingService.removePairedDevice(params.deviceId as string);
+        return { revoked };
+      }
+      default:
+        throw new Error(`Unknown pair method: ${method}`);
+    }
+  }
 
   /**
    * Handle editor methods
@@ -996,6 +1087,7 @@ export class AgentControlServer {
     this.stopPingInterval();
     this.stop();
     this.authService.dispose();
+    this.pairingService?.dispose();
     this.terminalService.disposeAll();
     this.fileSystemService.disposeWatchers();
     this.debugService.dispose();

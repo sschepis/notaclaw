@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.38",
+    "@ai-sdk/gateway": "^3.0.40",
     "@ai-sdk/google": "^3.0.22",
     "@ai-sdk/openai": "^3.0.26",
     "@mlc-ai/web-llm": "^0.2.80",

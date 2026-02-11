@@ -335,4 +335,20 @@ export const ChatEmptyStateSlot: React.FC<{
 
 ChatEmptyStateSlot.displayName = 'ChatEmptyStateSlot';
 
+/**
+ * Slot for nav rail footer icons (plugin status indicators)
+ */
+export const NavRailFooterSlot: React.FC<{
+  className?: string;
+}> = memo(({ className }) => (
+  <ExtensionSlotV2
+    name="nav:rail-footer"
+    layout="stack"
+    gap={2}
+    className={className}
+  />
+));
+
+NavRailFooterSlot.displayName = 'NavRailFooterSlot';
+
 export default ExtensionSlotV2;

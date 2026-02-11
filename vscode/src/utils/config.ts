@@ -159,6 +159,17 @@ function matchGlobPattern(path: string, pattern: string): boolean {
 }
 
 /**
+ * Get pairing-related configuration
+ */
+export function getPairingConfig(): { autoApprove: boolean; maxDevices: number } {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  return {
+    autoApprove: config.get<boolean>('pairing.autoApprove', false),
+    maxDevices: config.get<number>('pairing.maxDevices', 10),
+  };
+}
+
+/**
  * Watch for configuration changes
  */
 export function onConfigChange(callback: (config: AgentControlConfig) => void): vscode.Disposable {

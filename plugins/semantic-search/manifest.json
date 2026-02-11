@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Semantic Search Engine",
   "description": "Deep semantic search capabilities using GMF vectors for content similarity matching and retrieval. Index and search content by meaning, not just keywords.",
-  "main": "main/index.js",
+  "main": "dist/main/index.js",
   "renderer": "renderer/index.js",
   "permissions": [
     "dsn:register-tool",

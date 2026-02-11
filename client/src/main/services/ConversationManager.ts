@@ -2,6 +2,9 @@ import { AlephGunBridge, gunObjectsToArrays } from '@sschepis/alephnet-node';
 import { IdentityManager } from './IdentityManager';
 import { AIConversation, AIMessage, MemoryField } from '../../shared/alephnet-types';
 import { randomUUID } from 'crypto';
+import { app } from 'electron';
+import path from 'path';
+import fs from 'fs/promises';
 
 // Extended type to include memory field reference
 export interface AIConversationWithMemory extends AIConversation {
@@ -9,20 +12,27 @@ export interface AIConversationWithMemory extends AIConversation {
 }
 
 // Callback type for memory field creation
-export type MemoryFieldCreator = (options: { 
-    name: string; 
-    scope: 'conversation'; 
-    description?: string; 
-    visibility?: 'private' 
+export type MemoryFieldCreator = (options: {
+    name: string;
+    scope: 'conversation';
+    description?: string;
+    visibility?: 'private'
 }) => Promise<MemoryField>;
+
+/** Persisted state for active conversation restoration across sessions */
+interface ConversationSessionState {
+    activeConversationId: string | null;
+    openConversationIds: string[];
+    lastUpdated: number;
+}
 
 export class ConversationManager {
     private bridge: AlephGunBridge;
     private memoryFieldCreator: MemoryFieldCreator | null = null;
+    private sessionStatePath: string | null = null;
 
     constructor(bridge: AlephGunBridge, _identity: IdentityManager) {
         this.bridge = bridge;
-        // this.identity = identity; // Not used
     }
 
     /**
@@ -240,5 +250,60 @@ export class ConversationManager {
         
         // Update timestamp
         this.user.get('conversations').get(conversationId).get('updatedAt').put(Date.now());
+    }
+
+    // ─── Session State Persistence ───────────────────────────────────────────
+
+    private getSessionStatePath(): string {
+        if (!this.sessionStatePath) {
+            this.sessionStatePath = path.join(app.getPath('userData'), 'conversation-session.json');
+        }
+        return this.sessionStatePath;
+    }
+
+    /**
+     * Save the current active conversation and open conversations list.
+     * Called progressively as the user interacts with conversations.
+     */
+    async saveSessionState(state: { activeConversationId: string | null; openConversationIds: string[] }): Promise<void> {
+        const sessionState: ConversationSessionState = {
+            activeConversationId: state.activeConversationId,
+            openConversationIds: state.openConversationIds,
+            lastUpdated: Date.now()
+        };
+        try {
+            const filePath = this.getSessionStatePath();
+            await fs.writeFile(filePath, JSON.stringify(sessionState, null, 2), { mode: 0o600 });
+        } catch (err) {
+            console.error('ConversationManager: Failed to save session state:', err);
+        }
+    }
+
+    /**
+     * Load the previously active conversation state.
+     * Called on startup to restore the user's conversation context.
+     */
+    async loadSessionState(): Promise<ConversationSessionState | null> {
+        try {
+            const filePath = this.getSessionStatePath();
+            const data = await fs.readFile(filePath, 'utf-8');
+            const state = JSON.parse(data) as ConversationSessionState;
+            return state;
+        } catch {
+            // File doesn't exist yet or is corrupted - return null
+            return null;
+        }
+    }
+
+    /**
+     * Clear the persisted session state (e.g., on explicit logout or reset).
+     */
+    async clearSessionState(): Promise<void> {
+        try {
+            const filePath = this.getSessionStatePath();
+            await fs.unlink(filePath);
+        } catch {
+            // Ignore if file doesn't exist
+        }
     }
 }

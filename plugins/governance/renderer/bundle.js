@@ -1,4 +1,6 @@
 "use strict";
+
+// plugins/governance/renderer/bundle.js
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -26,8 +28,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// plugins/governance/renderer/index.tsx
 var index_exports = {};
 __export(index_exports, {
   activate: () => activate,
@@ -36,8 +36,6 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 var import_react2 = __toESM(require("react"));
 var import_lucide_react = require("lucide-react");
-
-// plugins/governance/renderer/CoherencePanel.tsx
 var import_react = __toESM(require("react"));
 var Icon = ({ d, className }) => /* @__PURE__ */ import_react.default.createElement("svg", { className, fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d }));
 var Shield = ({ className }) => /* @__PURE__ */ import_react.default.createElement(Icon, { className, d: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" });
@@ -156,8 +154,6 @@ var CoherencePanel = ({ context }) => {
     /* @__PURE__ */ import_react.default.createElement("div", { className: "flex gap-2 text-[10px] text-gray-500" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded-full" }, s.status), /* @__PURE__ */ import_react.default.createElement("span", null, s.acceptedClaimIds.length, " claims"), /* @__PURE__ */ import_react.default.createElement("span", null, new Date(s.timestamp).toLocaleDateString()))
   )))));
 };
-
-// plugins/governance/renderer/index.tsx
 var activate = (context) => {
   console.log("[Governance Console] Renderer activated");
   const { ui } = context;

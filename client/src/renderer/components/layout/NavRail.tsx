@@ -5,6 +5,7 @@ import { motion, Reorder } from 'framer-motion';
 import { useAppStore } from '../../store/useAppStore';
 import { usePluginNavigations } from '../../services/SlotRegistry';
 import { SlotErrorBoundary } from '../ui/SlotErrorBoundary';
+import { NavRailFooterSlot } from '../ui/ExtensionSlotV2';
 import type { NavigationDefinition } from '../../../shared/slot-types';
 
 interface NavRailProps {
@@ -256,6 +257,9 @@ export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode, onOpenSe
 
       {/* Bottom Actions */}
       <div className="flex flex-col items-center space-y-3 mb-2 w-full pt-2 border-t border-border">
+        {/* Plugin footer icons (e.g. VS Code connection indicator) */}
+        <NavRailFooterSlot className="items-center" />
+
         <RailButton
             label="Network Status"
             onClick={() => {}}

@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "name": "Temporal Voyager",
   "description": "Time-travel debugging and simulation tool leveraging Gun.js history for agent state replay.",
-  "main": "main/index.js",
-  "renderer": "renderer/index.tsx",
+  "main": "dist/main/index.js",
+  "renderer": "dist/renderer/index.js",
   "permissions": [
     "store:history",
     "store:read",

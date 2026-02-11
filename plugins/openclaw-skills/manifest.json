@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "name": "OpenClaw Skill Manager",
   "description": "Manage, create, and share skills in the OpenClaw standard format.",
-  "main": "main/index.js",
+  "main": "dist/main/index.js",
   "renderer": "renderer/index.js",
   "permissions": [
     "dsn:register-tool",

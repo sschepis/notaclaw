@@ -19,6 +19,7 @@ if (require('electron-squirrel-startup')) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let ipcReady = false;
 
 const getMainWindow = () => mainWindow;
 
@@ -26,8 +27,9 @@ app.on('ready', async () => {
     // Initialize services
     await initializeServices(getMainWindow);
     
-    // Register IPC handlers
+    // Register IPC handlers before creating any window
     registerIPC(getMainWindow);
+    ipcReady = true;
     
     // Create the browser window
     mainWindow = createWindow();
@@ -47,7 +49,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  // Only create a window if IPC handlers are registered;
+  // on macOS 'activate' can fire while initializeServices() is still running
+  if (BrowserWindow.getAllWindows().length === 0 && ipcReady) {
     mainWindow = createWindow();
   }
 });

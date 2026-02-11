@@ -74,6 +74,7 @@ export interface AppState {
   conversations: Record<string, Conversation>;
   activeConversationId: string | null;
   openConversationIds: string[];
+  loadingConversations: boolean;
   
   // Tabs
   tabs: Tab[];
@@ -121,6 +122,10 @@ export interface AppState {
   updateMessage: (id: string, content: string) => Promise<void>;
   deleteMessage: (id: string) => Promise<void>;
   deleteMessagesAfter: (id: string) => void; // Local only for now
+  
+  // Session State Persistence
+  saveSessionState: () => Promise<void>;
+  restoreSessionState: () => Promise<void>;
   setWallet: (wallet: WalletState) => void;
   setAgentState: (agent: AgentState) => void;
   setActiveAgents: (agents: Agent[]) => void;

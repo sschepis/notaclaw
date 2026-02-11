@@ -103,6 +103,21 @@ export const alephNetBridge = {
   aiConversationDeleteMessage: invoke('ai:conversation:deleteMessage'),
   aiConversationUpdateTitle: invoke('ai:conversation:updateTitle'),
 
+  // ─── Conversation Session State ────────────────────────────────
+  aiConversationSaveSessionState: invoke('ai:conversation:saveSessionState'),
+  aiConversationLoadSessionState: invoke('ai:conversation:loadSessionState'),
+  aiConversationClearSessionState: invoke('ai:conversation:clearSessionState'),
+
+  // ─── Memory Promotion ──────────────────────────────────────────
+  memoryPromote: invoke('memory:promote'),
+  memoryProcessForPromotion: invoke('memory:processForPromotion'),
+  memorySaveSkillConfig: invoke('memory:saveSkillConfig'),
+  memoryLoadSkillConfig: invoke('memory:loadSkillConfig'),
+  memoryLoadAllSkillConfigs: invoke('memory:loadAllSkillConfigs'),
+  memoryFoldConversation: invoke('memory:foldConversation'),
+  memoryQueryUserMemory: invoke('memory:queryUserMemory'),
+  memoryGetUserMemoriesByCategory: invoke('memory:getUserMemoriesByCategory'),
+
   // ─── Scheduled Tasks ──────────────────────────────────────────
   taskCreate: invoke('task:create'),
   taskList: invoke('task:list'),

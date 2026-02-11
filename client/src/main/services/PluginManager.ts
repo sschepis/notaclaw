@@ -518,6 +518,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       const resolvedPath = path.resolve(filePath);
       const allowedDirs = [this.pluginsDir, this.bundledPluginsDir];
       if (this.resolvedBundledDir) allowedDirs.push(this.resolvedBundledDir);
+      if (this.resolvedExtendedDir) allowedDirs.push(this.resolvedExtendedDir);
       
       // Also allow any loaded plugin's directory
       for (const plugin of this.plugins.values()) {
@@ -532,6 +533,13 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       if (!isAllowed) {
         console.error(`Access denied: ${resolvedPath} is not in`, allowedDirs);
         throw new Error(`Access denied: Cannot read files outside plugin directories (${resolvedPath})`);
+      }
+
+      // Check if the file exists before reading to avoid noisy ENOENT errors
+      try {
+        await fs.access(resolvedPath);
+      } catch {
+        throw new Error(`Plugin file not found: ${resolvedPath}`);
       }
       return await fs.readFile(resolvedPath, 'utf-8');
     });

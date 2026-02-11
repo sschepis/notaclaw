@@ -1,14 +1,15 @@
 {
-  "name": "vscode-agent-control",
-  "displayName": "VS Code Agent Control",
-  "description": "WebSocket-based remote control interface for AI agents to programmatically interact with VS Code",
-  "version": "0.1.0",
+  "name": "aleph-agent-control",
+  "displayName": "Aleph Agent Control",
+  "description": "WebSocket-based remote control interface for Aleph AI agents to programmatically interact with VS Code",
+  "version": "1.0.1",
   "publisher": "notaclaw",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/notaclaw/vscode-agent-control"
+    "url": "https://github.com/aleph-ai/aleph-agent-control"
   },
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -24,49 +25,96 @@
     "websocket"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:agentControl.start",
+    "onCommand:agentControl.stop",
+    "onCommand:agentControl.toggle",
+    "onCommand:agentControl.status",
+    "onCommand:agentControl.generateToken",
+    "onCommand:agentControl.showConnections",
+    "onCommand:agentControl.showWelcome",
+    "onCommand:agentControl.pairDevice",
+    "onCommand:agentControl.cancelPairing",
+    "onCommand:agentControl.managePairedDevices"
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentControl",
+          "title": "Agent Control",
+          "icon": "images/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentControl": [
+        {
+          "id": "agentControl.sidebarView",
+          "name": "Connection Status"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "agentControl.start",
         "title": "Start Agent Control Server",
-        "category": "Agent Control"
+        "category": "Aleph Agent Control"
       },
       {
         "command": "agentControl.stop",
         "title": "Stop Agent Control Server",
-        "category": "Agent Control"
+        "category": "Aleph Agent Control"
       },
       {
         "command": "agentControl.toggle",
         "title": "Toggle Agent Control Server On/Off",
-        "category": "Agent Control"
+        "category": "Aleph Agent Control"
       },
       {
         "command": "agentControl.status",
         "title": "Show Server Status",
-        "category": "Agent Control"
+        "category": "Aleph Agent Control"
       },
       {
         "command": "agentControl.generateToken",
         "title": "Generate New Authentication Token",
-        "category": "Agent Control"
+        "category": "Aleph Agent Control"
       },
       {
         "command": "agentControl.showConnections",
         "title": "Show Connected Clients",
-        "category": "Agent Control"
+        "category": "Aleph Agent Control"
+      },
+      {
+        "command": "agentControl.showWelcome",
+        "title": "Show Welcome Page",
+        "category": "Aleph Agent Control"
+      },
+      {
+        "command": "agentControl.pairDevice",
+        "title": "Pair a Device",
+        "category": "Aleph Agent Control"
+      },
+      {
+        "command": "agentControl.cancelPairing",
+        "title": "Cancel Active Pairing",
+        "category": "Aleph Agent Control"
+      },
+      {
+        "command": "agentControl.managePairedDevices",
+        "title": "Manage Paired Devices",
+        "category": "Aleph Agent Control"
       }
     ],
     "configuration": {
-      "title": "Agent Control",
+      "title": "Aleph Agent Control",
       "properties": {
         "agentControl.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable the Agent Control server on startup"
+          "description": "Enable the Aleph Agent Control server on startup"
         },
         "agentControl.port": {
           "type": "number",
@@ -184,10 +232,22 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["editor", "fs", "terminal", "command", "state", "search", "debug", "git"]
+            "enum": ["editor", "fs", "terminal", "command", "state", "search", "debug", "git", "pair"]
           },
           "default": [],
           "description": "If non-empty, only these method categories are allowed. Empty means all categories are allowed."
+        },
+        "agentControl.pairing.autoApprove": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically approve pairing requests without user confirmation (not recommended)"
+        },
+        "agentControl.pairing.maxDevices": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Maximum number of paired devices allowed"
         }
       }
     }
@@ -199,7 +259,7 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./dist/test/runTest.js",
-    "package": "vsce package",
+    "package": "npx vsce package",
     "publish": "vsce publish"
   },
   "devDependencies": {

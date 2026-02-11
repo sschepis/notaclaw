@@ -5,7 +5,7 @@
   "description": "Securely manage API keys and secrets.",
   "author": "AlephNet",
   "license": "MIT",
-  "main": "main/index.js",
+  "main": "dist/main/index.js",
   "renderer": "renderer/bundle.js",
   "permissions": [
     "secrets:read",

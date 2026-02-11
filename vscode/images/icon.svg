@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <!-- Main background gradient - deep blue to violet -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a3e"/>
+      <stop offset="50%" style="stop-color:#2d1b69"/>
+      <stop offset="100%" style="stop-color:#1e3a5f"/>
+    </linearGradient>
+    <!-- Glow gradient for the aleph -->
+    <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#7c4dff;stop-opacity:0.4"/>
+      <stop offset="70%" style="stop-color:#7c4dff;stop-opacity:0.05"/>
+      <stop offset="100%" style="stop-color:#7c4dff;stop-opacity:0"/>
+    </radialGradient>
+    <!-- Accent gradient for connection nodes -->
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00e5ff"/>
+      <stop offset="100%" style="stop-color:#7c4dff"/>
+    </linearGradient>
+    <!-- Aleph symbol gradient -->
+    <linearGradient id="alephGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e0e0ff"/>
+      <stop offset="50%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#b0b0ff"/>
+    </linearGradient>
+    <!-- Ring gradient -->
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00e5ff;stop-opacity:0.8"/>
+      <stop offset="50%" style="stop-color:#7c4dff;stop-opacity:0.6"/>
+      <stop offset="100%" style="stop-color:#00e5ff;stop-opacity:0.8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="4" y="4" width="120" height="120" rx="24" ry="24" fill="url(#bgGrad)" stroke="url(#ringGrad)" stroke-width="1.5"/>
+
+  <!-- Subtle grid pattern for tech feel -->
+  <g opacity="0.06" stroke="#ffffff" stroke-width="0.5">
+    <line x1="24" y1="4" x2="24" y2="124"/>
+    <line x1="44" y1="4" x2="44" y2="124"/>
+    <line x1="64" y1="4" x2="64" y2="124"/>
+    <line x1="84" y1="4" x2="84" y2="124"/>
+    <line x1="104" y1="4" x2="104" y2="124"/>
+    <line x1="4" y1="24" x2="124" y2="24"/>
+    <line x1="4" y1="44" x2="124" y2="44"/>
+    <line x1="4" y1="64" x2="124" y2="64"/>
+    <line x1="4" y1="84" x2="124" y2="84"/>
+    <line x1="4" y1="104" x2="124" y2="104"/>
+  </g>
+
+  <!-- Central glow -->
+  <circle cx="64" cy="64" r="40" fill="url(#glowGrad)"/>
+
+  <!-- Orbital ring -->
+  <ellipse cx="64" cy="64" rx="42" ry="42" fill="none" stroke="url(#ringGrad)" stroke-width="1" stroke-dasharray="4 6" opacity="0.5"/>
+
+  <!-- Connection lines radiating outward -->
+  <g stroke="url(#accentGrad)" stroke-width="1" opacity="0.35">
+    <!-- Top -->
+    <line x1="64" y1="22" x2="64" y2="12"/>
+    <!-- Bottom -->
+    <line x1="64" y1="106" x2="64" y2="116"/>
+    <!-- Left -->
+    <line x1="22" y1="64" x2="12" y2="64"/>
+    <!-- Right -->
+    <line x1="106" y1="64" x2="116" y2="64"/>
+    <!-- Diagonals -->
+    <line x1="34" y1="34" x2="24" y2="24"/>
+    <line x1="94" y1="34" x2="104" y2="24"/>
+    <line x1="34" y1="94" x2="24" y2="104"/>
+    <line x1="94" y1="94" x2="104" y2="104"/>
+  </g>
+
+  <!-- Connection nodes at endpoints -->
+  <g fill="#00e5ff" opacity="0.7">
+    <circle cx="64" cy="11" r="2"/>
+    <circle cx="64" cy="117" r="2"/>
+    <circle cx="11" cy="64" r="2"/>
+    <circle cx="117" cy="64" r="2"/>
+    <circle cx="23" cy="23" r="1.5"/>
+    <circle cx="105" cy="23" r="1.5"/>
+    <circle cx="23" cy="105" r="1.5"/>
+    <circle cx="105" cy="105" r="1.5"/>
+  </g>
+
+  <!-- Aleph (א) symbol - hand-crafted paths for a clean, modern look -->
+  <g transform="translate(64, 64)" fill="none" stroke="url(#alephGrad)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Main diagonal stroke (the vav-like stroke) -->
+    <path d="M -8,-28 C -4,-18 2,-8 6,4 C 10,16 10,24 6,30" opacity="0.95"/>
+    <!-- Upper right arm (yod-like) -->
+    <path d="M 4,-24 C 10,-28 16,-26 20,-20 C 22,-16 20,-12 16,-10" opacity="0.95"/>
+    <!-- Lower left arm (yod-like) -->
+    <path d="M -4,22 C -10,26 -16,24 -20,18 C -22,14 -20,10 -16,8" opacity="0.95"/>
+  </g>
+
+  <!-- Small pulsing dot at center -->
+  <circle cx="64" cy="64" r="3" fill="#00e5ff" opacity="0.6"/>
+  <circle cx="64" cy="64" r="1.5" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Accent corner marks for a "control frame" feel -->
+  <g stroke="#00e5ff" stroke-width="1.5" fill="none" opacity="0.4" stroke-linecap="round">
+    <!-- Top-left corner -->
+    <polyline points="14,28 14,14 28,14"/>
+    <!-- Top-right corner -->
+    <polyline points="100,14 114,14 114,28"/>
+    <!-- Bottom-left corner -->
+    <polyline points="14,100 14,114 28,114"/>
+    <!-- Bottom-right corner -->
+    <polyline points="100,114 114,114 114,100"/>
+  </g>
+</svg>

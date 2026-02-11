@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "description": "Control VS Code via WebSocket",
   "main": "dist/index.js",
+  "renderer": "dist/renderer/index.js",
   "permissions": [
     "network:http",
-    "dsn:register-tool"
+    "dsn:register-tool",
+    "storage:local"
   ]
 }

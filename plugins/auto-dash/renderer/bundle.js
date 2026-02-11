@@ -1,4 +1,6 @@
 "use strict";
+
+// plugins/auto-dash/renderer/bundle.js
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -16,18 +18,12 @@ var __copyProps = (to, from, except, desc) => {
   return to;
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// plugins/auto-dash/renderer/index.tsx
 var index_exports = {};
 __export(index_exports, {
   activate: () => activate
 });
 module.exports = __toCommonJS(index_exports);
-
-// plugins/auto-dash/renderer/AutoDashView.tsx
 var import_react = require("react");
-
-// plugins/auto-dash/renderer/components/MetricCard.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
 var MetricCard = ({ title, data, context }) => {
   const value = typeof data === "object" ? data.value || data.usage || data.temp || data.price : data;
@@ -46,8 +42,6 @@ var MetricCard = ({ title, data, context }) => {
     ] })
   ] });
 };
-
-// plugins/auto-dash/renderer/components/LogViewer.tsx
 var import_jsx_runtime2 = require("react/jsx-runtime");
 var LogViewer = ({ title, data }) => {
   const logs = Array.isArray(data) ? data : [];
@@ -70,8 +64,6 @@ var LogViewer = ({ title, data }) => {
     ] })
   ] });
 };
-
-// plugins/auto-dash/renderer/components/ActionConsole.tsx
 var import_jsx_runtime3 = require("react/jsx-runtime");
 var ActionConsole = ({ actions, onAction }) => {
   if (!actions || actions.length === 0) return null;
@@ -85,8 +77,6 @@ var ActionConsole = ({ actions, onAction }) => {
     i
   )) });
 };
-
-// plugins/auto-dash/renderer/components/SimpleChart.tsx
 var import_jsx_runtime4 = require("react/jsx-runtime");
 var SimpleChart = ({ title, data }) => {
   const points = Array.isArray(data) ? data : data.points || [];
@@ -116,8 +106,6 @@ var SimpleChart = ({ title, data }) => {
     ] })
   ] });
 };
-
-// plugins/auto-dash/renderer/components/WidgetRenderer.tsx
 var import_jsx_runtime5 = require("react/jsx-runtime");
 var WidgetRenderer = ({ widget, onAction }) => {
   const renderContent = () => {
@@ -144,8 +132,6 @@ var WidgetRenderer = ({ widget, onAction }) => {
     widget.actions && widget.actions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ActionConsole, { actions: widget.actions, onAction })
   ] });
 };
-
-// plugins/auto-dash/renderer/AutoDashView.tsx
 var import_jsx_runtime6 = require("react/jsx-runtime");
 var AutoDashView = ({ context }) => {
   const [schema, setSchema] = (0, import_react.useState)(null);
@@ -208,8 +194,6 @@ var AutoDashView = ({ context }) => {
     )) })
   ] });
 };
-
-// plugins/auto-dash/renderer/index.tsx
 var import_jsx_runtime7 = require("react/jsx-runtime");
 var activate = (context) => {
   console.log("[AutoDash] Renderer activated");

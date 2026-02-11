@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "name": "Prime Tuner",
   "description": "Diagnostic tool to visualize and tune Prime-Resonant frequencies.",
-  "main": "main/index.js",
+  "main": "dist/main/index.js",
   "renderer": "renderer/index.js",
   "permissions": [
     "store:read",

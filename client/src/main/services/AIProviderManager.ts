@@ -716,6 +716,40 @@ export class AIProviderManager {
   // Google Vertex AI helpers (Manual Implementation)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Recursively sanitize tool parameter schemas for Vertex AI compatibility.
+   * Vertex AI only accepts: STRING, NUMBER, INTEGER, BOOLEAN, ARRAY, OBJECT.
+   * Converts unsupported types (e.g., "any") to "string" as a safe fallback.
+   */
+  private sanitizeVertexParameters(schema: any): any {
+    if (!schema || typeof schema !== 'object') return schema;
+
+    const VALID_TYPES = new Set(['string', 'number', 'integer', 'boolean', 'array', 'object']);
+    const sanitized = { ...schema };
+
+    // Fix invalid type at this level
+    if (sanitized.type && !VALID_TYPES.has(sanitized.type.toLowerCase())) {
+      console.warn(`[Vertex AI] Sanitizing unsupported parameter type "${sanitized.type}" → "string"`);
+      sanitized.type = 'string';
+    }
+
+    // Recursively sanitize properties
+    if (sanitized.properties && typeof sanitized.properties === 'object') {
+      const sanitizedProps: any = {};
+      for (const [key, value] of Object.entries(sanitized.properties)) {
+        sanitizedProps[key] = this.sanitizeVertexParameters(value);
+      }
+      sanitized.properties = sanitizedProps;
+    }
+
+    // Recursively sanitize array items
+    if (sanitized.items) {
+      sanitized.items = this.sanitizeVertexParameters(sanitized.items);
+    }
+
+    return sanitized;
+  }
+
   private vertexHost(location: string): string {
     return location === 'global'
       ? 'aiplatform.googleapis.com'
@@ -931,7 +965,7 @@ export class AIProviderManager {
             return {
                 name: fn.name,
                 description: fn.description || '',
-                parameters: fn.parameters || { type: 'object', properties: {} }
+                parameters: this.sanitizeVertexParameters(fn.parameters || { type: 'object', properties: {} })
             };
         });
         

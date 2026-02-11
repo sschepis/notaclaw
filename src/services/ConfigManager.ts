@@ -15,6 +15,15 @@ export interface NetworkConfig {
   heartbeatIntervalMs: number;
 }
 
+export interface TurnConfig {
+  enabled: boolean;
+  port: number;
+  listeningPort: number;
+  authMechanism: 'long-term' | 'short-term';
+  realm: string;
+  debugLevel: string;
+}
+
 export interface LoggingConfig {
   level: 'debug' | 'info' | 'warn' | 'error';
   format: 'json' | 'pretty';
@@ -23,6 +32,7 @@ export interface LoggingConfig {
 
 export interface AppConfig {
   network: NetworkConfig;
+  turn: TurnConfig;
   logging: LoggingConfig;
 }
 
@@ -48,6 +58,14 @@ const CONFIG_SCHEMA: SchemaMap = {
     bootstrapUrl: { type: 'string', required: true, pattern: /^https?:\/\// },
     heartbeatIntervalMs: { type: 'number', required: true, min: 1000, max: 300_000 },
   },
+  turn: {
+    enabled: { type: 'boolean', required: true },
+    port: { type: 'number', required: true, min: 1, max: 65535 },
+    listeningPort: { type: 'number', required: true, min: 1, max: 65535 },
+    authMechanism: { type: 'string', required: true, enum: ['long-term', 'short-term'] as const },
+    realm: { type: 'string', required: true },
+    debugLevel: { type: 'string', required: true },
+  },
   logging: {
     level: { type: 'string', required: true, enum: ['debug', 'info', 'warn', 'error'] as const },
     format: { type: 'string', required: true, enum: ['json', 'pretty'] as const },
@@ -64,6 +82,14 @@ const DEFAULT_CONFIG: AppConfig = {
     ],
     bootstrapUrl: 'https://alephnet.io/bootstrap',
     heartbeatIntervalMs: 30000
+  },
+  turn: {
+    enabled: true,
+    port: 3478,
+    listeningPort: 3478,
+    authMechanism: 'long-term',
+    realm: 'alephnet.local',
+    debugLevel: 'ALL'
   },
   logging: {
     level: 'info',

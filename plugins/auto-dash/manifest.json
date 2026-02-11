@@ -3,7 +3,7 @@
   "name": "AutoDash",
   "version": "1.0.0",
   "description": "A generative runtime dashboard that updates dynamically based on context.",
-  "main": "main/index.js",
+  "main": "dist/index.js",
   "renderer": "renderer/bundle.js",
   "permissions": [
     "ai:complete",

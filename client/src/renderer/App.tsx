@@ -25,7 +25,7 @@ function App() {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('welcome');
   
-  const { addMessage, setWallet, setAgentState, setSMF, setNetwork, hasIdentity, setHasIdentity, setIsGenerating, setGenerationProgress, loadConversations, loadSelectedModelFromSettings } = useAppStore();
+  const { addMessage, setWallet, setAgentState, setSMF, setNetwork, hasIdentity, setHasIdentity, setIsGenerating, setGenerationProgress, loadConversations, loadSelectedModelFromSettings, restoreSessionState } = useAppStore();
 
   useEffect(() => {
     const checkSetupState = async () => {
@@ -60,7 +60,10 @@ function App() {
         setHasIdentity(true);
         setNeedsOnboarding(false);
         setLoading(false);
-        loadConversations(); // Load saved conversations
+        // Load saved conversations, then restore session state (active/open tabs)
+        loadConversations().then(() => {
+            restoreSessionState();
+        });
         loadSelectedModelFromSettings(); // Load persisted model selection
       } catch (err) {
         console.error('Setup check failed:', err);

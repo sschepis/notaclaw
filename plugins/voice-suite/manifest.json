@@ -6,7 +6,7 @@
   "author": "AlephNet",
   "license": "MIT",
   "main": "dist/index.js",
-  "renderer": "renderer/bundle.js",
+  "renderer": "renderer/index.tsx",
   "icon": "icon.svg",
   "permissions": [
     "network:http",

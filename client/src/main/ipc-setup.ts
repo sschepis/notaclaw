@@ -10,9 +10,10 @@ import {
     secretsManager, 
     trustEvaluator, 
     trustGate, 
-    conversationManager, 
-    personalityManager, 
-    taskScheduler, 
+    conversationManager,
+    memoryPromotionService,
+    personalityManager,
+    taskScheduler,
     configManager,
     logger,
     marketplaceService,
@@ -161,6 +162,28 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     ipcMain.handle('ai:conversation:updateMessage', (_, { conversationId, messageId, content }) => conversationManager.updateMessage(conversationId, messageId, content));
     ipcMain.handle('ai:conversation:deleteMessage', (_, { conversationId, messageId }) => conversationManager.deleteMessage(conversationId, messageId));
     ipcMain.handle('ai:conversation:updateTitle', (_, { id, title }) => conversationManager.updateTitle(id, title));
+
+    // Conversation Session State IPC (persistence across app restarts)
+    ipcMain.handle('ai:conversation:saveSessionState', (_, state) => conversationManager.saveSessionState(state));
+    ipcMain.handle('ai:conversation:loadSessionState', () => conversationManager.loadSessionState());
+    ipcMain.handle('ai:conversation:clearSessionState', () => conversationManager.clearSessionState());
+
+    // Memory Promotion IPC
+    ipcMain.handle('memory:promote', (_, request) => memoryPromotionService.promoteToUserMemory(request));
+    ipcMain.handle('memory:processForPromotion', (_, { content, role, conversationId }) =>
+        memoryPromotionService.processMessageForPromotion(content, role, conversationId));
+    ipcMain.handle('memory:saveSkillConfig', (_, { skillId, key, value }) =>
+        memoryPromotionService.saveSkillConfig(skillId, key, value));
+    ipcMain.handle('memory:loadSkillConfig', (_, { skillId, key }) =>
+        memoryPromotionService.loadSkillConfig(skillId, key));
+    ipcMain.handle('memory:loadAllSkillConfigs', (_, { skillId }) =>
+        memoryPromotionService.loadAllSkillConfigs(skillId));
+    ipcMain.handle('memory:foldConversation', (_, { conversationFieldId, options }) =>
+        memoryPromotionService.foldConversationToUserMemory(conversationFieldId, options));
+    ipcMain.handle('memory:queryUserMemory', (_, { query, limit }) =>
+        memoryPromotionService.queryUserMemory(query, limit));
+    ipcMain.handle('memory:getUserMemoriesByCategory', (_, { category, limit }) =>
+        memoryPromotionService.getUserMemoriesByCategory(category, limit));
 
     // Personality IPC
     ipcMain.handle('personality:set-core', async (_, trait) => personalityManager.addCoreTrait(trait));

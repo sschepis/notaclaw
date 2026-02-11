@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "name": "Workflow Weaver",
   "description": "Visual orchestration engine for chaining agents, tools, and semantic queries into reusable workflows.",
-  "main": "main/index.js",
+  "main": "dist/index.js",
   "renderer": "renderer/index.tsx",
   "permissions": [
     "network:http",

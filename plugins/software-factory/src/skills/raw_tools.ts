@@ -138,8 +138,8 @@ export const tools: Config['tools'] = [
                         description: 'The key of the state value to set'
                     },
                     value: {
-                        type: 'any',
-                        description: 'The value to set in the state'
+                        type: 'string',
+                        description: 'The value to set in the state (JSON-encoded for complex values)'
                     }
                 },
                 required: ['key', 'value']

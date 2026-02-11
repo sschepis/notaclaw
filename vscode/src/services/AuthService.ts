@@ -7,6 +7,7 @@ import * as crypto from 'crypto';
 import { ClientSession, AuthChallenge, AuthRequest, AuthResult } from '../protocol/types';
 import { logger } from '../utils/logger';
 import { getConfig, getOrGenerateToken } from '../utils/config';
+import type { PairingService } from './PairingService';
 
 const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -46,10 +47,19 @@ export class AuthService {
   private rateLimiters: Map<string, SlidingWindowRateLimiter> = new Map();
   private configuredToken: string = '';
   private cleanupInterval: ReturnType<typeof setInterval>;
+  private pairingService: PairingService | null = null;
 
   constructor() {
     // Cleanup expired sessions periodically
     this.cleanupInterval = setInterval(() => this.cleanupExpiredSessions(), 60 * 1000);
+  }
+
+  /**
+   * Inject the PairingService for paired-device token validation.
+   * Called after both services are constructed to avoid circular deps.
+   */
+  setPairingService(pairingService: PairingService): void {
+    this.pairingService = pairingService;
   }
 
   /**
@@ -104,17 +114,37 @@ export class AuthService {
       };
     }
 
-    // Verify token using timing-safe comparison
-    const tokenBuffer = Buffer.from(request.token);
-    const configuredBuffer = Buffer.from(this.configuredToken);
-    
-    if (tokenBuffer.length !== configuredBuffer.length || 
-        !crypto.timingSafeEqual(tokenBuffer, configuredBuffer)) {
-      logger.warn(`Authentication failed for ${clientId}: Invalid token`);
-      return {
-        authenticated: false,
-        error: 'Invalid token',
-      };
+    // First, try paired device token validation
+    let isPairedDevice = false;
+    if (this.pairingService) {
+      const device = this.pairingService.validatePairedToken(request.token);
+      if (device) {
+        isPairedDevice = true;
+        logger.info(`Authenticated via paired device: ${device.name} (${device.id})`);
+      }
+    }
+
+    // If not a paired device token, verify against the configured token
+    if (!isPairedDevice) {
+      if (!this.configuredToken || this.configuredToken.length === 0) {
+        logger.warn(`Authentication failed for ${clientId}: No configured token and not a paired device`);
+        return {
+          authenticated: false,
+          error: 'Invalid token',
+        };
+      }
+
+      const tokenBuffer = Buffer.from(request.token);
+      const configuredBuffer = Buffer.from(this.configuredToken);
+      
+      if (tokenBuffer.length !== configuredBuffer.length || 
+          !crypto.timingSafeEqual(tokenBuffer, configuredBuffer)) {
+        logger.warn(`Authentication failed for ${clientId}: Invalid token`);
+        return {
+          authenticated: false,
+          error: 'Invalid token',
+        };
+      }
     }
 
     // Clean up the challenge

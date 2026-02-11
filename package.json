@@ -30,6 +30,7 @@
     "gun": "^0.2020.1241",
     "home-assistant-js-websocket": "^9.6.0",
     "lucide-react": "^0.563.0",
+    "node-turn": "^0.0.6",
     "twitter-api-v2": "^1.29.0",
     "uuid": "^13.0.0"
   }

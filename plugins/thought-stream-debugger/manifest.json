@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "name": "Thought Stream Debugger",
   "description": "Advanced observability tool for inspecting agent execution traces, memory access, and resonance scores.",
-  "main": "main/index.js",
-  "renderer": "renderer/index.tsx",
+  "main": "dist/main/index.js",
+  "renderer": "dist/renderer/index.js",
   "permissions": [
     "agent:monitor",
     "store:read"

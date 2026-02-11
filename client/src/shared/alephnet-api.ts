@@ -111,6 +111,21 @@ export interface IAlephNetAPI {
   aiConversationDeleteMessage: (params: { conversationId: string; messageId: string }) => Promise<void>;
   aiConversationUpdateTitle: (params: { id: string; title: string }) => Promise<AIConversation>;
 
+  // ─── Conversation Session State ────────────────────────────────
+  aiConversationSaveSessionState: (params: { activeConversationId: string | null; openConversationIds: string[] }) => Promise<void>;
+  aiConversationLoadSessionState: (params?: void) => Promise<{ activeConversationId: string | null; openConversationIds: string[]; lastUpdated: number } | null>;
+  aiConversationClearSessionState: (params?: void) => Promise<void>;
+
+  // ─── Memory Promotion ──────────────────────────────────────────
+  memoryPromote: (params: { content: string; reason: string; category: string; significance: number; conversationId?: string; sourceFieldId?: string; metadata?: Record<string, unknown> }) => Promise<{ success: boolean; fragmentId?: string; userFieldId?: string; error?: string }>;
+  memoryProcessForPromotion: (params: { content: string; role: string; conversationId?: string }) => Promise<Array<{ success: boolean; fragmentId?: string; userFieldId?: string; error?: string }>>;
+  memorySaveSkillConfig: (params: { skillId: string; key: string; value: string }) => Promise<{ success: boolean; fragmentId?: string; userFieldId?: string; error?: string }>;
+  memoryLoadSkillConfig: (params: { skillId: string; key: string }) => Promise<string | null>;
+  memoryLoadAllSkillConfigs: (params: { skillId: string }) => Promise<Record<string, string>>;
+  memoryFoldConversation: (params: { conversationFieldId: string; options?: { verifiedOnly?: boolean; minSignificance?: number } }) => Promise<{ syncedCount: number; entropyDelta: number }>;
+  memoryQueryUserMemory: (params: { query: string; limit?: number }) => Promise<MemoryFragment[]>;
+  memoryGetUserMemoriesByCategory: (params: { category: string; limit?: number }) => Promise<MemoryFragment[]>;
+
   // ─── Scheduled Tasks ──────────────────────────────────────────
   taskCreate: (params: CreateScheduledTaskOptions) => Promise<ScheduledTask>;
   taskList: (params?: { status?: ScheduledTaskStatus; parentConversationId?: string }) => Promise<ScheduledTask[]>;

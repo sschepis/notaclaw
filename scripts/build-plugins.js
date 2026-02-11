@@ -23,12 +23,14 @@ async function buildPlugin(pluginPath) {
     if (fs.existsSync(entryPoint)) actualEntry = entryPoint;
     else if (fs.existsSync(entryPoint2)) actualEntry = entryPoint2;
     
-    // Fallback: check src/index.ts or main/index.ts
+    // Fallback: check src/index.ts, main/index.ts, or src/main/index.ts
     if (!actualEntry) {
         const srcIndex = path.join(pluginPath, 'src', 'index.ts');
         const mainIndex = path.join(pluginPath, 'main', 'index.ts');
+        const srcMainIndex = path.join(pluginPath, 'src', 'main', 'index.ts');
         if (fs.existsSync(srcIndex)) actualEntry = srcIndex;
         else if (fs.existsSync(mainIndex)) actualEntry = mainIndex;
+        else if (fs.existsSync(srcMainIndex)) actualEntry = srcMainIndex;
     }
 
     // Fallback: Check if main is .js and exists (for ESM -> CJS conversion)
@@ -67,6 +69,98 @@ async function buildPlugin(pluginPath) {
         console.log(`✓ Built ${pkg.name}`);
     } catch (e) {
         console.error(`✗ Failed to build ${pkg.name}:`, e.message);
+    }
+
+    // Build renderer entry if specified in manifest.json
+    await buildRendererEntry(pluginPath, pkg);
+}
+
+async function buildRendererEntry(pluginPath, pkg) {
+    const manifestJsonPath = path.join(pluginPath, 'manifest.json');
+    let manifest = null;
+
+    try {
+        manifest = JSON.parse(fs.readFileSync(manifestJsonPath, 'utf8'));
+    } catch {
+        return; // No manifest.json or parse error; skip renderer build
+    }
+
+    if (!manifest.renderer) return;
+
+    // Determine output path from manifest
+    const rendererOut = path.join(pluginPath, manifest.renderer);
+    const rendererDir = path.dirname(manifest.renderer);
+
+    // Find the renderer source entry point
+    // Look for .tsx/.ts source files corresponding to the output path
+    // e.g., manifest.renderer = "dist/renderer/index.js" → look for renderer/index.tsx
+    const rendererSrcCandidates = [];
+
+    // Strip leading "dist/" from renderer path to find source
+    const srcRelative = manifest.renderer
+        .replace(/^dist\//, '')
+        .replace(/\.js$/, '');
+
+    rendererSrcCandidates.push(
+        path.join(pluginPath, srcRelative + '.tsx'),
+        path.join(pluginPath, srcRelative + '.ts'),
+        path.join(pluginPath, srcRelative + '.jsx'),
+        path.join(pluginPath, srcRelative + '.js'),
+    );
+
+    let rendererEntry = null;
+    for (const candidate of rendererSrcCandidates) {
+        if (fs.existsSync(candidate)) {
+            rendererEntry = candidate;
+            break;
+        }
+    }
+
+    if (!rendererEntry) {
+        console.log(`  Skipping renderer build for ${pkg.name}: No renderer source found`);
+        return;
+    }
+
+    console.log(`  Building renderer for ${pkg.name}...`);
+
+    // Renderer code runs in a sandboxed browser-like environment.
+    // React, ReactDOM, framer-motion, lucide-react are provided by the host via require().
+    const rendererExternals = [
+        'react', 'react-dom', 'react/jsx-runtime',
+        'framer-motion', 'lucide-react', 'alephnet'
+    ];
+
+    try {
+        // Build the renderer bundle.js (single file the PluginLoader tries first)
+        const bundleOut = path.join(path.dirname(rendererOut), 'bundle.js');
+        await esbuild.build({
+            entryPoints: [rendererEntry],
+            outfile: bundleOut,
+            bundle: true,
+            platform: 'browser',
+            format: 'cjs',
+            target: 'es2020',
+            external: rendererExternals,
+            allowOverwrite: true,
+            jsx: 'automatic',
+        });
+
+        // Also output the non-bundled index.js for fallback
+        await esbuild.build({
+            entryPoints: [rendererEntry],
+            outfile: rendererOut,
+            bundle: true,
+            platform: 'browser',
+            format: 'cjs',
+            target: 'es2020',
+            external: rendererExternals,
+            allowOverwrite: true,
+            jsx: 'automatic',
+        });
+
+        console.log(`  ✓ Built renderer for ${pkg.name}`);
+    } catch (e) {
+        console.error(`  ✗ Failed to build renderer for ${pkg.name}:`, e.message);
     }
 }
 
