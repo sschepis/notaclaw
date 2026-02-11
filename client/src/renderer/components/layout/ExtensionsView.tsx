@@ -6,7 +6,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { PluginManifest, SkillManifest } from '../../../shared/plugin-types';
 import { PopupMenu, PopupMenuItem } from '../ui/PopupMenu';
-import { Trash2, Power, Download, Copy, Settings } from 'lucide-react';
+import { Trash2, Power, Download, Copy, Settings, Box, Sparkles } from 'lucide-react';
 
 export const ExtensionsView: React.FC = () => {
     const { plugins, availableSkills, filter, setFilter, setPlugins, setAvailableSkills, updatePluginStatus, removePlugin } = usePluginStore();
@@ -209,6 +209,14 @@ export const ExtensionsView: React.FC = () => {
                 {filteredItems.map(item => {
                     const installed = isInstalled(item.id);
                     const isAlephExtension = 'isAlephExtension' in item && item.isAlephExtension;
+                    // Determine if it's a skill:
+                    // 1. It's an uninstalled skill (no status)
+                    // 2. It's an installed plugin with skill capabilities
+                    // 3. Fallback: it's an Aleph extension (often implies skill)
+                    const isSkill = !('status' in item) ||
+                                   ('alephConfig' in item && item.alephConfig?.capabilities?.skillProvider === true) ||
+                                   isAlephExtension;
+
                     const isDisabled = 'status' in item && item.status === 'disabled';
                     
                     return (
@@ -216,19 +224,20 @@ export const ExtensionsView: React.FC = () => {
                             key={item.id}
                             onClick={() => handleExtensionClick(item)}
                             onContextMenu={(e) => installed && handleContextMenu(e, item.id)}
-                            className={`p-3 bg-card rounded-lg hover:bg-muted/50 transition-colors border border-border hover:border-primary/30 group relative cursor-pointer ${isDisabled ? 'opacity-75' : ''}`}
+                            className={`p-3 bg-card rounded-lg hover:bg-muted/50 transition-colors border ${isSkill ? 'border-purple-500/20 hover:border-purple-500/50' : 'border-border hover:border-primary/30'} group relative cursor-pointer ${isDisabled ? 'opacity-75' : ''}`}
                         >
                             <div className="flex flex-wrap justify-between items-start mb-1 gap-y-1">
                                 <div className="flex items-center gap-2 min-w-0">
                                     {'icon' in item && item.icon ? (
                                         <img src={item.icon} alt={item.name} className="w-6 h-6 rounded-sm object-contain bg-muted/50 p-0.5 shrink-0" />
                                     ) : (
-                                        <div className="w-6 h-6 rounded-sm bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0">
-                                            {item.name.substring(0, 2).toUpperCase()}
+                                        <div className={`w-6 h-6 rounded-sm ${isSkill ? 'bg-purple-500/10 text-purple-500' : 'bg-muted text-muted-foreground'} flex items-center justify-center text-[10px] font-bold shrink-0`}>
+                                            {isSkill ? <Sparkles size={14} /> : <Box size={14} />}
                                         </div>
                                     )}
                                     <h3 className="font-bold text-sm text-foreground truncate">{item.name}</h3>
-                                    {isAlephExtension && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-primary text-primary shrink-0">Aleph</Badge>}
+                                    {isSkill && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-purple-500/30 text-purple-500 shrink-0">Skill</Badge>}
+                                    {!isSkill && isAlephExtension && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-primary text-primary shrink-0">Aleph</Badge>}
                                 </div>
                                 <div className="flex items-center gap-2 ml-auto">
                                      {installed && <Badge variant="outline" className={isDisabled ? "text-[10px] px-1.5 py-0 h-5 border-border text-muted-foreground shrink-0" : "text-[10px] px-1.5 py-0 h-5 border-emerald-800 text-emerald-500 shrink-0"}>{isDisabled ? 'Disabled' : 'Installed'}</Badge>}

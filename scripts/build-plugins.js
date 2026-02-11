@@ -1,59 +1,86 @@
-const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
+const esbuild = require('esbuild');
 
-const pluginsDir = path.join(__dirname, '../plugins');
+const PLUGIN_DIRS = ['plugins', 'plugins-extended'];
+const ROOT_DIR = path.resolve(__dirname, '..');
 
-async function buildPlugins() {
-  console.log('Building plugins...');
-  
-  if (!fs.existsSync(pluginsDir)) {
-    console.error('Plugins directory not found');
-    return;
-  }
+async function buildPlugin(pluginPath) {
+    const manifestPath = path.join(pluginPath, 'package.json');
+    if (!fs.existsSync(manifestPath)) return;
 
-  const plugins = fs.readdirSync(pluginsDir).filter(f => fs.statSync(path.join(pluginsDir, f)).isDirectory());
-
-  for (const plugin of plugins) {
-    const pluginPath = path.join(pluginsDir, plugin);
-    const rendererPath = path.join(pluginPath, 'renderer');
+    const pkg = require(manifestPath);
+    // Only build if it has typescript dev dependency or tsconfig or main is .js but src is .ts
+    // For simplicity, we check if main exists and if there is a corresponding .ts file
     
-    // Check for entry point (index.tsx or index.js)
-    let entryPoint = null;
-    if (fs.existsSync(path.join(rendererPath, 'index.tsx'))) {
-      entryPoint = path.join(rendererPath, 'index.tsx');
-    } else if (fs.existsSync(path.join(rendererPath, 'index.js'))) {
-      entryPoint = path.join(rendererPath, 'index.js');
+    if (!pkg.main) return;
+
+    const entryPoint = path.join(pluginPath, pkg.main.replace('.js', '.ts'));
+    const entryPoint2 = path.join(pluginPath, pkg.main.replace('.js', '.tsx'));
+    
+    let actualEntry = null;
+    if (fs.existsSync(entryPoint)) actualEntry = entryPoint;
+    else if (fs.existsSync(entryPoint2)) actualEntry = entryPoint2;
+    
+    // Fallback: check src/index.ts or main/index.ts
+    if (!actualEntry) {
+        const srcIndex = path.join(pluginPath, 'src', 'index.ts');
+        const mainIndex = path.join(pluginPath, 'main', 'index.ts');
+        if (fs.existsSync(srcIndex)) actualEntry = srcIndex;
+        else if (fs.existsSync(mainIndex)) actualEntry = mainIndex;
     }
 
-    if (entryPoint) {
-      console.log(`Building ${plugin}...`);
-      try {
-        await esbuild.build({
-          entryPoints: [entryPoint],
-          outfile: path.join(rendererPath, 'bundle.js'),
-          bundle: true,
-          format: 'cjs',
-          platform: 'browser',
-          external: ['react', 'react-dom', 'alephnet'],
-          alias: {
-            '@': path.resolve(__dirname, '../client/src'),
-            '@radix-ui/react-slot': path.resolve(__dirname, '../client/node_modules/@radix-ui/react-slot'),
-            'class-variance-authority': path.resolve(__dirname, '../client/node_modules/class-variance-authority'),
-            'clsx': path.resolve(__dirname, '../client/node_modules/clsx'),
-            'tailwind-merge': path.resolve(__dirname, '../client/node_modules/tailwind-merge')
-          },
-          loader: { '.tsx': 'tsx', '.ts': 'ts' },
-          target: ['es2020']
-        });
-        console.log(`✓ ${plugin} built successfully`);
-      } catch (e) {
-        console.error(`✗ Failed to build ${plugin}:`, e);
-      }
-    } else {
-      console.log(`- ${plugin}: No renderer entry point found`);
+    // Fallback: Check if main is .js and exists (for ESM -> CJS conversion)
+    if (!actualEntry && pkg.main && pkg.main.endsWith('.js')) {
+        const jsEntry = path.join(pluginPath, pkg.main);
+        if (fs.existsSync(jsEntry)) {
+             // Check if it has ESM syntax
+             try {
+                const content = fs.readFileSync(jsEntry, 'utf8');
+                if (content.includes('import ') || content.includes('export ')) {
+                    actualEntry = jsEntry;
+                    console.log(`Detected ESM in .js file: ${pkg.name}`);
+                }
+             } catch (e) {}
+        }
     }
-  }
+
+    if (!actualEntry) {
+        console.log(`Skipping ${pkg.name}: No entry point found`);
+        return;
+    }
+
+    console.log(`Building ${pkg.name}...`);
+    
+    try {
+        await esbuild.build({
+            entryPoints: [actualEntry],
+            outfile: path.join(pluginPath, pkg.main),
+            bundle: true,
+            platform: 'node',
+            format: 'cjs',
+            target: 'node18',
+            external: ['electron', ...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {})],
+            allowOverwrite: true,
+        });
+        console.log(`✓ Built ${pkg.name}`);
+    } catch (e) {
+        console.error(`✗ Failed to build ${pkg.name}:`, e.message);
+    }
 }
 
-buildPlugins();
+async function main() {
+    for (const dir of PLUGIN_DIRS) {
+        const fullDir = path.join(ROOT_DIR, dir);
+        if (!fs.existsSync(fullDir)) continue;
+
+        const plugins = fs.readdirSync(fullDir);
+        for (const plugin of plugins) {
+            if (plugin.startsWith('.')) continue;
+            await buildPlugin(path.join(fullDir, plugin));
+        }
+    }
+}
+
+main().catch(console.error);

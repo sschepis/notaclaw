@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 
-export const activate = (context: any) => {
+interface PluginContext {
+    registerComponent: (location: string, options: any) => void;
+    useAppStore: () => {
+        activeSidebarView: string;
+        setActiveSidebarView: (view: string) => void;
+    };
+}
+
+export const activate = (context: PluginContext) => {
     console.log('[Theme Studio] Renderer activated');
 
     const ThemePanel = () => {

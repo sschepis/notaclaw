@@ -1,8 +1,8 @@
 {
   "id": "@alephnet/hello-world",
   "name": "Hello World",
-  "version": "1.0.0",
-  "description": "A test plugin",
+  "version": "1.0.1",
+  "description": "A basic Hello World plugin demonstrating structure and capabilities",
   "author": "AlephNet",
   "license": "MIT",
   "main": "main/index.js",

@@ -4,7 +4,7 @@
   "description": "Secure sandboxed environment for code execution.",
   "main": "main/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "keywords": [
     "alephnet",
@@ -15,5 +15,10 @@
   "license": "MIT",
   "dependencies": {
     "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/jest": "^29.5.12",
+    "typescript": "^5.0.0"
   }
 }

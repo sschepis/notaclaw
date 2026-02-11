@@ -21,12 +21,16 @@
     "@ai-sdk/anthropic": "^3.0.39",
     "@ai-sdk/google": "^3.0.23",
     "@ai-sdk/openai": "^3.0.26",
+    "@farcaster/hub-nodejs": "^0.15.10",
+    "@neynar/nodejs-sdk": "^3.134.0",
     "@sschepis/alephnet-node": "^1.4.0",
     "@types/uuid": "^10.0.0",
     "ai": "^6.0.78",
     "framer-motion": "^12.33.0",
     "gun": "^0.2020.1241",
+    "home-assistant-js-websocket": "^9.6.0",
     "lucide-react": "^0.563.0",
+    "twitter-api-v2": "^1.29.0",
     "uuid": "^13.0.0"
   }
 }

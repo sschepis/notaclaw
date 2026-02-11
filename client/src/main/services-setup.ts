@@ -126,10 +126,6 @@ export async function initializeServices(getMainWindow: () => Electron.BrowserWi
     // Initialize Session Manager
     sessionManager.initialize();
 
-    // Initialize Desktop Learner
-    logManager.info('DesktopLearner', 'Initializing', 'Starting accessibility learner...');
-    await desktopLearner.initialize();
-    
     // Bind DSNNode events to IPC
     dsnNode.on('status', (status) => {
         const mainWindow = getMainWindow();
@@ -217,6 +213,10 @@ export async function initializeServices(getMainWindow: () => Electron.BrowserWi
     await alephNetClient.connect();
     if (logger) logger.info('AlephNet', 'IPC Ready', 'All AlephNet IPC channels registered.');
     logManager.info('AlephNet', 'IPC Ready', 'All AlephNet IPC channels registered.');
+
+    // Initialize Desktop Learner (after AlephNet is connected)
+    logManager.info('DesktopLearner', 'Initializing', 'Starting accessibility learner...');
+    await desktopLearner.initialize();
 
     // Initialize Task Scheduler
     logManager.info('TaskScheduler', 'Initializing', 'Loading scheduled tasks...');

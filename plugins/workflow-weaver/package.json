@@ -1,0 +1,29 @@
+{
+  "name": "@alephnet/workflow-weaver",
+  "version": "1.0.0",
+  "description": "Visual orchestration engine for chaining agents, tools, and semantic queries into reusable workflows.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "alephnet",
+    "workflow",
+    "agent-orchestration",
+    "automation"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.12.7",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "react-flow-renderer": "^10.3.17"
+  }
+}

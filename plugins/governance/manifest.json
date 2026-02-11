@@ -5,7 +5,7 @@
   "description": "Participation in decentralized governance, voting, and coherence claims.",
   "author": "AlephNet",
   "license": "MIT",
-  "main": "main/index.js",
+  "main": "dist/index.js",
   "renderer": "renderer/bundle.js",
   "permissions": [
     "dsn:identity",

@@ -1,8 +1,9 @@
 import React from 'react';
 import { Bot, Users, Plus, List } from 'lucide-react';
 import { AgentsPanel } from './AgentsPanel';
+import { RendererPluginContext } from '../../../client/src/shared/plugin-types';
 
-export const activate = (context: any) => {
+export const activate = (context: RendererPluginContext) => {
     console.log('[Agent Essentials] Renderer activated');
     const { React, useAppStore, ui } = context;
 
@@ -23,21 +24,36 @@ export const activate = (context: any) => {
         );
     };
 
-    // Register Nav Item
-    context.registerComponent('sidebar:nav-item', {
-        id: 'agent-essentials-nav',
-        component: AgentEssentialsButton
-    });
-
-    // Register Main View
-    context.registerComponent('sidebar:view:agents', {
-        id: 'agent-essentials-panel',
-        component: AgentsPanel
-    });
-
-    // Register Commands for Command Menu
     const cleanups: Array<() => void> = [];
 
+    // Register Stage View
+    if (context.ui.registerStageView) {
+        cleanups.push(context.ui.registerStageView({
+            id: 'agent-essentials-panel',
+            name: 'Agent Essentials',
+            icon: Bot,
+            component: AgentsPanel
+        }));
+
+        // Register Navigation
+        cleanups.push(context.ui.registerNavigation({
+            id: 'agent-essentials-nav',
+            label: 'Agents',
+            icon: Bot,
+            view: {
+                id: 'agent-essentials-panel',
+                name: 'Agent Essentials',
+                icon: Bot,
+                component: AgentsPanel
+            },
+            order: 20
+        }));
+    } else {
+        // Fallback or legacy handling if needed, but we are upgrading
+        console.warn('[Agent Essentials] New UI API not available');
+    }
+
+    // Register Commands for Command Menu
     if (ui?.registerCommand) {
         cleanups.push(ui.registerCommand({
             id: 'agent-essentials:open-agents',
@@ -87,12 +103,12 @@ export const activate = (context: any) => {
         }));
     }
 
-    context._cleanups = cleanups;
+    (context as any)._cleanups = cleanups;
 };
 
-export const deactivate = (context: any) => {
+export const deactivate = (context: RendererPluginContext) => {
     console.log('[Agent Essentials] Renderer deactivated');
-    if (context._cleanups) {
-        context._cleanups.forEach((cleanup: any) => cleanup());
+    if ((context as any)._cleanups) {
+        (context as any)._cleanups.forEach((cleanup: any) => cleanup());
     }
 };

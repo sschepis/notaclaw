@@ -4,11 +4,19 @@
   "description": "Universal data connector for ingesting external data sources into the AlephNet Semantic Graph.",
   "main": "main/index.js",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "jest"
   },
   "dependencies": {
     "pg": "^8.11.3",
     "mongodb": "^6.3.0",
-    "axios": "^1.6.7"
+    "axios": "^1.6.7",
+    "react": "^18.2.0",
+    "lucide-react": "^0.563.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/jest": "^29.5.12",
+    "typescript": "^5.0.0"
   }
 }

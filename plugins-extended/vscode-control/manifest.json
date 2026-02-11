@@ -3,7 +3,7 @@
   "name": "VS Code Control",
   "version": "0.1.0",
   "description": "Control VS Code via WebSocket",
-  "main": "dist/plugins/vscode-control/src/index.js",
+  "main": "dist/index.js",
   "permissions": [
     "network:http",
     "dsn:register-tool"

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { RendererPluginContext } from '../../../client/src/shared/plugin-types';
 
-export const activate = (context: any) => {
+export const activate = (context: RendererPluginContext) => {
     console.log('[Code Interpreter] Renderer activated');
 
-    const CodeBlockRenderer = ({ block, language }: any) => {
+    const CodeBlockRenderer = ({ context: { code, language } }: any) => {
         const [output, setOutput] = useState<string | null>(null);
         const [isRunning, setIsRunning] = useState(false);
 
@@ -25,7 +26,7 @@ export const activate = (context: any) => {
                         
                         // Execute
                         // eslint-disable-next-line no-eval
-                        const result = eval(block.content);
+                        const result = eval(code);
                         
                         if (result !== undefined) {
                             logs.push('Result: ' + String(result));
@@ -59,7 +60,7 @@ export const activate = (context: any) => {
                     </button>
                 </div>
                 <pre className="p-3 text-sm font-mono text-gray-300 overflow-x-auto m-0">
-                    <code>{block.content}</code>
+                    <code>{code}</code>
                 </pre>
                 {output && (
                     <div className="border-t border-white/10 bg-black/50 p-3">
@@ -72,33 +73,25 @@ export const activate = (context: any) => {
     };
 
     // Register for javascript
-    const { useFenceStore } = context.require('alephnet');
-    const { registerRenderer } = useFenceStore.getState();
-
-    registerRenderer({
-        id: 'js-interpreter',
-        languages: ['javascript', 'js'],
-        component: (props: any) => <CodeBlockRenderer {...props} language="javascript" />,
-        priority: 10
-    });
-    
-    // Register sidebar button
-    /*
-    const CodeInterpreterButton = () => {
-        return (
-            <button
-                className="w-9 h-9 rounded-lg flex items-center justify-center bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all"
-                onClick={() => console.log('Code Interpreter clicked')}
-                title="Code Interpreter"
-            >
-                CI
-            </button>
-        );
-    };
-
-    context.registerComponent('sidebar:nav-item', {
-        id: 'code-interpreter-nav',
-        component: CodeInterpreterButton
-    });
-    */
+    if (context.ui.registerSlot) {
+        context.ui.registerSlot('fence:renderer', {
+            component: CodeBlockRenderer,
+            filter: (ctx) => ctx.language === 'javascript' || ctx.language === 'js'
+        });
+    } else {
+        // Fallback to old store if available
+        try {
+            const { useFenceStore } = (context as any).require('alephnet');
+            const { registerRenderer } = useFenceStore.getState();
+            registerRenderer({
+                id: 'js-interpreter',
+                languages: ['javascript', 'js'],
+                component: (props: any) => <CodeBlockRenderer context={{ code: props.block.content, language: 'javascript' }} />,
+                priority: 10
+            });
+        } catch (e) {
+            console.warn('[Code Interpreter] Failed to register renderer (legacy fallback failed)', e);
+        }
+    }
 };
+

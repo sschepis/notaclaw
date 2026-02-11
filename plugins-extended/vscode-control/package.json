@@ -1,9 +1,10 @@
 {
   "name": "vscode-control",
   "version": "0.1.0",
-  "main": "dist/plugins/vscode-control/src/index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "jest"
   },
   "dependencies": {
     "ws": "^8.14.2",
@@ -12,6 +13,7 @@
   "devDependencies": {
     "typescript": "^5.3.3",
     "@types/ws": "^8.5.10",
-    "@types/uuid": "^9.0.7"
+    "@types/uuid": "^9.0.7",
+    "@types/jest": "^29.5.12"
   }
 }

@@ -46,6 +46,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
     await this.ensurePluginsDir();
     await this.loadStorage();
     await this.scanBundledPlugins();
+    await this.scanExtendedPlugins();
     await this.scanPlugins();
   }
 
@@ -99,6 +100,28 @@ export class PluginManager extends BasePluginManager<PluginContext> {
 
     if (!found) {
       console.log('Bundled plugins directory not found or inaccessible:', this.bundledPluginsDir);
+    }
+  }
+
+  private async scanExtendedPlugins() {
+    // Try to find plugins-extended relative to where we found plugins
+    let extendedDir = path.join(process.cwd(), 'plugins-extended');
+    
+    if (this.resolvedBundledDir) {
+        extendedDir = path.join(path.dirname(this.resolvedBundledDir), 'plugins-extended');
+    }
+
+    try {
+        await fs.access(extendedDir);
+        console.log(`Scanning extended plugins in ${extendedDir}`);
+        const entries = await fs.readdir(extendedDir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                await this.loadPlugin(path.join(extendedDir, entry.name));
+            }
+        }
+    } catch {
+        // Optional directory, ignore if missing
     }
   }
 
@@ -366,7 +389,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       ai: {
         complete: async (request: any) => {
             check('ai:complete');
-            const prompt = request.systemPrompt 
+            const prompt = request.systemPrompt
                 ? `System: ${request.systemPrompt}\n\nUser: ${request.userPrompt}`
                 : request.userPrompt;
             const response = await this.aiManager.processRequest(prompt, {
@@ -378,6 +401,14 @@ export class PluginManager extends BasePluginManager<PluginContext> {
                 text: response.content,
                 raw: response
             };
+        }
+      },
+      traits: {
+        register: (_trait: any) => {
+            console.warn(`Plugin ${manifest.id} tried to register a trait (not supported in headless mode)`);
+        },
+        unregister: (_traitId: string) => {
+            // No-op
         }
       }
     };
