@@ -40,6 +40,11 @@
         "category": "Agent Control"
       },
       {
+        "command": "agentControl.toggle",
+        "title": "Toggle Agent Control Server On/Off",
+        "category": "Agent Control"
+      },
+      {
         "command": "agentControl.status",
         "title": "Show Server Status",
         "category": "Agent Control"
@@ -60,7 +65,7 @@
       "properties": {
         "agentControl.enabled": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Enable the Agent Control server on startup"
         },
         "agentControl.port": {
@@ -79,6 +84,26 @@
           "type": "string",
           "default": "",
           "description": "Authentication token (leave empty to generate one automatically)"
+        },
+        "agentControl.tls.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable TLS (WSS) for encrypted WebSocket connections"
+        },
+        "agentControl.tls.certPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to TLS certificate file (.pem)"
+        },
+        "agentControl.tls.keyPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to TLS private key file (.pem)"
+        },
+        "agentControl.tls.caPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to CA certificate file (.pem) for client certificate verification (optional)"
         },
         "agentControl.allowedOrigins": {
           "type": "array",
@@ -140,7 +165,29 @@
             "type": "string"
           },
           "default": [],
-          "description": "VS Code commands that should not be executable"
+          "description": "VS Code commands that should not be executable (deny-list mode)"
+        },
+        "agentControl.security.allowedCommands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "If non-empty, only these VS Code commands are allowed (allow-list mode). Takes precedence over restrictedCommands."
+        },
+        "agentControl.security.requireApproval": {
+          "type": "boolean",
+          "default": false,
+          "description": "Require user approval for destructive file operations (delete, overwrite)"
+        },
+        "agentControl.security.allowedMethodCategories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["editor", "fs", "terminal", "command", "state", "search", "debug", "git"]
+          },
+          "default": [],
+          "description": "If non-empty, only these method categories are allowed. Empty means all categories are allowed."
         }
       }
     }

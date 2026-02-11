@@ -31,12 +31,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Create server instance
   server = new AgentControlServer();
 
+  // Create status bar item (before commands so handlers can reference it)
+  const statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100
+  );
+  statusBarItem.command = 'agentControl.toggle';
+  context.subscriptions.push(statusBarItem);
+
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('agentControl.start', async () => {
       if (server) {
         try {
           await server.start();
+          updateStatusBar(statusBarItem);
         } catch (error) {
           vscode.window.showErrorMessage(`Failed to start server: ${error}`);
         }
@@ -46,7 +55,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('agentControl.stop', async () => {
       if (server) {
         await server.stop();
+        updateStatusBar(statusBarItem);
         vscode.window.showInformationMessage('Agent Control server stopped');
+      }
+    }),
+
+    vscode.commands.registerCommand('agentControl.toggle', async () => {
+      if (server) {
+        const status = server.getStatus();
+        if (status.running) {
+          await server.stop();
+          vscode.window.showInformationMessage('Agent Control server stopped');
+        } else {
+          try {
+            await server.start();
+          } catch (error) {
+            vscode.window.showErrorMessage(`Failed to start server: ${error}`);
+          }
+        }
+        updateStatusBar(statusBarItem);
       }
     }),
 
@@ -112,9 +139,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       logger.configure(newConfig.logging.level, newConfig.logging.logToFile);
       logger.info('Configuration updated');
       
-      // If server is running and port changed, restart
       if (server) {
         const status = server.getStatus();
+
+        // Start server if enabled was toggled on while server is not running
+        if (newConfig.enabled && !status.running) {
+          logger.info('agentControl.enabled changed to true — starting server');
+          server.start().then(() => {
+            updateStatusBar(statusBarItem);
+          }).catch((err) => {
+            logger.error('Failed to start server after config change', err);
+          });
+        }
+
+        // Stop server if enabled was toggled off while server is running
+        if (!newConfig.enabled && status.running) {
+          logger.info('agentControl.enabled changed to false — stopping server');
+          server.stop().then(() => {
+            updateStatusBar(statusBarItem);
+            vscode.window.showInformationMessage('Agent Control server stopped (disabled in settings)');
+          });
+        }
+
+        // If server is running and port changed, restart
         if (status.running && status.port !== newConfig.port) {
           vscode.window.showInformationMessage(
             'Port configuration changed. Restart the server to apply.',
@@ -129,14 +176,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
-  // Create status bar item
-  const statusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    100
-  );
-  statusBarItem.command = 'agentControl.status';
+  // Initial status bar render
   updateStatusBar(statusBarItem);
-  context.subscriptions.push(statusBarItem);
 
   // Update status bar periodically
   const statusInterval = setInterval(() => {
@@ -171,11 +212,11 @@ function updateStatusBar(item: vscode.StatusBarItem): void {
     const status = server.getStatus();
     if (status.running) {
       item.text = `$(broadcast) Agent: ${status.clients}`;
-      item.tooltip = `Agent Control server running on port ${status.port}\n${status.clients} client(s) connected`;
+      item.tooltip = `Agent Control running on :${status.port} — ${status.clients} client(s)\nClick to stop`;
       item.backgroundColor = undefined;
     } else {
       item.text = '$(circle-slash) Agent: Off';
-      item.tooltip = 'Agent Control server is not running. Click for status.';
+      item.tooltip = 'Agent Control server is stopped\nClick to start';
       item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
     }
     item.show();

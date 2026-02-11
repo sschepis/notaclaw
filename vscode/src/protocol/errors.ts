@@ -159,19 +159,61 @@ export function commandRestricted(id: string | number, command: string): JsonRpc
 }
 
 /**
- * Convert any error to a JSON-RPC error response
+ * Build structured error data payload with timestamp, type classification,
+ * and optional stack trace (only included when agentControl.logLevel is 'debug').
+ */
+function enrichErrorData(base: Record<string, unknown> | undefined, error: unknown): Record<string, unknown> {
+  const data: Record<string, unknown> = { ...(base ?? {}) };
+  data.timestamp = new Date().toISOString();
+
+  if (error instanceof ProtocolError) {
+    data.errorType = 'protocol';
+  } else if (error instanceof Error) {
+    data.errorType = error.name ?? 'Error';
+    // Only include stack in debug mode to avoid leaking internals in production
+    try {
+      // Dynamically import to avoid circular dependency — safe because this is synchronous config read
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const vscode = require('vscode');
+      const level = vscode.workspace.getConfiguration('agentControl').get('logLevel', 'info') as string;
+      if (level === 'debug') {
+        data.stack = error.stack;
+      }
+    } catch {
+      // Running outside VS Code (tests) — include stack by default
+      data.stack = (error as Error).stack;
+    }
+  } else {
+    data.errorType = 'unknown';
+  }
+
+  return data;
+}
+
+/**
+ * Convert any error to a JSON-RPC error response.
+ * All error responses include structured data with timestamp and error type.
+ * Stack traces are only included when logLevel is 'debug'.
  */
 export function toErrorResponse(id: string | number, error: unknown): JsonRpcErrorResponse {
+  // Handle parameter validation errors from WebSocketServer helpers
+  if (error instanceof Error && (error as any).__invalidParams) {
+    return invalidParams((error as any).requestId ?? id, error.message);
+  }
+
   if (error instanceof ProtocolError) {
-    return createErrorResponse(id, error.code, error.message, error.data);
+    const enriched = enrichErrorData(
+      typeof error.data === 'object' && error.data !== null ? error.data as Record<string, unknown> : undefined,
+      error,
+    );
+    return createErrorResponse(id, error.code, error.message, enriched);
   }
   
   if (error instanceof Error) {
-    return internalError(id, error.message, {
-      name: error.name,
-      stack: error.stack,
-    });
+    const enriched = enrichErrorData({ name: error.name }, error);
+    return internalError(id, error.message, enriched);
   }
   
-  return internalError(id, String(error));
+  const enriched = enrichErrorData(undefined, error);
+  return internalError(id, String(error), enriched);
 }

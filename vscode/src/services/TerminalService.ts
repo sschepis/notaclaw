@@ -23,11 +23,27 @@ import { getConfig } from '../utils/config';
 // Map our terminal IDs to VS Code terminals
 type TerminalId = string;
 
+export interface GetTerminalOutputParams {
+  terminalId: string;
+  maxLines?: number;
+}
+
+export interface GetTerminalOutputResult {
+  terminalId: string;
+  output: string;
+  lineCount: number;
+  truncated: boolean;
+}
+
 export class TerminalService {
   private terminals: Map<TerminalId, vscode.Terminal> = new Map();
   private terminalIdCounter = 0;
   private disposables: vscode.Disposable[] = [];
   
+  // Output buffers per terminal (ring buffer of lines)
+  private outputBuffers: Map<TerminalId, string[]> = new Map();
+  private static readonly MAX_BUFFER_LINES = 1000;
+
   // Callback for terminal output (used by WebSocket server to send notifications)
   private outputCallback?: (terminalId: string, data: string) => void;
   private closeCallback?: (terminalId: string) => void;
@@ -39,6 +55,7 @@ export class TerminalService {
         for (const [id, t] of this.terminals) {
           if (t === terminal) {
             this.terminals.delete(id);
+            this.outputBuffers.delete(id);
             this.closeCallback?.(id);
             logger.debug(`Terminal closed: ${id}`);
             break;
@@ -57,6 +74,47 @@ export class TerminalService {
   ): void {
     this.outputCallback = outputCallback;
     this.closeCallback = closeCallback;
+  }
+
+  /**
+   * Buffer output data for a terminal (called from the output callback path)
+   */
+  bufferOutput(terminalId: string, data: string): void {
+    if (!this.outputBuffers.has(terminalId)) {
+      this.outputBuffers.set(terminalId, []);
+    }
+    const buffer = this.outputBuffers.get(terminalId)!;
+    
+    // Split incoming data into lines and append
+    const lines = data.split('\n');
+    buffer.push(...lines);
+    
+    // Trim to max buffer size (keep most recent lines)
+    if (buffer.length > TerminalService.MAX_BUFFER_LINES) {
+      buffer.splice(0, buffer.length - TerminalService.MAX_BUFFER_LINES);
+    }
+  }
+
+  /**
+   * Get buffered output for a terminal
+   */
+  async getOutput(params: GetTerminalOutputParams): Promise<GetTerminalOutputResult> {
+    this.checkAccess();
+    
+    // Verify terminal exists
+    this.getTerminal(params.terminalId);
+    
+    const buffer = this.outputBuffers.get(params.terminalId) || [];
+    const maxLines = params.maxLines || TerminalService.MAX_BUFFER_LINES;
+    const truncated = buffer.length > maxLines;
+    const lines = truncated ? buffer.slice(buffer.length - maxLines) : buffer;
+    
+    return {
+      terminalId: params.terminalId,
+      output: lines.join('\n'),
+      lineCount: lines.length,
+      truncated,
+    };
   }
 
   /**

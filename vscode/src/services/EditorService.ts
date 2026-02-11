@@ -23,10 +23,50 @@ import {
   GetOpenFilesResult,
   GetSelectionResult,
   SuccessResult,
+  DocumentInfo,
   ErrorCode,
 } from '../protocol/types';
 import { ProtocolError } from '../protocol/errors';
 import { logger } from '../utils/logger';
+
+// ============================================================================
+// Parameter types for new methods
+// ============================================================================
+
+export interface GetDocumentInfoParams {
+  path: string;
+}
+
+export interface ApplyEditsParams {
+  path: string;
+  edits: Array<{
+    range: Range;
+    text: string;
+  }>;
+}
+
+export interface ApplyEditsResult {
+  applied: number;
+}
+
+export interface GetCompletionsParams {
+  path: string;
+  position: Position;
+  triggerCharacter?: string;
+}
+
+export interface CompletionItem {
+  label: string;
+  kind: string;
+  detail?: string;
+  insertText?: string;
+  sortText?: string;
+}
+
+export interface GetCompletionsResult {
+  items: CompletionItem[];
+  isIncomplete: boolean;
+}
 
 export class EditorService {
   /**
@@ -153,6 +193,72 @@ export class EditorService {
       throw new ProtocolError(
         ErrorCode.FileNotFound,
         `Failed to read file: ${params.path}`,
+        { path: params.path }
+      );
+    }
+  }
+
+  /**
+   * Get document metadata without full content
+   */
+  async getDocumentInfo(params: GetDocumentInfoParams): Promise<DocumentInfo> {
+    const uri = vscode.Uri.file(params.path);
+
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+
+      return {
+        uri: document.uri.toString(),
+        languageId: document.languageId,
+        version: document.version,
+        lineCount: document.lineCount,
+        isDirty: document.isDirty,
+      };
+    } catch (error) {
+      logger.error(`Failed to get document info: ${params.path}`, error);
+      throw new ProtocolError(
+        ErrorCode.FileNotFound,
+        `Failed to get document info: ${params.path}`,
+        { path: params.path }
+      );
+    }
+  }
+
+  /**
+   * Apply multiple edits to a single file atomically
+   */
+  async applyEdits(params: ApplyEditsParams): Promise<ApplyEditsResult> {
+    const uri = vscode.Uri.file(params.path);
+
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+      const edit = new vscode.WorkspaceEdit();
+
+      for (const e of params.edits) {
+        const range = this.toVSCodeRange(e.range);
+        edit.replace(uri, range, e.text);
+      }
+
+      const applied = await vscode.workspace.applyEdit(edit);
+
+      if (!applied) {
+        throw new ProtocolError(
+          ErrorCode.InternalError,
+          `Failed to apply edits to: ${params.path}`,
+          { path: params.path }
+        );
+      }
+
+      logger.debug(`Applied ${params.edits.length} edits to ${params.path}`);
+      return { applied: params.edits.length };
+    } catch (error) {
+      if (error instanceof ProtocolError) {
+        throw error;
+      }
+      logger.error(`Failed to apply edits: ${params.path}`, error);
+      throw new ProtocolError(
+        ErrorCode.InternalError,
+        `Failed to apply edits: ${String(error)}`,
         { path: params.path }
       );
     }
@@ -399,7 +505,6 @@ export class EditorService {
    */
   async save(params: SaveParams): Promise<SuccessResult> {
     if (params.path) {
-      const uri = vscode.Uri.file(params.path);
       const document = this.getDocument(params.path);
       
       if (document) {
@@ -422,6 +527,58 @@ export class EditorService {
       } else {
         throw new ProtocolError(ErrorCode.EditorNotActive, 'No active editor');
       }
+    }
+  }
+
+  /**
+   * Get completion items at a position in a document
+   */
+  async getCompletions(params: GetCompletionsParams): Promise<GetCompletionsResult> {
+    const uri = vscode.Uri.file(params.path);
+
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+      const position = this.toVSCodePosition(params.position);
+
+      const completionList = await vscode.commands.executeCommand<vscode.CompletionList>(
+        'vscode.executeCompletionItemProvider',
+        document.uri,
+        position,
+        params.triggerCharacter
+      );
+
+      if (!completionList) {
+        return { items: [], isIncomplete: false };
+      }
+
+      const items: CompletionItem[] = completionList.items.slice(0, 100).map(item => {
+        const label = typeof item.label === 'string' ? item.label : item.label.label;
+        const kindName = item.kind !== undefined
+          ? vscode.CompletionItemKind[item.kind] ?? 'Unknown'
+          : 'Unknown';
+
+        return {
+          label,
+          kind: kindName,
+          detail: item.detail,
+          insertText: typeof item.insertText === 'string'
+            ? item.insertText
+            : item.insertText?.value,
+          sortText: item.sortText,
+        };
+      });
+
+      return {
+        items,
+        isIncomplete: completionList.isIncomplete ?? false,
+      };
+    } catch (error) {
+      logger.error(`Failed to get completions: ${params.path}`, error);
+      throw new ProtocolError(
+        ErrorCode.InternalError,
+        `Failed to get completions: ${String(error)}`,
+        { path: params.path }
+      );
     }
   }
 

@@ -38,7 +38,8 @@ Please refer to **[TASKS.md](docs/TASKS.md)** for a detailed roadmap and current
     *   `src/renderer/`: Frontend UI (Renderer Process).
     *   `src/preload/`: Secure bridge between Main and Renderer.
 *   `src/`: Core backend services and shared logic.
-*   `plugins/`: Built-in and example plugins.
+*   `plugins/`: Built-in core plugins.
+*   `plugins-extended/`: Extended and experimental plugins.
 *   `docs/`: Comprehensive documentation.
 *   `personalities/`: JSON definitions for AI agent personalities.
 
@@ -74,10 +75,10 @@ Please refer to **[TASKS.md](docs/TASKS.md)** for a detailed roadmap and current
     npm install
     cd client
     npm install
-    cd ..
     ```
 
 3.  **Start the application**
+    From the `client` directory:
     ```bash
     npm start
     ```
@@ -108,7 +109,7 @@ Detailed documentation is available in the `docs/` directory:
 ├─────────────────────────────────────────────────────────────┤
 │                      Plugin Layer                            │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │
-│  │canvas-viz│ │elevenvox │ │theme-std │ │swarm-control│   │
+│  │canvas-viz│ │voice-ste │ │theme-std │ │swarm-control│   │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────────┘   │
 ├─────────────────────────────────────────────────────────────┤
 │                    AlephNet Layer                            │
@@ -130,8 +131,7 @@ The application comes with a rich ecosystem of built-in plugins, categorized by 
 *   **Federated Trainer**: Distributed AI model training.
 *   **OpenClaw Skills**: Manage, create, and share skills in the OpenClaw standard format.
 *   **Prime Tuner**: Fine-tune agent parameters and behaviors.
-*   **Voice Interface / Symphony**: Voice interaction capabilities.
-*   **ElevenVoices**: Integration with ElevenLabs for high-quality TTS and voice cloning.
+*   **Voice Suite**: Unified voice capabilities including Text-to-Speech, Speech-to-Text, and Voice Cloning (ElevenLabs/OpenAI).
 
 ### 💬 Communication & Social
 *   **Entangled Chat**: Secure, distributed chat capabilities.
@@ -139,13 +139,13 @@ The application comes with a rich ecosystem of built-in plugins, categorized by 
 *   **Social Mirror**: Identity and reputation management across the mesh.
 
 ### 📚 Data & Knowledge
-*   **Quantum Vault**: Secure, encrypted data storage.
 *   **Knowledge Graph**: Visualize and query semantic relationships.
 *   **Semantic Search**: Meaning-based search across all data.
 *   **Document Reader**: Ingest and process various document formats.
 *   **Data Osmosis**: Intelligent data synchronization and import/export.
 
 ### 🎨 Visualization & UI
+*   **AutoDash**: Generative UI dashboard for dynamic agent interfaces.
 *   **Canvas Viz**: Interactive data visualization canvas.
 *   **Network Visualizer**: 3D visualization of the mesh network.
 *   **Semantic Whiteboard**: Collaborative visual thinking space.
@@ -162,7 +162,8 @@ The application comes with a rich ecosystem of built-in plugins, categorized by 
 ### 🔗 Integration & Connectivity
 *   **API Gateway**: Connect to external APIs and services.
 *   **IoT Resonance Bridge**: Interface with IoT devices and sensors.
-*   **MCP Support**: Support for the Model Context Protocol.
+*   **OpenClaw Gateway**: Gateway for OpenClaw distributed compute delegation.
+*   **VSCode Control**: Integration for controlling VSCode instances.
 
 ### ⚙️ Workflow & Automation
 *   **Workflow Weaver**: Visual workflow builder and automation engine.

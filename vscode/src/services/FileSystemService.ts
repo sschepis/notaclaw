@@ -1,6 +1,6 @@
 /**
  * File System Service for Agent Control
- * Handles file and directory operations
+ * Handles file and directory operations, including file watching
  */
 
 import * as vscode from 'vscode';
@@ -31,30 +31,69 @@ import { ProtocolError } from '../protocol/errors';
 import { logger } from '../utils/logger';
 import { isPathRestricted, getConfig } from '../utils/config';
 
+// ============================================================================
+// File watcher types
+// ============================================================================
+
+export interface WatchFilesParams {
+  pattern: string;
+  /** Optional: workspace-relative base path */
+  basePath?: string;
+}
+
+export interface WatchFilesResult {
+  watcherId: string;
+}
+
+export interface UnwatchFilesParams {
+  watcherId: string;
+}
+
 export class FileSystemService {
+  private watchers: Map<string, vscode.FileSystemWatcher> = new Map();
+  private watcherCounter = 0;
+
+  /** Callback for file change notifications (set by the server) */
+  private onFileChange?: (path: string, type: 'created' | 'changed' | 'deleted') => void;
+
   /**
-   * Resolve a path to an absolute path
+   * Set the callback for file change notifications
    */
-  private resolvePath(filePath: string): string {
-    if (path.isAbsolute(filePath)) {
-      return filePath;
-    }
-    
-    // Resolve relative to workspace
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (workspaceFolder) {
-      return path.join(workspaceFolder.uri.fsPath, filePath);
-    }
-    
-    return path.resolve(filePath);
+  setFileChangeCallback(callback: (path: string, type: 'created' | 'changed' | 'deleted') => void): void {
+    this.onFileChange = callback;
   }
 
   /**
-   * Check if file system access is allowed
+   * Get the workspace root path (or cwd as fallback)
+   */
+  private getWorkspaceRoot(): string {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    return workspaceFolder ? workspaceFolder.uri.fsPath : process.cwd();
+  }
+
+  /**
+   * Resolve a path to a normalized absolute path.
+   * All `../` sequences are resolved so the result is canonical.
+   */
+  private resolvePath(filePath: string): string {
+    const root = this.getWorkspaceRoot();
+
+    if (path.isAbsolute(filePath)) {
+      // Normalize to collapse ../  and ./ sequences
+      return path.resolve(filePath);
+    }
+
+    // Resolve relative to workspace — path.resolve normalizes automatically
+    return path.resolve(root, filePath);
+  }
+
+  /**
+   * Check if file system access is allowed and the path is within the workspace sandbox.
+   * Prevents directory traversal attacks (e.g. ../../etc/passwd).
    */
   private checkAccess(filePath: string): void {
     const config = getConfig();
-    
+
     if (!config.security.allowFileSystemAccess) {
       throw new ProtocolError(
         ErrorCode.FeatureDisabled,
@@ -62,7 +101,21 @@ export class FileSystemService {
         { path: filePath }
       );
     }
-    
+
+    // Path sandboxing: resolved path must be within the workspace root.
+    // This prevents ../../../etc/passwd style traversal attacks.
+    const root = this.getWorkspaceRoot();
+    const normalizedPath = path.resolve(filePath);
+    const normalizedRoot = path.resolve(root);
+
+    if (!normalizedPath.startsWith(normalizedRoot + path.sep) && normalizedPath !== normalizedRoot) {
+      throw new ProtocolError(
+        ErrorCode.PathRestricted,
+        `Path escapes workspace sandbox: ${filePath}`,
+        { path: filePath, workspace: normalizedRoot }
+      );
+    }
+
     if (isPathRestricted(filePath)) {
       throw new ProtocolError(
         ErrorCode.PathRestricted,
@@ -470,5 +523,74 @@ export class FileSystemService {
         { path: params.path }
       );
     }
+  }
+
+  // =========================================================================
+  // File Watching
+  // =========================================================================
+
+  /**
+   * Start watching files matching a glob pattern.
+   * File change events are broadcast as notifications to connected clients.
+   */
+  async watchFiles(params: WatchFilesParams): Promise<WatchFilesResult> {
+    const config = getConfig();
+    if (!config.security.allowFileSystemAccess) {
+      throw new ProtocolError(ErrorCode.FeatureDisabled, 'File system access is disabled');
+    }
+
+    const watcherId = `watcher-${++this.watcherCounter}-${Date.now()}`;
+    const pattern = new vscode.RelativePattern(
+      vscode.workspace.workspaceFolders?.[0] || '',
+      params.pattern
+    );
+
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+
+    watcher.onDidCreate((uri) => {
+      this.onFileChange?.(uri.fsPath, 'created');
+    });
+    watcher.onDidChange((uri) => {
+      this.onFileChange?.(uri.fsPath, 'changed');
+    });
+    watcher.onDidDelete((uri) => {
+      this.onFileChange?.(uri.fsPath, 'deleted');
+    });
+
+    this.watchers.set(watcherId, watcher);
+    logger.info(`File watcher created: ${watcherId} for pattern "${params.pattern}"`);
+
+    return { watcherId };
+  }
+
+  /**
+   * Stop watching files for a given watcher ID
+   */
+  async unwatchFiles(params: UnwatchFilesParams): Promise<SuccessResult> {
+    const watcher = this.watchers.get(params.watcherId);
+    if (!watcher) {
+      throw new ProtocolError(
+        ErrorCode.InvalidParams,
+        `Watcher not found: ${params.watcherId}`,
+        { watcherId: params.watcherId }
+      );
+    }
+
+    watcher.dispose();
+    this.watchers.delete(params.watcherId);
+    logger.info(`File watcher disposed: ${params.watcherId}`);
+
+    return { success: true };
+  }
+
+  /**
+   * Dispose all active file watchers (called on server shutdown)
+   */
+  disposeWatchers(): void {
+    for (const [id, watcher] of this.watchers) {
+      watcher.dispose();
+      logger.debug(`Disposed watcher: ${id}`);
+    }
+    this.watchers.clear();
   }
 }

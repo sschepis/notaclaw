@@ -92,7 +92,6 @@ export type Capability =
   | 'dsn:publish-observation'
   | 'gateway:register'
   | 'dsn:gmf-write'
-  | 'gateway:register'
   | 'crypto:sign'
   | 'crypto:encrypt'
   | 'wallet:read'

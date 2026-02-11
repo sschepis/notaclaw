@@ -35,6 +35,12 @@ export interface AIRequestOptions {
   stream?: boolean;
 }
 
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
 export interface AIResponse {
   content: string;
   model: string;
@@ -44,7 +50,7 @@ export interface AIResponse {
     completionTokens: number;
     totalTokens: number;
   };
-  toolCalls?: any[];
+  toolCalls?: ToolCall[];
   raw?: any;
 }
 

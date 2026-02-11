@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { pathToFileURL } from 'url';
 import { EventEmitter } from 'events';
-import { PluginManifest, PluginContext } from '../shared/plugin-types';
+import { PluginManifest, PluginContext, SandboxProvider, SandboxSession, ExecutionResult } from '../shared/plugin-types';
 import { BasePluginManager } from '../shared/plugin-core/BasePluginManager';
 import { DSNNode } from './DSNNode';
 import { AIProviderManager } from './AIProviderManager';
@@ -14,6 +14,105 @@ import { TrustGate } from './TrustGate';
 import { SignedEnvelope, Capability, TrustAssessment, CapabilityCheckResult } from '../shared/trust-types';
 import { SkillDefinition } from '../shared/types';
 import { ServiceDefinition, GatewayDefinition } from '../shared/service-types';
+import { spawn } from 'child_process';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Headless IPC Bus — EventEmitter-based local IPC for plugins
+// ═══════════════════════════════════════════════════════════════════════════
+
+class HeadlessIPCBus {
+    private bus = new EventEmitter();
+    private handlers = new Map<string, (data: any) => Promise<any>>();
+
+    send(channel: string, data: any): void {
+        this.bus.emit(channel, data);
+    }
+
+    on(channel: string, handler: (data: any) => void): void {
+        this.bus.on(channel, handler);
+    }
+
+    handle(channel: string, handler: (data: any) => Promise<any>): void {
+        this.handlers.set(channel, handler);
+    }
+
+    async invoke(channel: string, data: any): Promise<any> {
+        const handler = this.handlers.get(channel);
+        if (!handler) {
+            throw new Error(`No handler registered for IPC channel: ${channel}`);
+        }
+        return handler(data);
+    }
+
+    removeAll(): void {
+        this.bus.removeAllListeners();
+        this.handlers.clear();
+    }
+}
+
+// Global IPC bus shared across all plugins
+const globalIPCBus = new HeadlessIPCBus();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Basic Sandbox Provider — uses child_process for code execution
+// ═══════════════════════════════════════════════════════════════════════════
+
+class BasicSandboxProvider implements SandboxProvider {
+    async createSession(type: 'node' | 'python' | 'bash'): Promise<SandboxSession> {
+        const sessionId = `sandbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const tempDir = path.join(process.cwd(), 'data', 'sandbox', sessionId);
+        await fs.mkdir(tempDir, { recursive: true });
+
+        const shell = type === 'node' ? 'node' : type === 'python' ? 'python3' : 'bash';
+
+        return {
+            id: sessionId,
+            async exec(command: string, options?: { timeout?: number }): Promise<ExecutionResult> {
+                const timeout = options?.timeout ?? 30000;
+                return new Promise((resolve) => {
+                    const proc = spawn(shell, ['-c', command], {
+                        cwd: tempDir,
+                        timeout,
+                        env: { ...process.env, HOME: tempDir },
+                    });
+
+                    let stdout = '';
+                    let stderr = '';
+
+                    proc.stdout.on('data', (d) => { stdout += d.toString(); });
+                    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+
+                    proc.on('close', (code) => {
+                        resolve({ stdout, stderr, exitCode: code ?? 1 });
+                    });
+
+                    proc.on('error', (err) => {
+                        resolve({ stdout, stderr: stderr + err.message, exitCode: 1 });
+                    });
+                });
+            },
+            async write(filePath: string, content: string): Promise<void> {
+                const fullPath = path.join(tempDir, filePath);
+                await fs.mkdir(path.dirname(fullPath), { recursive: true });
+                await fs.writeFile(fullPath, content);
+            },
+            async read(filePath: string): Promise<string> {
+                return fs.readFile(path.join(tempDir, filePath), 'utf-8');
+            },
+            async close(): Promise<void> {
+                try {
+                    await fs.rm(tempDir, { recursive: true, force: true });
+                } catch {
+                    // Best effort cleanup
+                }
+            }
+        };
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Plugin Manager
+// ═══════════════════════════════════════════════════════════════════════════
 
 export class PluginManager extends BasePluginManager<PluginContext> {
   private pluginsDir: string;
@@ -21,9 +120,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
   private resolvedBundledDir: string | null = null;
   private storagePath: string;
   private storageCache: Record<string, any> | null = null;
-  
-  // Capability decisions from the last load attempt
-  private currentCapabilityDecisions: Map<Capability, CapabilityCheckResult> | undefined;
+  private sandboxProvider = new BasicSandboxProvider();
 
   constructor(
     private dsnNode: DSNNode,
@@ -215,14 +312,53 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       // Attach runtime props to manifest
       manifest.trust = trust;
       manifest.status = status;
-      this.currentCapabilityDecisions = capabilityDecisions;
 
-      const result = await this.loadPluginFromManifest(manifest, pluginPath);
-      this.currentCapabilityDecisions = undefined;
+      // Pass capabilityDecisions as argument to avoid class-level race condition
+      const result = await this.loadPluginFromManifestWithDecisions(manifest, pluginPath, capabilityDecisions);
       return result;
 
     } catch (error) {
       console.error(`Failed to load plugin at ${pluginPath}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Extended loadPluginFromManifest that passes capability decisions as a
+   * parameter instead of storing them in a mutable class field.
+   * This prevents race conditions when loading plugins concurrently.
+   */
+  private async loadPluginFromManifestWithDecisions(
+    manifest: PluginManifest,
+    pluginPath: string,
+    capabilityDecisions?: Map<Capability, CapabilityCheckResult>
+  ): Promise<boolean> {
+    if (this.isPluginLoaded(manifest.id)) {
+      console.warn(`[PluginManager] Plugin ${manifest.id} already loaded. Skipping.`);
+      return true;
+    }
+
+    try {
+      const context = this.createContextWithDecisions(manifest, capabilityDecisions);
+      const instance = await this.executePlugin(manifest, pluginPath, context);
+
+      if (instance && typeof instance.activate === 'function') {
+        await instance.activate(context);
+      }
+
+      const loaded = {
+        manifest,
+        path: pluginPath,
+        context,
+        instance,
+        status: 'active' as const,
+        loadedAt: new Date()
+      };
+
+      this.registerPlugin(manifest.id, loaded);
+      return true;
+    } catch (e) {
+      console.error(`[PluginManager] Failed to load plugin ${manifest.id}:`, e);
       return false;
     }
   }
@@ -254,14 +390,37 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       return true;
   }
 
-  protected createContext(manifest: PluginManifest): PluginContext {
+  /**
+   * Create context with capability decisions passed as parameter (no race).
+   */
+  private createContextWithDecisions(
+    manifest: PluginManifest,
+    decisions?: Map<Capability, CapabilityCheckResult>
+  ): PluginContext {
     const eventEmitter = new EventEmitter();
-    const decisions = this.currentCapabilityDecisions;
 
     const check = (cap: Capability) => {
         if (!decisions) return;
         const result = decisions.get(cap);
         if (result?.decision === 'DENY') throw new Error(`Capability ${cap} denied: ${result.reason}`);
+    };
+
+    // Create scoped IPC that routes through the global bus
+    const pluginIPC = {
+        send: (channel: string, data: any) => {
+            globalIPCBus.send(`${manifest.id}:${channel}`, data);
+        },
+        on: (channel: string, handler: (data: any) => void) => {
+            // Listen on both scoped and global channels
+            globalIPCBus.on(`${manifest.id}:${channel}`, handler);
+            globalIPCBus.on(channel, handler);
+        },
+        handle: (channel: string, handler: (data: any) => Promise<any>) => {
+            globalIPCBus.handle(`${manifest.id}:${channel}`, handler);
+        },
+        invoke: async (channel: string, data: any) => {
+            return globalIPCBus.invoke(channel, data);
+        }
     };
 
     return {
@@ -331,25 +490,16 @@ export class PluginManager extends BasePluginManager<PluginContext> {
             }));
         }
       },
-      ipc: {
-        send: (_channel, _data) => {
-          console.warn(`Plugin ${manifest.id} tried to send IPC message (not supported in headless mode)`);
-        },
-        on: (_channel, _handler) => {
-          // No-op
-        },
-        handle: (_channel, _handler) => {
-            // No-op
-        },
-        invoke: async (_channel, _data) => {
-           throw new Error("IPC invoke not supported in headless mode");
-        }
-      },
+      ipc: pluginIPC,
       services: {
         tools: {
             register: (tool) => {
                 check('dsn:register-tool');
-                this.serviceRegistry.registerToolHandler(tool.name, tool.handler);
+                this.serviceRegistry.registerToolHandler(tool.name, tool.handler, {
+                    description: tool.description,
+                    parameters: tool.parameters,
+                    pluginId: manifest.id,
+                });
             }
         },
         gateways: {
@@ -358,13 +508,17 @@ export class PluginManager extends BasePluginManager<PluginContext> {
                 this.serviceRegistry.registerGateway(gateway);
             }
         },
-        sandbox: {} as any
+        sandbox: this.sandboxProvider
       },
       dsn: {
         registerTool: (toolDefinition: SkillDefinition, handler: Function) => {
             check('dsn:register-tool');
             console.log(`Plugin ${manifest.id} registering tool: ${toolDefinition.name}`);
-            this.serviceRegistry.registerToolHandler(toolDefinition.name, handler);
+            this.serviceRegistry.registerToolHandler(toolDefinition.name, handler, {
+                description: toolDefinition.description,
+                parameters: (toolDefinition as any).parameters,
+                pluginId: manifest.id,
+            });
         },
         registerService: (serviceDef: ServiceDefinition, _handler: Function) => {
             check('dsn:register-service');
@@ -412,6 +566,13 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         }
       }
     };
+  }
+
+  /**
+   * @deprecated Use createContextWithDecisions instead
+   */
+  protected createContext(manifest: PluginManifest): PluginContext {
+    return this.createContextWithDecisions(manifest, undefined);
   }
 
   private isDisabled(id: string): boolean {

@@ -20,6 +20,12 @@ export function getConfig(): AgentControlConfig {
     host: config.get<string>('host', '127.0.0.1'),
     token: config.get<string>('token', ''),
     allowedOrigins: config.get<string[]>('allowedOrigins', ['*']),
+    tls: {
+      enabled: config.get<boolean>('tls.enabled', false),
+      certPath: config.get<string>('tls.certPath', ''),
+      keyPath: config.get<string>('tls.keyPath', ''),
+      caPath: config.get<string>('tls.caPath', ''),
+    },
     rateLimit: {
       enabled: config.get<boolean>('rateLimit.enabled', true),
       requestsPerSecond: config.get<number>('rateLimit.requestsPerSecond', 100),
@@ -34,6 +40,9 @@ export function getConfig(): AgentControlConfig {
       allowCommandExecution: config.get<boolean>('security.allowCommandExecution', true),
       restrictedPaths: config.get<string[]>('security.restrictedPaths', []),
       restrictedCommands: config.get<string[]>('security.restrictedCommands', []),
+      allowedCommands: config.get<string[]>('security.allowedCommands', []),
+      requireApproval: config.get<boolean>('security.requireApproval', false),
+      allowedMethodCategories: config.get<string[]>('security.allowedMethodCategories', []),
     },
   };
 }
@@ -103,13 +112,36 @@ export function isPathRestricted(filePath: string): boolean {
 }
 
 /**
- * Check if a command is restricted
+ * Check if a command is restricted.
+ * If `allowedCommands` is non-empty (allow-list mode), only those commands are permitted.
+ * Otherwise falls back to the deny-list (`restrictedCommands`).
  */
 export function isCommandRestricted(command: string): boolean {
   const config = getConfig();
+
+  // Allow-list mode: if allowedCommands is configured, only those commands pass
+  const allowedCommands = config.security.allowedCommands;
+  if (allowedCommands.length > 0) {
+    return !allowedCommands.includes(command);
+  }
+
+  // Deny-list mode (default)
   const restrictedCommands = config.security.restrictedCommands;
-  
   return restrictedCommands.includes(command);
+}
+
+/**
+ * Check if a method category is allowed.
+ * If `allowedMethodCategories` is non-empty, only those categories are permitted.
+ * An empty array means all categories are allowed (default).
+ */
+export function isMethodCategoryAllowed(category: string): boolean {
+  const config = getConfig();
+  const allowed = config.security.allowedMethodCategories;
+  if (allowed.length === 0) {
+    return true; // No restrictions — all categories allowed
+  }
+  return allowed.includes(category);
 }
 
 /**

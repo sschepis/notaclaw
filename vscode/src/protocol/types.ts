@@ -558,6 +558,12 @@ export interface AgentControlConfig {
   host: string;
   token: string;
   allowedOrigins: string[];
+  tls: {
+    enabled: boolean;
+    certPath: string;
+    keyPath: string;
+    caPath: string;
+  };
   rateLimit: {
     enabled: boolean;
     requestsPerSecond: number;
@@ -572,6 +578,16 @@ export interface AgentControlConfig {
     allowCommandExecution: boolean;
     restrictedPaths: string[];
     restrictedCommands: string[];
+    /** If non-empty, only these commands are allowed (allow-list mode). Takes precedence over restrictedCommands. */
+    allowedCommands: string[];
+    /** If true, destructive file operations require user approval via modal dialog */
+    requireApproval: boolean;
+    /** 
+     * If non-empty, only these method categories are allowed for the client.
+     * Categories: 'editor', 'fs', 'terminal', 'command', 'state', 'search', 'debug', 'git'
+     * An empty array means all categories are allowed.
+     */
+    allowedMethodCategories: string[];
   };
 }
 
@@ -594,8 +610,12 @@ export const METHOD_CATEGORIES = {
     'editor.getSelection',
     'editor.getActiveFile',
     'editor.getOpenFiles',
+    'editor.getDocumentInfo',
+    'editor.applyEdits',
     'editor.save',
     'editor.saveAll',
+    'editor.formatDocument',
+    'editor.getCompletions',
   ],
   fs: [
     'fs.readFile',
@@ -609,6 +629,8 @@ export const METHOD_CATEGORIES = {
     'fs.listDirectory',
     'fs.exists',
     'fs.stat',
+    'fs.watchFiles',
+    'fs.unwatchFiles',
   ],
   terminal: [
     'terminal.create',
@@ -617,6 +639,7 @@ export const METHOD_CATEGORIES = {
     'terminal.show',
     'terminal.list',
     'terminal.getActive',
+    'terminal.getOutput',
   ],
   command: [
     'command.execute',
@@ -629,10 +652,31 @@ export const METHOD_CATEGORIES = {
     'state.findReferences',
     'state.goToDefinition',
     'state.getHover',
+    'state.getCodeActions',
+    'state.getOpenDocuments',
+    'state.getVisibleEditors',
   ],
   search: [
     'search.findInFiles',
     'search.findAndReplace',
+  ],
+  debug: [
+    'debug.startSession',
+    'debug.stopSession',
+    'debug.setBreakpoints',
+    'debug.removeBreakpoints',
+    'debug.getBreakpoints',
+    'debug.listSessions',
+  ],
+  git: [
+    'git.status',
+    'git.diff',
+    'git.log',
+    'git.stage',
+    'git.unstage',
+    'git.commit',
+    'git.checkout',
+    'git.branches',
   ],
 } as const;
 
@@ -643,4 +687,6 @@ export type MethodName =
   | typeof METHOD_CATEGORIES.terminal[number]
   | typeof METHOD_CATEGORIES.command[number]
   | typeof METHOD_CATEGORIES.state[number]
-  | typeof METHOD_CATEGORIES.search[number];
+  | typeof METHOD_CATEGORIES.search[number]
+  | typeof METHOD_CATEGORIES.debug[number]
+  | typeof METHOD_CATEGORIES.git[number];

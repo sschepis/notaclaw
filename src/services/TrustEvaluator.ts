@@ -1,3 +1,5 @@
+import fs from 'fs/promises';
+import path from 'path';
 import type { StakingTier } from '../shared/alephnet-types';
 import type {
   ITrustEvaluator,
@@ -51,6 +53,7 @@ interface CacheEntry {
 export class TrustEvaluator implements ITrustEvaluator {
   private cache = new Map<string, CacheEntry>();
   private overrideMap = new Map<string, TrustOverride>();
+  private overridePersistPath: string;
 
   constructor(
     private readonly envelopeService: SignedEnvelopeService,
@@ -58,7 +61,42 @@ export class TrustEvaluator implements ITrustEvaluator {
     private readonly socialGraph: ISocialGraphProvider,
     private readonly reputationProvider: IReputationProvider,
     private readonly domainManager: DomainManager
-  ) {}
+  ) {
+    this.overridePersistPath = path.join(process.cwd(), 'data', 'trust-overrides.json');
+  }
+
+  /**
+   * Load persisted trust overrides from disk (2.7.2).
+   * Call this during application startup after construction.
+   */
+  async loadOverrides(): Promise<void> {
+    try {
+      const data = await fs.readFile(this.overridePersistPath, 'utf-8');
+      const overrides: TrustOverride[] = JSON.parse(data);
+      this.overrideMap.clear();
+      for (const override of overrides) {
+        const key = this.overrideKey(override);
+        this.overrideMap.set(key, override);
+      }
+      console.log(`[TrustEvaluator] Loaded ${overrides.length} trust overrides from disk`);
+    } catch {
+      // File doesn't exist yet — no overrides to load
+    }
+  }
+
+  /**
+   * Persist current overrides to disk (2.7.2).
+   */
+  private async persistOverrides(): Promise<void> {
+    try {
+      const dir = path.dirname(this.overridePersistPath);
+      await fs.mkdir(dir, { recursive: true });
+      const data = JSON.stringify(Array.from(this.overrideMap.values()), null, 2);
+      await fs.writeFile(this.overridePersistPath, data, { mode: 0o600 });
+    } catch (error) {
+      console.error('[TrustEvaluator] Failed to persist overrides:', error);
+    }
+  }
 
   // ─── ITrustEvaluator ──────────────────────────────────────────────────
 
@@ -188,10 +226,17 @@ export class TrustEvaluator implements ITrustEvaluator {
   async setOverride(override: TrustOverride): Promise<void> {
     const key = this.overrideKey(override);
     this.overrideMap.set(key, override);
+    // Invalidate cache for affected content
+    if (override.target.type === 'artifact' && override.target.contentHash) {
+      this.cache.delete(override.target.contentHash);
+    }
+    await this.persistOverrides();
   }
 
   async removeOverride(contentHash: string): Promise<void> {
     this.overrideMap.delete(contentHash);
+    this.cache.delete(contentHash);
+    await this.persistOverrides();
   }
 
   async getOverrides(): Promise<TrustOverride[]> {

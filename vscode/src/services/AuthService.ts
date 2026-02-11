@@ -10,14 +10,46 @@ import { getConfig, getOrGenerateToken } from '../utils/config';
 
 const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/**
+ * Sliding window rate limiter using a circular buffer of timestamps.
+ * Each call to `recordAndCheck()` adds the current timestamp and returns
+ * whether the request is within the allowed rate.
+ */
+class SlidingWindowRateLimiter {
+  private timestamps: number[] = [];
+  private maxPerSecond: number;
+
+  constructor(maxPerSecond: number) {
+    this.maxPerSecond = maxPerSecond;
+  }
+
+  /** Record a new request and return whether the request is allowed. */
+  recordAndCheck(): boolean {
+    const now = Date.now();
+    // Prune timestamps older than 1 second
+    this.timestamps = this.timestamps.filter(t => now - t < 1000);
+    if (this.timestamps.length >= this.maxPerSecond) {
+      return false; // rate limited
+    }
+    this.timestamps.push(now);
+    return true; // allowed
+  }
+
+  updateLimit(maxPerSecond: number): void {
+    this.maxPerSecond = maxPerSecond;
+  }
+}
+
 export class AuthService {
   private sessions: Map<string, ClientSession> = new Map();
   private pendingChallenges: Map<string, { nonce: string; timestamp: number }> = new Map();
+  private rateLimiters: Map<string, SlidingWindowRateLimiter> = new Map();
   private configuredToken: string = '';
+  private cleanupInterval: ReturnType<typeof setInterval>;
 
   constructor() {
     // Cleanup expired sessions periodically
-    setInterval(() => this.cleanupExpiredSessions(), 60 * 1000);
+    this.cleanupInterval = setInterval(() => this.cleanupExpiredSessions(), 60 * 1000);
   }
 
   /**
@@ -100,6 +132,10 @@ export class AuthService {
     };
 
     this.sessions.set(clientId, session);
+
+    // Create a rate limiter for this client
+    const config = getConfig();
+    this.rateLimiters.set(clientId, new SlidingWindowRateLimiter(config.rateLimit.requestsPerSecond));
     
     logger.info(`Client ${clientId} authenticated successfully`);
 
@@ -121,6 +157,7 @@ export class AuthService {
     // Check if session has expired
     if (Date.now() - session.lastActivity > SESSION_TIMEOUT_MS) {
       this.sessions.delete(clientId);
+      this.rateLimiters.delete(clientId);
       return false;
     }
 
@@ -151,6 +188,7 @@ export class AuthService {
   removeSession(clientId: string): void {
     this.sessions.delete(clientId);
     this.pendingChallenges.delete(clientId);
+    this.rateLimiters.delete(clientId);
     logger.debug(`Session removed for client ${clientId}`);
   }
 
@@ -162,7 +200,8 @@ export class AuthService {
   }
 
   /**
-   * Check rate limiting for a client
+   * Check rate limiting for a client using sliding window algorithm.
+   * Returns true if the request is allowed, false if rate-limited.
    */
   checkRateLimit(clientId: string): boolean {
     const config = getConfig();
@@ -170,23 +209,19 @@ export class AuthService {
       return true;
     }
 
-    const session = this.sessions.get(clientId);
-    if (!session) {
+    const limiter = this.rateLimiters.get(clientId);
+    if (!limiter) {
       return false;
     }
 
-    // Simple rate limiting: check requests per second
-    // This is a simplified implementation; production would use a sliding window
-    const now = Date.now();
-    const timeSinceConnect = (now - session.connectedAt) / 1000;
-    const avgRequestsPerSecond = session.requestCount / Math.max(1, timeSinceConnect);
+    // Update the limit in case config changed
+    limiter.updateLimit(config.rateLimit.requestsPerSecond);
 
-    if (avgRequestsPerSecond > config.rateLimit.requestsPerSecond) {
+    const allowed = limiter.recordAndCheck();
+    if (!allowed) {
       logger.warn(`Rate limit exceeded for client ${clientId}`);
-      return false;
     }
-
-    return true;
+    return allowed;
   }
 
   /**
@@ -197,6 +232,7 @@ export class AuthService {
     for (const [clientId, session] of this.sessions) {
       if (now - session.lastActivity > SESSION_TIMEOUT_MS) {
         this.sessions.delete(clientId);
+        this.rateLimiters.delete(clientId);
         logger.debug(`Expired session removed for client ${clientId}`);
       }
     }
@@ -221,7 +257,9 @@ export class AuthService {
    * Dispose of resources
    */
   dispose(): void {
+    clearInterval(this.cleanupInterval);
     this.sessions.clear();
     this.pendingChallenges.clear();
+    this.rateLimiters.clear();
   }
 }

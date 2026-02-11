@@ -3,13 +3,13 @@ import { IdentityManager } from './services/IdentityManager';
 import { SecretsManager } from './services/SecretsManager';
 import { AIProviderManager } from './services/AIProviderManager';
 import { SignedEnvelopeService } from './services/SignedEnvelopeService';
-import { DomainManager } from './services/DomainManager';
 import { TrustEvaluator } from './services/TrustEvaluator';
 import { TrustGate } from './services/TrustGate';
 import { PersonalityManager } from './services/PersonalityManager';
 import { ServiceRegistry } from './services/ServiceRegistry';
 import { DSNNode } from './services/DSNNode';
 import { PluginManager } from './services/PluginManager';
+import { HeadlessTrustAdapter } from './services/HeadlessTrustAdapter';
 
 async function main() {
   console.log('Starting AlephNet Headless Node...');
@@ -38,55 +38,31 @@ async function main() {
     const aiManager = new AIProviderManager();
     await aiManager.initialize();
 
-    // 4. Initialize Core Services
+    // 4. Create shared services (single instances)
+    const signedEnvelopeService = new SignedEnvelopeService(identityManager);
     const personalityManager = new PersonalityManager(aiManager);
-    const dsnNode = new DSNNode(aiManager, personalityManager);
+
+    // 5. Initialize DSN Node with dependency injection (no duplicate services)
+    const dsnNode = new DSNNode({
+        identityManager,
+        aiManager,
+        personalityManager,
+        signedEnvelopeService,
+        // domainManager is created internally by DSNNode using the injected services
+    });
     
-    // Start DSN Node (initializes bridge)
+    // Start DSN Node (initializes bridge, Gun, DomainManager)
     await dsnNode.start();
     const bridge = dsnNode.getBridge();
 
-    const signedEnvelopeService = new SignedEnvelopeService(identityManager);
+    // Set bridge on the shared envelope service
     signedEnvelopeService.setBridge(bridge);
 
-    const domainManager = dsnNode.getDomainManager(); // DSNNode initializes DomainManager internally
-    
-    // We need to inject the bridge-dependent services if DSNNode didn't expose them all
-    // DSNNode exposes getDomainManager() but we need to instantiate others
-    
-    // Wait, DSNNode constructor instantiates DomainManager and SignedEnvelopeService internally?
-    // Let's check DSNNode.ts
-    // Yes: this.envelopeService = new SignedEnvelopeService(this.identityManager);
-    //      this.domainManager = new DomainManager(this.bridge, this.identityManager, this.envelopeService);
-    
-    // So we should use the instances from DSNNode if possible, or refactor DSNNode to accept them.
-    // DSNNode currently doesn't expose envelopeService.
-    // I should probably have updated DSNNode to expose it or accept it.
-    // But since I already wrote DSNNode, let's see.
-    // I can instantiate new ones, but they should share the bridge.
-    // DSNNode creates its own bridge: this.bridge = new AlephGunBridge();
-    
-    // So I should get the bridge from DSNNode.
-    
-    // Re-instantiating SignedEnvelopeService is fine as long as I set the bridge.
-    
+    const domainManager = dsnNode.getDomainManager();
     const serviceRegistry = new ServiceRegistry(bridge);
     
-    // Trust Services
-    // TrustEvaluator needs socialGraph, reputationProvider.
-    // AlephNetTrustAdapter in client implemented these.
-    // In headless, we need an adapter or use the bridge directly if it implements them.
-    // The bridge implements basic graph ops but maybe not the high-level provider interfaces.
-    // I might need to implement a `HeadlessTrustAdapter` that wraps the bridge to implement `ISocialGraphProvider` etc.
-    // For now, I'll create a simple adapter inline or stub it.
-    
-    const trustAdapter = {
-        getFriends: async () => [], // Stub
-        getFriendsOfFriend: async () => [], // Stub
-        getReputation: async () => 0.5,
-        getStakingTier: async () => 'Neophyte' as const,
-        getCoherenceScore: async () => 0.5
-    };
+    // 6. Trust Services — use HeadlessTrustAdapter backed by Gun bridge
+    const trustAdapter = new HeadlessTrustAdapter(bridge, identityManager);
 
     const trustEvaluator = new TrustEvaluator(
         signedEnvelopeService,
@@ -98,7 +74,7 @@ async function main() {
 
     const trustGate = new TrustGate(trustEvaluator);
 
-    // 5. Initialize Plugin Manager
+    // 7. Initialize Plugin Manager
     const pluginManager = new PluginManager(
         dsnNode,
         aiManager,
@@ -114,9 +90,10 @@ async function main() {
     console.log('AlephNet Headless Node is running.');
     console.log('Press Ctrl+C to stop.');
 
-    // Keep alive
+    // Keep alive — graceful shutdown including plugins
     process.on('SIGINT', async () => {
         console.log('Stopping...');
+        await pluginManager.shutdown();
         await dsnNode.stop();
         await secretsManager.shutdown();
         process.exit(0);

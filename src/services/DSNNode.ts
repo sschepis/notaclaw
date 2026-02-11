@@ -4,12 +4,19 @@ import { IdentityManager } from './IdentityManager';
 import { DSNNodeConfig } from '../shared/types';
 import { AIProviderManager } from './AIProviderManager';
 import { PersonalityManager } from './PersonalityManager';
-import { AIRequestOptions } from '../shared/ai-types';
 import { DomainManager } from './DomainManager';
 import { SignedEnvelopeService } from './SignedEnvelopeService';
 import { configManager } from './ConfigManager';
 import Gun from 'gun';
 import 'gun/sea';
+
+export interface DSNNodeDeps {
+  identityManager: IdentityManager;
+  aiManager: AIProviderManager;
+  personalityManager: PersonalityManager;
+  signedEnvelopeService?: SignedEnvelopeService;
+  domainManager?: DomainManager;
+}
 
 export class DSNNode extends EventEmitter {
   private bridge: AlephGunBridge;
@@ -22,68 +29,178 @@ export class DSNNode extends EventEmitter {
   private config: DSNNodeConfig | null = null;
   private gunInstance: any = null;
 
-  constructor(aiManager: AIProviderManager, personalityManager: PersonalityManager) {
+  // Error recovery & reconnection (2.8.2, 2.8.3)
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private readonly maxReconnectAttempts = 10;
+  private readonly reconnectBaseDelayMs = 2000;
+  private isRestarting = false;
+
+  /**
+   * Constructor accepts all required dependencies to avoid duplicate
+   * service instantiation. If `signedEnvelopeService` or `domainManager`
+   * are not provided they are created from the given `identityManager`
+   * (backward-compat).
+   */
+  constructor(deps: DSNNodeDeps);
+  /** @deprecated Use the `DSNNodeDeps` object form instead. */
+  constructor(aiManager: AIProviderManager, personalityManager: PersonalityManager);
+  constructor(
+    depsOrAiManager: DSNNodeDeps | AIProviderManager,
+    personalityManager?: PersonalityManager
+  ) {
     super();
     this.bridge = new AlephGunBridge();
-    this.identityManager = new IdentityManager();
-    this.aiManager = aiManager;
-    this.personalityManager = personalityManager;
-    this.envelopeService = new SignedEnvelopeService(this.identityManager);
-    this.domainManager = new DomainManager(this.bridge, this.identityManager, this.envelopeService);
+
+    if (depsOrAiManager instanceof AIProviderManager) {
+      // Legacy 2-arg constructor
+      this.identityManager = new IdentityManager();
+      this.aiManager = depsOrAiManager;
+      this.personalityManager = personalityManager!;
+      this.envelopeService = new SignedEnvelopeService(this.identityManager);
+      this.domainManager = new DomainManager(this.bridge, this.identityManager, this.envelopeService);
+    } else {
+      // New DI constructor
+      const deps = depsOrAiManager;
+      this.identityManager = deps.identityManager;
+      this.aiManager = deps.aiManager;
+      this.personalityManager = deps.personalityManager;
+      this.envelopeService = deps.signedEnvelopeService ?? new SignedEnvelopeService(this.identityManager);
+      this.domainManager = deps.domainManager ?? new DomainManager(this.bridge, this.identityManager, this.envelopeService);
+    }
   }
 
   async start() {
     console.log('Starting DSN Node...');
     
-    // 0. Initialize config manager
-    await configManager.initialize();
-    const networkConfig = configManager.getNetworkConfig();
-    
-    // 1. Load existing identity
-    const identity = await this.identityManager.getPublicIdentity();
-    if (!identity) {
-        console.log('No identity found. Deferring to onboarding flow.');
-        this.emit('status', 'OFFLINE');
-        return;
+    try {
+      // 0. Initialize config manager
+      await configManager.initialize();
+      const networkConfig = configManager.getNetworkConfig();
+      
+      // 1. Load existing identity
+      const identity = await this.identityManager.getPublicIdentity();
+      if (!identity) {
+          console.log('No identity found. Deferring to onboarding flow.');
+          this.emit('status', 'OFFLINE');
+          return;
+      }
+
+      // 2. Instantiate Library DSNNode
+      const keyTriplet = {
+          pub: identity.pub,
+          priv: identity.priv,
+          resonance: (identity.resonance || new Array(16).fill(0)) as any,
+          fingerprint: identity.fingerprint,
+          bodyPrimes: identity.bodyPrimes || []
+      };
+
+      // Instantiate Gun with configurable peers
+      console.log(`Connecting to peers: ${networkConfig.peers.join(', ')}`);
+      this.gunInstance = Gun({ peers: networkConfig.peers });
+
+      this.libNode = new LibDSNNode({
+          nodeId: identity.fingerprint,
+          semanticDomain: 'cognitive', // Default
+          existingKeyTriplet: keyTriplet,
+          gunInstance: this.gunInstance,
+          bootstrapUrl: networkConfig.bootstrapUrl
+      });
+
+      // 3. Initialize Bridge with real Gun instance
+      await this.bridge.initialize(this.gunInstance, this.libNode, null);
+
+      // Set the bridge on the envelope service so it can publish
+      this.envelopeService.setBridge(this.bridge);
+
+      // 4. Start Library Node
+      await this.libNode.start(this.gunInstance);
+      // Cast to any to avoid type mismatch if shared types drifted
+      this.config = this.libNode.config as any;
+
+      // Reset reconnection state on successful start
+      this.reconnectAttempts = 0;
+      this.isRestarting = false;
+
+      console.log('DSN Node started:', this.config?.nodeId);
+      this.emit('status', 'ONLINE');
+    } catch (error) {
+      console.error('[DSNNode] Failed to start:', error);
+      this.emit('status', 'ERROR');
+      this.emit('error', error);
+      
+      // Trigger automatic reconnection (2.8.2)
+      this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * Schedule a reconnection attempt with exponential backoff (2.8.3).
+   */
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) return; // Already scheduled
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error(`[DSNNode] Max reconnection attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
+      this.emit('status', 'DISCONNECTED');
+      return;
     }
 
-    // 2. Instantiate Library DSNNode
-    const keyTriplet = {
-        pub: identity.pub,
-        priv: identity.priv,
-        resonance: (identity.resonance || new Array(16).fill(0)) as any,
-        fingerprint: identity.fingerprint,
-        bodyPrimes: identity.bodyPrimes || []
-    };
+    const delay = this.reconnectBaseDelayMs * Math.pow(2, this.reconnectAttempts) + Math.random() * 1000;
+    this.reconnectAttempts++;
+    
+    console.log(`[DSNNode] Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${Math.round(delay)}ms`);
+    this.emit('status', 'RECONNECTING');
 
-    // Instantiate Gun with configurable peers
-    console.log(`Connecting to peers: ${networkConfig.peers.join(', ')}`);
-    this.gunInstance = Gun({ peers: networkConfig.peers });
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      if (this.isRestarting) return;
+      this.isRestarting = true;
 
-    this.libNode = new LibDSNNode({
-        nodeId: identity.fingerprint,
-        semanticDomain: 'cognitive', // Default
-        existingKeyTriplet: keyTriplet,
-        gunInstance: this.gunInstance,
-        bootstrapUrl: networkConfig.bootstrapUrl
-    });
+      try {
+        // Clean up old connection
+        if (this.libNode) {
+          try { await this.libNode.stop(); } catch { /* ignore */ }
+          this.libNode = null;
+        }
+        this.gunInstance = null;
+        this.bridge = new AlephGunBridge();
 
-    // 3. Initialize Bridge with real Gun instance
-    await this.bridge.initialize(this.gunInstance, this.libNode, null);
+        // Attempt fresh start
+        await this.start();
+      } catch (error) {
+        console.error(`[DSNNode] Reconnection attempt ${this.reconnectAttempts} failed:`, error);
+        this.isRestarting = false;
+        // start() will call scheduleReconnect() again on failure
+      }
+    }, delay);
+  }
 
-    // 4. Start Library Node
-    await this.libNode.start(this.gunInstance);
-    // Cast to any to avoid type mismatch if shared types drifted
-    this.config = this.libNode.config as any;
-
-    console.log('DSN Node started:', this.config?.nodeId);
-    this.emit('status', 'ONLINE');
+  /**
+   * Manually trigger a reconnection (e.g. after detecting connectivity loss).
+   */
+  async reconnect(): Promise<void> {
+    console.log('[DSNNode] Manual reconnect requested');
+    this.reconnectAttempts = 0; // Reset counter for manual reconnect
+    await this.stop();
+    await this.start();
   }
 
   async stop() {
     console.log('Stopping DSN Node...');
+    
+    // Cancel any pending reconnection
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.isRestarting = false;
+
     if (this.libNode) {
+      try {
         await this.libNode.stop();
+      } catch (error) {
+        console.warn('[DSNNode] Error during stop:', error);
+      }
     }
     // Note: Gun doesn't have a clean 'close' method in typical usage,
     // but clearing references helps.
@@ -102,14 +219,6 @@ export class DSNNode extends EventEmitter {
         providerId = parsedProviderId;
         model = modelParts.join(':');
     }
-    
-    const options: AIRequestOptions = {
-        contentType: metadata.mode === 'Code' ? 'code' : (metadata.mode === 'Agent' ? 'agent' : 'chat'),
-        providerId,
-        model,
-        temperature: metadata.resonance ? metadata.resonance / 100 : 0.7,
-        maxTokens: 2048
-    };
 
     try {
         // Delegate to PersonalityManager
@@ -171,5 +280,13 @@ export class DSNNode extends EventEmitter {
 
   public getDomainManager() {
       return this.domainManager;
+  }
+
+  public getEnvelopeService() {
+      return this.envelopeService;
+  }
+
+  public getIdentityManager() {
+      return this.identityManager;
   }
 }

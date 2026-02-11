@@ -65,6 +65,10 @@ export const InputArea: React.FC<InputAreaProps> = ({
     }
   }, [isGenerating]);
 
+  const displayContent = isListening && interimTranscript 
+    ? `${content}${content ? ' ' : ''}${interimTranscript}`
+    : content;
+
   return (
     <div className={`
         relative rounded-xl border transition-all duration-300 flex flex-col
@@ -96,18 +100,19 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
       <Textarea 
         ref={textareaRef}
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
+        value={displayContent}
+        onChange={(e) => !isListening && setContent(e.target.value)}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
         onFocus={onFocus}
         onBlur={onBlur}
-        placeholder={isGenerating ? 'Generating response...' : `Enter ${mode.toLowerCase()}... (Ctrl+Enter to send)`}
+        placeholder={isGenerating ? 'Generating response...' : isListening ? 'Listening...' : `Enter ${mode.toLowerCase()}... (Ctrl+Enter to send)`}
         rows={1}
         disabled={isGenerating}
+        readOnly={isListening}
         className={`bg-transparent border-none placeholder-muted-foreground focus-visible:ring-0 text-sm p-3 w-full resize-none custom-scrollbar font-medium leading-relaxed min-h-[60px] ${
           isGenerating ? 'text-muted-foreground cursor-not-allowed' : 'text-foreground'
-        }`}
+        } ${isListening ? 'cursor-wait' : ''}`}
       />
       
       {/* Controls Bar */}
@@ -253,22 +258,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
             </AnimatePresence>
         </div>
       </div>
-      
-      {/* Interim transcript display */}
-      <AnimatePresence>
-        {isListening && interimTranscript && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="absolute left-0 right-0 -bottom-8 flex items-center justify-center pointer-events-none"
-          >
-            <span className="text-[10px] text-primary italic bg-background/90 px-3 py-1 rounded-full border border-primary/30 shadow-sm backdrop-blur-sm">
-              {interimTranscript}...
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

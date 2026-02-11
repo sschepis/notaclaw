@@ -4,6 +4,8 @@
  */
 
 import * as vscode from 'vscode';
+import * as https from 'https';
+import * as fs from 'fs';
 import { WebSocketServer as WSServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -13,14 +15,18 @@ import {
   JsonRpcErrorResponse,
   JsonRpcMessage,
   AuthRequest,
+  ErrorCode,
 } from '../protocol/types';
 import {
+  ProtocolError,
   parseError,
   invalidRequest,
+  invalidParams,
   methodNotFound,
   unauthorized,
   rateLimited,
   toErrorResponse,
+  createErrorResponse,
 } from '../protocol/errors';
 import { AuthService } from '../services/AuthService';
 import { EditorService } from '../services/EditorService';
@@ -28,19 +34,26 @@ import { FileSystemService } from '../services/FileSystemService';
 import { TerminalService } from '../services/TerminalService';
 import { CommandService } from '../services/CommandService';
 import { StateService } from '../services/StateService';
+import { DebugService } from '../services/DebugService';
+import { GitService } from '../services/GitService';
 import { logger } from '../utils/logger';
-import { getConfig } from '../utils/config';
+import { getConfig, isMethodCategoryAllowed } from '../utils/config';
 
 interface Client {
   id: string;
   ws: WebSocket;
   authenticated: boolean;
+  origin: string;
 }
 
+const PING_INTERVAL_MS = 30000;
+
 export class AgentControlServer {
-  private server: WSServer | null = null;
-  private clients: Map<string, Client> = new Map();
-  private disposables: vscode.Disposable[] = [];
+  private server: WSServer | null;
+  private httpsServer: https.Server | null = null;
+  private clients: Map<string, Client>;
+  private disposables: vscode.Disposable[];
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
   
   // Services
   private authService: AuthService;
@@ -49,20 +62,36 @@ export class AgentControlServer {
   private terminalService: TerminalService;
   private commandService: CommandService;
   private stateService: StateService;
+  private debugService: DebugService;
+  private gitService: GitService;
 
   constructor() {
+    this.server = null;
+    this.clients = new Map();
+    this.disposables = [];
+
     this.authService = new AuthService();
     this.editorService = new EditorService();
     this.fileSystemService = new FileSystemService();
     this.terminalService = new TerminalService();
     this.commandService = new CommandService();
     this.stateService = new StateService();
+    this.debugService = new DebugService();
+    this.gitService = new GitService();
     
-    // Set up terminal callbacks
+    // Set up terminal callbacks — buffer output and broadcast notification
     this.terminalService.setCallbacks(
-      (terminalId, data) => this.broadcastNotification('terminal.output', { terminalId, data }),
+      (terminalId, data) => {
+        this.terminalService.bufferOutput(terminalId, data);
+        this.broadcastNotification('terminal.output', { terminalId, data });
+      },
       (terminalId) => this.broadcastNotification('terminal.closed', { terminalId })
     );
+
+    // Set up file system change callback
+    this.fileSystemService.setFileChangeCallback((filePath, type) => {
+      this.broadcastNotification('file.changed', { path: filePath, type });
+    });
   }
 
   /**
@@ -81,26 +110,57 @@ export class AgentControlServer {
 
     return new Promise((resolve, reject) => {
       try {
-        this.server = new WSServer({
-          host: config.host,
-          port: config.port,
-        });
+        // TLS/WSS support: if tls is enabled, create an HTTPS server and pass it to WSServer
+        if (config.tls.enabled && config.tls.certPath && config.tls.keyPath) {
+          const tlsOptions: https.ServerOptions = {
+            cert: fs.readFileSync(config.tls.certPath),
+            key: fs.readFileSync(config.tls.keyPath),
+          };
+          if (config.tls.caPath) {
+            tlsOptions.ca = fs.readFileSync(config.tls.caPath);
+          }
 
-        this.server.on('listening', () => {
-          logger.info(`Agent Control server started on ${config.host}:${config.port}`);
-          vscode.window.showInformationMessage(
-            `Agent Control server running on port ${config.port}`
-          );
-          resolve();
-        });
+          this.httpsServer = https.createServer(tlsOptions);
+          this.server = new WSServer({ server: this.httpsServer });
+
+          this.httpsServer.listen(config.port, config.host, () => {
+            const protocol = 'wss';
+            logger.info(`Agent Control server started on ${protocol}://${config.host}:${config.port}`);
+            vscode.window.showInformationMessage(
+              `Agent Control server running on ${protocol}://port ${config.port}`
+            );
+            this.startPingInterval();
+            resolve();
+          });
+
+          this.httpsServer.on('error', (error) => {
+            logger.error('HTTPS server error', error);
+            reject(error);
+          });
+        } else {
+          // Plain WebSocket (ws://)
+          this.server = new WSServer({
+            host: config.host,
+            port: config.port,
+          });
+
+          this.server.on('listening', () => {
+            logger.info(`Agent Control server started on ws://${config.host}:${config.port}`);
+            vscode.window.showInformationMessage(
+              `Agent Control server running on port ${config.port}`
+            );
+            this.startPingInterval();
+            resolve();
+          });
+
+          this.server.on('error', (error) => {
+            logger.error('WebSocket server error', error);
+            reject(error);
+          });
+        }
 
         this.server.on('connection', (ws, req) => {
           this.handleConnection(ws, req);
-        });
-
-        this.server.on('error', (error) => {
-          logger.error('WebSocket server error', error);
-          reject(error);
         });
       } catch (error) {
         logger.error('Failed to start server', error);
@@ -117,9 +177,13 @@ export class AgentControlServer {
       return;
     }
 
+    // Stop ping interval
+    this.stopPingInterval();
+
     return new Promise((resolve) => {
-      // Close all client connections
+      // Notify clients before closing
       for (const client of this.clients.values()) {
+        this.sendNotification(client.ws, 'server.shutdown', { reason: 'Server shutting down' });
         client.ws.close(1000, 'Server shutting down');
       }
       this.clients.clear();
@@ -127,26 +191,84 @@ export class AgentControlServer {
       this.server!.close(() => {
         logger.info('Agent Control server stopped');
         this.server = null;
+        if (this.httpsServer) {
+          this.httpsServer.close();
+          this.httpsServer = null;
+        }
         resolve();
       });
     });
   }
 
   /**
+   * Start WebSocket ping/pong interval for connection health monitoring
+   */
+  private startPingInterval(): void {
+    this.pingInterval = setInterval(() => {
+      for (const [clientId, client] of this.clients) {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.ping();
+        } else {
+          // Remove dead connections
+          logger.info(`Removing stale client: ${clientId}`);
+          this.authService.removeSession(clientId);
+          this.clients.delete(clientId);
+        }
+      }
+    }, PING_INTERVAL_MS);
+  }
+
+  /**
+   * Stop the ping/pong interval
+   */
+  private stopPingInterval(): void {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+  }
+
+  /**
+   * Check if an origin is allowed by config
+   */
+  private isOriginAllowed(origin: string): boolean {
+    const config = getConfig();
+    const allowed = config.allowedOrigins;
+    if (allowed.includes('*')) {
+      return true;
+    }
+    return allowed.includes(origin);
+  }
+
+  /**
    * Handle a new client connection
    */
   private handleConnection(ws: WebSocket, req: import('http').IncomingMessage): void {
+    const origin = req.headers.origin || 'unknown';
+
+    // Enforce allowed origins
+    if (origin !== 'unknown' && !this.isOriginAllowed(origin)) {
+      logger.warn(`Rejected connection from disallowed origin: ${origin}`);
+      ws.close(1008, 'Origin not allowed');
+      return;
+    }
+
     const clientId = uuidv4();
     const client: Client = {
       id: clientId,
       ws,
       authenticated: false,
+      origin,
     };
     
     this.clients.set(clientId, client);
     
-    const origin = req.headers.origin || 'unknown';
     logger.info(`Client connected: ${clientId} from ${origin}`);
+
+    // Handle pong responses (for ping/pong health check)
+    ws.on('pong', () => {
+      logger.debug(`Pong received from client ${clientId}`);
+    });
 
     // Send authentication challenge
     const challenge = this.authService.createChallenge(clientId);
@@ -171,151 +293,317 @@ export class AgentControlServer {
   }
 
   /**
-   * Handle an incoming message
+   * Handle an incoming message — supports both single requests and JSON-RPC 2.0 batch arrays
    */
   private async handleMessage(client: Client, data: string): Promise<void> {
-    let message: JsonRpcMessage;
+    let parsed: unknown;
     
     try {
-      message = JSON.parse(data);
+      parsed = JSON.parse(data);
     } catch {
       this.send(client.ws, parseError());
       return;
     }
 
+    // JSON-RPC 2.0 batch support: if the parsed value is an array, process each element
+    if (Array.isArray(parsed)) {
+      if (parsed.length === 0) {
+        this.send(client.ws, invalidRequest(null, 'Empty batch request'));
+        return;
+      }
+      const responses: (JsonRpcSuccessResponse | JsonRpcErrorResponse)[] = [];
+      for (const item of parsed) {
+        const response = await this.handleSingleMessage(client, item);
+        if (response) {
+          responses.push(response);
+        }
+      }
+      // Send batch response
+      if (responses.length > 0 && client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(JSON.stringify(responses));
+      }
+      return;
+    }
+
+    // Single request
+    const response = await this.handleSingleMessage(client, parsed);
+    if (response) {
+      this.send(client.ws, response);
+    }
+  }
+
+  /**
+   * Handle a single JSON-RPC message and return the response (or null for notifications)
+   */
+  private async handleSingleMessage(client: Client, message: unknown): Promise<JsonRpcSuccessResponse | JsonRpcErrorResponse | null> {
     // Validate basic structure
     if (!this.isValidRequest(message)) {
-      this.send(client.ws, invalidRequest(null, 'Invalid JSON-RPC request'));
-      return;
+      return invalidRequest(null, 'Invalid JSON-RPC request');
     }
 
     const request = message as JsonRpcRequest;
     
     // Handle authentication
     if (request.method === 'auth.authenticate') {
-      await this.handleAuthentication(client, request);
-      return;
+      return this.handleAuthentication(client, request);
     }
 
     // Check authentication for all other methods
     if (!this.authService.isAuthenticated(client.id)) {
-      this.send(client.ws, unauthorized(request.id));
-      return;
+      return unauthorized(request.id);
     }
 
     // Check rate limiting
     if (!this.authService.checkRateLimit(client.id)) {
-      this.send(client.ws, rateLimited(request.id));
-      return;
+      return rateLimited(request.id);
     }
 
     // Update activity
     this.authService.updateActivity(client.id);
 
     // Route the request
-    await this.routeRequest(client, request);
+    return this.routeRequest(client, request);
   }
 
   /**
    * Handle authentication request
    */
-  private async handleAuthentication(client: Client, request: JsonRpcRequest): Promise<void> {
+  private async handleAuthentication(client: Client, request: JsonRpcRequest): Promise<JsonRpcSuccessResponse | JsonRpcErrorResponse> {
     const params = request.params as unknown as AuthRequest | undefined;
     
     if (!params || !params.token || !params.nonce) {
-      this.send(client.ws, invalidRequest(request.id, 'Missing token or nonce'));
-      return;
+      return invalidRequest(request.id, 'Missing token or nonce');
     }
 
     const result = this.authService.authenticate(client.id, params, {
-      origin: 'unknown', // Would need to track this from connection
+      origin: client.origin,
     });
 
     if (result.authenticated) {
       client.authenticated = true;
     }
 
-    this.sendResponse(client.ws, request.id, result);
+    return {
+      jsonrpc: '2.0',
+      id: request.id,
+      result,
+    };
   }
 
   /**
    * Route a request to the appropriate handler
    */
-  private async routeRequest(client: Client, request: JsonRpcRequest): Promise<void> {
+  private async routeRequest(client: Client, request: JsonRpcRequest): Promise<JsonRpcSuccessResponse | JsonRpcErrorResponse> {
     const [category, method] = request.method.split('.');
     
     logger.logRequest(client.id, request.method, request.params);
+
+    // Check per-method-category permissions
+    if (!isMethodCategoryAllowed(category)) {
+      return createErrorResponse(
+        request.id,
+        ErrorCode.FeatureDisabled,
+        `Method category '${category}' is not allowed by configuration`,
+        { category, method: request.method }
+      );
+    }
 
     try {
       let result: unknown;
 
       switch (category) {
         case 'editor':
-          result = await this.handleEditorMethod(method, request.params);
+          result = await this.handleEditorMethod(method, request);
           break;
         case 'fs':
-          result = await this.handleFileSystemMethod(method, request.params);
+          result = await this.handleFileSystemMethod(method, request);
           break;
         case 'terminal':
-          result = await this.handleTerminalMethod(method, request.params);
+          result = await this.handleTerminalMethod(method, request);
           break;
         case 'command':
-          result = await this.handleCommandMethod(method, request.params);
+          result = await this.handleCommandMethod(method, request);
           break;
         case 'state':
-          result = await this.handleStateMethod(method, request.params);
+          result = await this.handleStateMethod(method, request);
           break;
         case 'search':
-          result = await this.handleSearchMethod(method, request.params);
+          result = await this.handleSearchMethod(method, request);
+          break;
+        case 'debug':
+          result = await this.handleDebugMethod(method, request);
+          break;
+        case 'git':
+          result = await this.handleGitMethod(method, request);
           break;
         default:
-          this.send(client.ws, methodNotFound(request.id, request.method));
-          return;
+          return methodNotFound(request.id, request.method);
       }
 
       logger.logResponse(client.id, request.method, result);
-      this.sendResponse(client.ws, request.id, result);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result,
+      };
     } catch (error) {
       logger.logError(client.id, request.method, error);
-      this.send(client.ws, toErrorResponse(request.id, error));
+      return toErrorResponse(request.id, error);
     }
   }
+
+  // =========================================================================
+  // Parameter validation helpers
+  // =========================================================================
+
+  private requireString(params: Record<string, unknown> | undefined, field: string, requestId: string | number): string {
+    if (!params || typeof params[field] !== 'string') {
+      throw Object.assign(new Error(`Missing required string parameter: ${field}`), { __invalidParams: true, requestId });
+    }
+    return params[field] as string;
+  }
+
+  private requireParams(request: JsonRpcRequest): Record<string, unknown> {
+    if (!request.params || typeof request.params !== 'object') {
+      throw Object.assign(new Error('Missing required params'), { __invalidParams: true, requestId: request.id });
+    }
+    return request.params as Record<string, unknown>;
+  }
+
+  /**
+   * Confirm a destructive operation with the user if requireApproval is enabled.
+   * Throws OperationCancelled if the user declines.
+   */
+  private async confirmDestructiveOperation(operation: string, target: string): Promise<void> {
+    const config = getConfig();
+    // Check if approval is required (defaults to false)
+    const requireApproval = config.security.requireApproval;
+    if (!requireApproval) {
+      return; // No approval required
+    }
+
+    const choice = await vscode.window.showWarningMessage(
+      `Agent requests: ${operation} — ${target}`,
+      { modal: true },
+      'Allow',
+      'Deny'
+    );
+
+    if (choice !== 'Allow') {
+      throw new ProtocolError(
+        ErrorCode.OperationCancelled,
+        `User denied destructive operation: ${operation} on ${target}`
+      );
+    }
+  }
+
+  // =========================================================================
+  // Method handlers with parameter validation
+  // =========================================================================
 
   /**
    * Handle editor methods
    */
-  private async handleEditorMethod(method: string, params: unknown): Promise<unknown> {
-    const p = params as Record<string, unknown>;
+  private async handleEditorMethod(method: string, request: JsonRpcRequest): Promise<unknown> {
+    const p = request.params as Record<string, unknown> | undefined;
     
     switch (method) {
-      case 'openFile':
-        return this.editorService.openFile(p as any);
-      case 'closeFile':
-        return this.editorService.closeFile(p as any);
-      case 'getContent':
-        return this.editorService.getContent(p as any);
-      case 'setContent':
-        return this.editorService.setContent(p as any);
-      case 'insertText':
-        return this.editorService.insertText(p as any);
-      case 'replaceRange':
-        return this.editorService.replaceRange(p as any);
-      case 'deleteRange':
-        return this.editorService.deleteRange(p as any);
-      case 'setSelection':
-        return this.editorService.setSelection(p as any);
-      case 'revealLine':
-        return this.editorService.revealLine(p as any);
+      case 'openFile': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.editorService.openFile(params as any);
+      }
+      case 'closeFile': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.editorService.closeFile(params as any);
+      }
+      case 'getContent': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.editorService.getContent(params as any);
+      }
+      case 'setContent': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        this.requireString(params, 'content', request.id);
+        return this.editorService.setContent(params as any);
+      }
+      case 'insertText': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        this.requireString(params, 'text', request.id);
+        if (!params.position || typeof params.position !== 'object') {
+          throw Object.assign(new Error('Missing required parameter: position'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.editorService.insertText(params as any);
+      }
+      case 'replaceRange': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        this.requireString(params, 'text', request.id);
+        if (!params.range || typeof params.range !== 'object') {
+          throw Object.assign(new Error('Missing required parameter: range'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.editorService.replaceRange(params as any);
+      }
+      case 'deleteRange': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!params.range || typeof params.range !== 'object') {
+          throw Object.assign(new Error('Missing required parameter: range'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.editorService.deleteRange(params as any);
+      }
+      case 'setSelection': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!params.range || typeof params.range !== 'object') {
+          throw Object.assign(new Error('Missing required parameter: range'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.editorService.setSelection(params as any);
+      }
+      case 'revealLine': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (typeof params.line !== 'number') {
+          throw Object.assign(new Error('Missing required number parameter: line'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.editorService.revealLine(params as any);
+      }
       case 'getSelection':
         return this.editorService.getSelection();
       case 'getActiveFile':
         return this.editorService.getActiveFile();
       case 'getOpenFiles':
         return this.editorService.getOpenFiles();
+      case 'getDocumentInfo': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.editorService.getDocumentInfo(params as any);
+      }
+      case 'applyEdits': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!Array.isArray(params.edits)) {
+          throw Object.assign(new Error('Missing required array parameter: edits'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.editorService.applyEdits(params as any);
+      }
       case 'save':
-        return this.editorService.save(p as any);
+        return this.editorService.save((p || {}) as any);
       case 'saveAll':
         return this.editorService.saveAll();
+      case 'formatDocument':
+        return this.editorService.formatDocument(p?.path as string | undefined);
+      case 'getCompletions': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!params.position || typeof params.position !== 'object') {
+          throw Object.assign(new Error('Missing required parameter: position'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.editorService.getCompletions(params as any);
+      }
       default:
         throw new Error(`Unknown editor method: ${method}`);
     }
@@ -324,32 +612,81 @@ export class AgentControlServer {
   /**
    * Handle file system methods
    */
-  private async handleFileSystemMethod(method: string, params: unknown): Promise<unknown> {
-    const p = params as Record<string, unknown>;
+  private async handleFileSystemMethod(method: string, request: JsonRpcRequest): Promise<unknown> {
+    const p = request.params as Record<string, unknown> | undefined;
     
     switch (method) {
-      case 'readFile':
-        return this.fileSystemService.readFile(p as any);
-      case 'writeFile':
-        return this.fileSystemService.writeFile(p as any);
-      case 'appendFile':
-        return this.fileSystemService.appendFile(p as any);
-      case 'deleteFile':
-        return this.fileSystemService.deleteFile(p as any);
-      case 'rename':
-        return this.fileSystemService.rename(p as any);
-      case 'copy':
-        return this.fileSystemService.copy(p as any);
-      case 'createDirectory':
-        return this.fileSystemService.createDirectory(p as any);
-      case 'deleteDirectory':
-        return this.fileSystemService.deleteDirectory(p as any);
-      case 'listDirectory':
-        return this.fileSystemService.listDirectory(p as any);
-      case 'exists':
-        return this.fileSystemService.exists(p as any);
-      case 'stat':
-        return this.fileSystemService.stat(p as any);
+      case 'readFile': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.fileSystemService.readFile(params as any);
+      }
+      case 'writeFile': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        this.requireString(params, 'content', request.id);
+        return this.fileSystemService.writeFile(params as any);
+      }
+      case 'appendFile': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        this.requireString(params, 'content', request.id);
+        return this.fileSystemService.appendFile(params as any);
+      }
+      case 'deleteFile': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        await this.confirmDestructiveOperation('Delete file', params.path as string);
+        return this.fileSystemService.deleteFile(params as any);
+      }
+      case 'rename': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'oldPath', request.id);
+        this.requireString(params, 'newPath', request.id);
+        return this.fileSystemService.rename(params as any);
+      }
+      case 'copy': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'source', request.id);
+        this.requireString(params, 'destination', request.id);
+        return this.fileSystemService.copy(params as any);
+      }
+      case 'createDirectory': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.fileSystemService.createDirectory(params as any);
+      }
+      case 'deleteDirectory': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        await this.confirmDestructiveOperation('Delete directory', params.path as string);
+        return this.fileSystemService.deleteDirectory(params as any);
+      }
+      case 'listDirectory': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.fileSystemService.listDirectory(params as any);
+      }
+      case 'exists': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.fileSystemService.exists(params as any);
+      }
+      case 'stat': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.fileSystemService.stat(params as any);
+      }
+      case 'watchFiles': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'pattern', request.id);
+        return this.fileSystemService.watchFiles(params as any);
+      }
+      case 'unwatchFiles': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'watcherId', request.id);
+        return this.fileSystemService.unwatchFiles(params as any);
+      }
       default:
         throw new Error(`Unknown file system method: ${method}`);
     }
@@ -358,22 +695,37 @@ export class AgentControlServer {
   /**
    * Handle terminal methods
    */
-  private async handleTerminalMethod(method: string, params: unknown): Promise<unknown> {
-    const p = params as Record<string, unknown>;
+  private async handleTerminalMethod(method: string, request: JsonRpcRequest): Promise<unknown> {
+    const p = request.params as Record<string, unknown> | undefined;
     
     switch (method) {
       case 'create':
-        return this.terminalService.create(p as any);
-      case 'dispose':
-        return this.terminalService.dispose(p as any);
-      case 'sendText':
-        return this.terminalService.sendText(p as any);
-      case 'show':
-        return this.terminalService.show(p as any);
+        return this.terminalService.create((p || {}) as any);
+      case 'dispose': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'terminalId', request.id);
+        return this.terminalService.dispose(params as any);
+      }
+      case 'sendText': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'terminalId', request.id);
+        this.requireString(params, 'text', request.id);
+        return this.terminalService.sendText(params as any);
+      }
+      case 'show': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'terminalId', request.id);
+        return this.terminalService.show(params as any);
+      }
       case 'list':
         return this.terminalService.list();
       case 'getActive':
         return this.terminalService.getActive();
+      case 'getOutput': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'terminalId', request.id);
+        return this.terminalService.getOutput(params as any);
+      }
       default:
         throw new Error(`Unknown terminal method: ${method}`);
     }
@@ -382,14 +734,17 @@ export class AgentControlServer {
   /**
    * Handle command methods
    */
-  private async handleCommandMethod(method: string, params: unknown): Promise<unknown> {
-    const p = params as Record<string, unknown>;
+  private async handleCommandMethod(method: string, request: JsonRpcRequest): Promise<unknown> {
+    const p = request.params as Record<string, unknown> | undefined;
     
     switch (method) {
-      case 'execute':
-        return this.commandService.execute(p as any);
+      case 'execute': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'command', request.id);
+        return this.commandService.execute(params as any);
+      }
       case 'list':
-        return this.commandService.list(p as any);
+        return this.commandService.list((p || {}) as any);
       default:
         throw new Error(`Unknown command method: ${method}`);
     }
@@ -398,22 +753,55 @@ export class AgentControlServer {
   /**
    * Handle state methods
    */
-  private async handleStateMethod(method: string, params: unknown): Promise<unknown> {
-    const p = params as Record<string, unknown>;
+  private async handleStateMethod(method: string, request: JsonRpcRequest): Promise<unknown> {
+    const p = request.params as Record<string, unknown> | undefined;
     
     switch (method) {
       case 'getWorkspace':
         return this.stateService.getWorkspace();
       case 'getDiagnostics':
-        return this.stateService.getDiagnostics(p as any);
-      case 'getSymbols':
-        return this.stateService.getSymbols(p as any);
-      case 'findReferences':
-        return this.stateService.findReferences(p as any);
-      case 'goToDefinition':
-        return this.stateService.goToDefinition(p as any);
-      case 'getHover':
-        return this.stateService.getHover(p as any);
+        return this.stateService.getDiagnostics((p || {}) as any);
+      case 'getSymbols': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        return this.stateService.getSymbols(params as any);
+      }
+      case 'findReferences': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!params.position || typeof params.position !== 'object') {
+          throw Object.assign(new Error('Missing required parameter: position'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.stateService.findReferences(params as any);
+      }
+      case 'goToDefinition': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!params.position || typeof params.position !== 'object') {
+          throw Object.assign(new Error('Missing required parameter: position'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.stateService.goToDefinition(params as any);
+      }
+      case 'getHover': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!params.position || typeof params.position !== 'object') {
+          throw Object.assign(new Error('Missing required parameter: position'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.stateService.getHover(params as any);
+      }
+      case 'getCodeActions': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!params.range || typeof params.range !== 'object') {
+          throw Object.assign(new Error('Missing required parameter: range'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.stateService.getCodeActions(params as any);
+      }
+      case 'getOpenDocuments':
+        return this.stateService.getOpenDocuments();
+      case 'getVisibleEditors':
+        return this.stateService.getVisibleEditors();
       default:
         throw new Error(`Unknown state method: ${method}`);
     }
@@ -422,16 +810,107 @@ export class AgentControlServer {
   /**
    * Handle search methods
    */
-  private async handleSearchMethod(method: string, params: unknown): Promise<unknown> {
-    const p = params as Record<string, unknown>;
+  private async handleSearchMethod(method: string, request: JsonRpcRequest): Promise<unknown> {
+    const p = request.params as Record<string, unknown> | undefined;
     
     switch (method) {
-      case 'findInFiles':
-        return this.stateService.findInFiles(p as any);
-      case 'findAndReplace':
-        return this.stateService.findAndReplace(p as any);
+      case 'findInFiles': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'query', request.id);
+        return this.stateService.findInFiles(params as any);
+      }
+      case 'findAndReplace': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'query', request.id);
+        this.requireString(params, 'replacement', request.id);
+        return this.stateService.findAndReplace(params as any);
+      }
       default:
         throw new Error(`Unknown search method: ${method}`);
+    }
+  }
+
+  /**
+   * Handle debug methods
+   */
+  private async handleDebugMethod(method: string, request: JsonRpcRequest): Promise<unknown> {
+    const p = request.params as Record<string, unknown> | undefined;
+
+    switch (method) {
+      case 'startSession': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'type', request.id);
+        this.requireString(params, 'request', request.id);
+        return this.debugService.startSession(params as any);
+      }
+      case 'stopSession':
+        return this.debugService.stopSession((p || {}) as any);
+      case 'setBreakpoints': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!Array.isArray(params.breakpoints)) {
+          throw Object.assign(new Error('Missing required array parameter: breakpoints'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.debugService.setBreakpoints(params as any);
+      }
+      case 'removeBreakpoints': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'path', request.id);
+        if (!Array.isArray(params.lines)) {
+          throw Object.assign(new Error('Missing required array parameter: lines'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.debugService.removeBreakpoints(params as any);
+      }
+      case 'getBreakpoints':
+        return this.debugService.getBreakpoints((p || {}) as any);
+      case 'listSessions':
+        return this.debugService.listSessions();
+      default:
+        throw new Error(`Unknown debug method: ${method}`);
+    }
+  }
+
+  /**
+   * Handle git methods
+   */
+  private async handleGitMethod(method: string, request: JsonRpcRequest): Promise<unknown> {
+    const p = request.params as Record<string, unknown> | undefined;
+
+    switch (method) {
+      case 'status':
+        return this.gitService.status();
+      case 'diff':
+        return this.gitService.diff((p || {}) as any);
+      case 'log':
+        return this.gitService.log((p || {}) as any);
+      case 'stage': {
+        const params = this.requireParams(request);
+        if (!Array.isArray(params.paths)) {
+          throw Object.assign(new Error('Missing required array parameter: paths'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.gitService.stage(params as any);
+      }
+      case 'unstage': {
+        const params = this.requireParams(request);
+        if (!Array.isArray(params.paths)) {
+          throw Object.assign(new Error('Missing required array parameter: paths'), { __invalidParams: true, requestId: request.id });
+        }
+        return this.gitService.unstage(params as any);
+      }
+      case 'commit': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'message', request.id);
+        return this.gitService.commit(params as any);
+      }
+      case 'checkout': {
+        const params = this.requireParams(request);
+        this.requireString(params, 'branch', request.id);
+        return this.gitService.checkout(params as any);
+      }
+      case 'branches':
+        return this.gitService.branches();
+      default:
+        throw new Error(`Unknown git method: ${method}`);
     }
   }
 
@@ -462,17 +941,6 @@ export class AgentControlServer {
   }
 
   /**
-   * Send a success response
-   */
-  private sendResponse(ws: WebSocket, id: string | number, result: unknown): void {
-    this.send(ws, {
-      jsonrpc: '2.0',
-      id,
-      result,
-    });
-  }
-
-  /**
    * Send a notification to a client
    */
   private sendNotification(ws: WebSocket, method: string, params?: unknown): void {
@@ -489,7 +957,7 @@ export class AgentControlServer {
   /**
    * Broadcast a notification to all authenticated clients
    */
-  private broadcastNotification(method: string, params?: unknown): void {
+  broadcastNotification(method: string, params?: unknown): void {
     for (const client of this.clients.values()) {
       if (client.authenticated) {
         this.sendNotification(client.ws, method, params);
@@ -513,10 +981,11 @@ export class AgentControlServer {
   /**
    * Get connected clients info
    */
-  getConnectedClients(): Array<{ id: string; authenticated: boolean }> {
+  getConnectedClients(): Array<{ id: string; authenticated: boolean; origin: string }> {
     return Array.from(this.clients.values()).map(client => ({
       id: client.id,
       authenticated: client.authenticated,
+      origin: client.origin,
     }));
   }
 
@@ -524,9 +993,12 @@ export class AgentControlServer {
    * Dispose of resources
    */
   dispose(): void {
+    this.stopPingInterval();
     this.stop();
     this.authService.dispose();
     this.terminalService.disposeAll();
+    this.fileSystemService.disposeWatchers();
+    this.debugService.dispose();
     
     for (const disposable of this.disposables) {
       disposable.dispose();

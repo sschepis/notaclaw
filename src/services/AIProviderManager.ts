@@ -5,7 +5,7 @@ import { generateText, LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { AIProviderConfig, AISettings, AIRequestOptions, AIResponse, AIContentType } from '../shared/ai-types';
+import { AIProviderConfig, AISettings, AIRequestOptions, AIResponse, AIContentType, ToolCall } from '../shared/ai-types';
 
 const DEFAULT_SETTINGS: AISettings = {
   providers: [],
@@ -20,6 +20,14 @@ const DEFAULT_SETTINGS: AISettings = {
 // Cache TTL: 24 hours in milliseconds
 const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+// Vertex access token cache: tokens valid for 1 hour, refresh 5 min early
+const VERTEX_TOKEN_MARGIN_MS = 5 * 60 * 1000;
+
+// Retry settings
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1000;
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+
 interface ModelCacheEntry {
   models: string[];
   fetchedAt: number;
@@ -29,11 +37,17 @@ interface ModelCache {
   [cacheKey: string]: ModelCacheEntry;
 }
 
+interface CachedToken {
+  accessToken: string;
+  expiresAt: number;
+}
+
 export class AIProviderManager {
   private settings: AISettings = DEFAULT_SETTINGS;
   private configPath: string | null = null;
   private modelCachePath: string | null = null;
   private modelCache: ModelCache = {};
+  private vertexTokenCache: Map<string, CachedToken> = new Map();
 
   constructor() {
     const dataDir = path.join(process.cwd(), 'data');
@@ -156,7 +170,7 @@ export class AIProviderManager {
           const modelsUrl = `https://${host}/v1beta1/projects/${project}/locations/${location}/publishers/google/models`;
           
           console.log(`Fetching Vertex models from: ${modelsUrl}`);
-          const response = await fetch(modelsUrl, {
+          const response = await this.fetchWithRetry(modelsUrl, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
           });
           
@@ -210,7 +224,6 @@ export class AIProviderManager {
       this.settings = settings;
       
       // Don't persist model lists in settings - they are cached separately
-      // This prevents stale/hardcoded models from sticking around
       const settingsToSave = {
         ...settings,
         providers: settings.providers.map(p => ({
@@ -232,8 +245,6 @@ export class AIProviderManager {
     console.log(`Testing provider: ${config.name} (${config.type})`);
     
     try {
-      // For SDK-supported providers, we can try a simple generation call or list models if supported
-      // For now, we'll keep the manual fetch checks as they are lightweight
       if (config.type === 'openai') {
         const endpoint = config.endpoint || 'https://api.openai.com/v1';
         const response = await fetch(`${endpoint}/models`, {
@@ -275,7 +286,6 @@ export class AIProviderManager {
         }
 
         const host = this.vertexHost(location);
-        // Use v1beta1 to list models
         const testUrl = `https://${host}/v1beta1/projects/${project}/locations/${location}/publishers/google/models`;
         console.log(`[Vertex AI] Testing URL: ${testUrl}`);
         const response = await fetch(testUrl, {
@@ -315,10 +325,9 @@ export class AIProviderManager {
    * Fetch available models from a provider's API.
    */
   async fetchProviderModels(config: AIProviderConfig, forceRefresh = false): Promise<string[]> {
-    // ALWAYS return the preview models for Vertex AI immediately to ensure they're available
+    // ALWAYS return the preview models for Vertex AI immediately
     if (config.type === 'vertex') {
-      const vertexModels = await this.fetchVertexModels(config, forceRefresh);
-      return vertexModels;
+      return this.fetchVertexModels(config, forceRefresh);
     }
     
     const cacheKey = this.getModelCacheKey(config);
@@ -329,7 +338,6 @@ export class AIProviderManager {
       const cached = this.modelCache[cacheKey];
       const age = now - cached.fetchedAt;
       
-      // Check if cache contains known stale/hardcoded data
       const isStaleData = cached.models.includes('gemini-1.0-pro-002') && !cached.models.includes('gemini-1.5-pro');
 
       if (age < MODEL_CACHE_TTL_MS && !isStaleData) {
@@ -347,7 +355,7 @@ export class AIProviderManager {
 
       if (config.type === 'openai') {
         const endpoint = config.endpoint || 'https://api.openai.com/v1';
-        const response = await fetch(`${endpoint}/models`, {
+        const response = await this.fetchWithRetry(`${endpoint}/models`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${config.apiKey}`,
@@ -361,13 +369,28 @@ export class AIProviderManager {
           .map((m: any) => m.id)
           .sort();
       } else if (config.type === 'anthropic') {
-        models = [
-          'claude-3-5-sonnet-20241022',
-          'claude-3-5-haiku-20241022',
-          'claude-3-opus-20240229',
-          'claude-3-sonnet-20240229',
-          'claude-3-haiku-20240307'
-        ];
+        // Fetch from Anthropic's models endpoint
+        try {
+          const endpoint = config.endpoint || 'https://api.anthropic.com/v1';
+          const response = await this.fetchWithRetry(`${endpoint}/models`, {
+            method: 'GET',
+            headers: {
+              'x-api-key': config.apiKey || '',
+              'anthropic-version': '2023-06-01',
+              'Content-Type': 'application/json'
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            models = (data.data || []).map((m: any) => m.id).sort();
+          } else {
+            console.warn(`Anthropic /models returned ${response.status}, using fallback list`);
+            models = await this.getAnthropicFallbackModels();
+          }
+        } catch {
+          console.warn('Anthropic model fetch failed, using fallback list');
+          models = await this.getAnthropicFallbackModels();
+        }
       } else if (config.type === 'local') {
         const endpoint = config.endpoint || 'http://localhost:11434';
         const response = await fetch(`${endpoint}/api/tags`);
@@ -376,7 +399,7 @@ export class AIProviderManager {
         models = (data.models || []).map((m: any) => m.name);
       } else if (config.type === 'openrouter') {
         const endpoint = config.endpoint || 'https://openrouter.ai/api/v1';
-        const response = await fetch(`${endpoint}/models`, {
+        const response = await this.fetchWithRetry(`${endpoint}/models`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${config.apiKey}`,
@@ -393,7 +416,6 @@ export class AIProviderManager {
         const data = await response.json();
         models = (data.data || []).map((m: any) => m.id);
       } else if (config.type === 'vertex-anthropic') {
-        // Vertex Anthropic: Static list of supported models as requested
         models = [
           'claude-opus-4-6',
           'claude-opus-4-5'
@@ -414,7 +436,6 @@ export class AIProviderManager {
           .filter((id: string) => id.includes('gemini'))
           .sort();
 
-        // Ensure gemini-3-pro-preview is present as requested
         if (!models.includes('gemini-3-pro-preview')) {
            models.unshift('gemini-3-pro-preview');
         }
@@ -426,7 +447,6 @@ export class AIProviderManager {
         await this.saveModelCache();
         console.log(`Cached ${models.length} models for ${config.type}`);
 
-        // Update in-memory settings with new models
         const providerIndex = this.settings.providers.findIndex(p => p.id === config.id);
         if (providerIndex !== -1) {
           this.settings.providers[providerIndex].models = models;
@@ -445,15 +465,33 @@ export class AIProviderManager {
   }
 
   /**
+   * Fallback Anthropic model list for when the API endpoint is unavailable.
+   */
+  private async getAnthropicFallbackModels(): Promise<string[]> {
+    return [
+      'claude-opus-4-6',
+      'claude-sonnet-4-5-20250514',
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-haiku-20241022',
+      'claude-3-opus-20240229',
+      'claude-3-sonnet-20240229',
+      'claude-3-haiku-20240307'
+    ];
+  }
+
+  /**
    * Generate embeddings for a given text using the configured embedding provider.
+   * Throws an error if no embedding provider is configured instead of returning
+   * random vectors that would corrupt downstream vector stores.
    */
   async getEmbeddings(text: string, providerId?: string): Promise<number[]> {
     const resolution = this.getResolvedProvider('embedding', providerId);
     
-    // If no provider configured, return mock (or maybe fail?)
     if (!resolution) {
-      console.warn('No embedding provider configured, using random mock vector');
-      return Array.from({ length: 768 }, () => Math.random());
+      throw new Error(
+        'No embedding provider configured. Add an embedding-capable provider ' +
+        '(OpenAI, Vertex AI) and configure an embedding routing rule.'
+      );
     }
 
     const { config: provider } = resolution;
@@ -463,7 +501,7 @@ export class AIProviderManager {
         return await this.getVertexEmbeddings(provider, text);
       } else if (provider.type === 'openai') {
         const endpoint = provider.endpoint || 'https://api.openai.com/v1';
-        const response = await fetch(`${endpoint}/embeddings`, {
+        const response = await this.fetchWithRetry(`${endpoint}/embeddings`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${provider.apiKey}`,
@@ -483,13 +521,13 @@ export class AIProviderManager {
         return data.data[0].embedding;
       }
       
-      // Fallback for others
-      console.warn(`Provider ${provider.type} not supported for embeddings yet, using mock`);
-      return Array.from({ length: 768 }, () => Math.random());
+      throw new Error(
+        `Provider type '${provider.type}' does not support embeddings. ` +
+        'Use OpenAI or Vertex AI for embedding generation.'
+      );
     } catch (error) {
       console.error('Failed to generate embeddings:', error);
-      // Fallback to mock on error to keep system running
-      return Array.from({ length: 768 }, () => Math.random());
+      throw error; // Propagate instead of silently returning random vectors
     }
   }
 
@@ -500,11 +538,10 @@ export class AIProviderManager {
 
     const accessToken = await this.getVertexAccessToken(provider);
     const host = this.vertexHost(location);
-    // Use text-embedding-004
     const model = 'text-embedding-004';
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:predict`;
 
-    const response = await fetch(endpoint, {
+    const response = await this.fetchWithRetry(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -663,8 +700,6 @@ export class AIProviderManager {
     try {
         const sdkModel = this.getSDKModel(provider, modelToUse);
         if (sdkModel) {
-            // Convert tools to Vercel AI SDK format if needed
-            // For now assuming tools are already in compatible format or we map them
             const toolsMap = tools.reduce((acc: any, tool: any) => {
                 acc[tool.function.name] = tool.function;
                 return acc;
@@ -678,9 +713,15 @@ export class AIProviderManager {
                 maxTokens: options.maxTokens ?? 2048,
             } as any);
 
-            // Handle tool calls in response
-            // We might need to return them in AIResponse
-            
+            // Map tool calls to typed ToolCall[]
+            const typedToolCalls: ToolCall[] = Array.isArray(toolCalls)
+                ? toolCalls.map((tc: any) => ({
+                    id: tc.toolCallId || tc.id || '',
+                    name: tc.toolName || tc.name || '',
+                    arguments: tc.args || tc.arguments || {},
+                  }))
+                : [];
+
             return {
                 content: text,
                 model: modelToUse,
@@ -690,7 +731,7 @@ export class AIProviderManager {
                     completionTokens: (usage as any).completionTokens || 0,
                     totalTokens: (usage as any).totalTokens || 0
                 },
-                toolCalls: toolCalls // Need to update AIResponse type
+                toolCalls: typedToolCalls.length > 0 ? typedToolCalls : undefined,
             };
         }
         throw new Error(`Unsupported provider type for chat: ${provider.type}`);
@@ -698,6 +739,46 @@ export class AIProviderManager {
         console.error('AI chat request failed:', error);
         throw error;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Retry Helper
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetch with exponential backoff retry for transient errors.
+   */
+  private async fetchWithRetry(url: string, init?: RequestInit, retries = MAX_RETRIES): Promise<Response> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(url, init);
+
+        // If not retryable or successful, return immediately
+        if (response.ok || !RETRYABLE_STATUS_CODES.has(response.status) || attempt === retries) {
+          return response;
+        }
+
+        // Retryable error — compute delay
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500;
+        console.warn(`[AIProvider] Request to ${url} returned ${response.status}, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${retries})`);
+        await this.sleep(delay);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt === retries) break;
+
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500;
+        console.warn(`[AIProvider] Network error for ${url}, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${retries}): ${lastError.message}`);
+        await this.sleep(delay);
+      }
+    }
+
+    throw lastError || new Error(`Request to ${url} failed after ${retries} retries`);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   // ---------------------------------------------------------------------------
@@ -710,8 +791,23 @@ export class AIProviderManager {
       : `${location}-aiplatform.googleapis.com`;
   }
 
+  /**
+   * Get a Vertex AI access token, using a cached token if still valid.
+   * Tokens are cached per provider (keyed by authJsonPath + projectId)
+   * and refreshed 5 minutes before expiry.
+   */
   private async getVertexAccessToken(provider: AIProviderConfig): Promise<string> {
     if (!provider.authJsonPath) throw new Error('Vertex AI provider requires authJsonPath');
+
+    // Cache key based on auth file and project
+    const cacheKey = `${provider.authJsonPath}:${provider.projectId || ''}`;
+    const cached = this.vertexTokenCache.get(cacheKey);
+
+    if (cached && cached.expiresAt > Date.now() + VERTEX_TOKEN_MARGIN_MS) {
+      return cached.accessToken;
+    }
+
+    // Generate new token
     const raw = await fs.readFile(provider.authJsonPath, 'utf-8');
     const serviceAccount = JSON.parse(raw);
     const now = Math.floor(Date.now() / 1000);
@@ -739,6 +835,13 @@ export class AIProviderManager {
 
     if (!tokenResponse.ok) throw new Error(`Vertex Token Error: ${tokenResponse.status}`);
     const tokenData = await tokenResponse.json();
+
+    // Cache the token (expires in ~1 hour)
+    this.vertexTokenCache.set(cacheKey, {
+      accessToken: tokenData.access_token,
+      expiresAt: Date.now() + (tokenData.expires_in ? tokenData.expires_in * 1000 : 3600 * 1000),
+    });
+
     return tokenData.access_token;
   }
 
@@ -761,7 +864,7 @@ export class AIProviderManager {
     const host = this.vertexHost(location);
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
 
-    const response = await fetch(endpoint, {
+    const response = await this.fetchWithRetry(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -809,10 +912,9 @@ export class AIProviderManager {
 
     const accessToken = await this.getVertexAccessToken(provider);
     const host = this.vertexHost(location);
-    // Anthropic on Vertex uses rawPredict or streamRawPredict
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/anthropic/models/${model}:rawPredict`;
 
-    const response = await fetch(endpoint, {
+    const response = await this.fetchWithRetry(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,

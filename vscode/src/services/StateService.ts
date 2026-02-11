@@ -461,6 +461,45 @@ export class StateService {
   }
 
   /**
+   * Get code actions (quick fixes, refactorings) for a range
+   */
+  async getCodeActions(params: { path: string; range: Range }): Promise<{ actions: Array<{ title: string; kind?: string; isPreferred?: boolean }> }> {
+    const uri = vscode.Uri.file(params.path);
+    const range = new vscode.Range(
+      this.toVSCodePosition(params.range.start),
+      this.toVSCodePosition(params.range.end)
+    );
+
+    try {
+      const result = await vscode.commands.executeCommand<vscode.CodeAction[]>(
+        'vscode.executeCodeActionProvider',
+        uri,
+        range
+      );
+
+      if (!result) {
+        return { actions: [] };
+      }
+
+      const actions = result.map((action: vscode.CodeAction) => ({
+        title: action.title,
+        kind: action.kind?.value,
+        isPreferred: action.isPreferred,
+      }));
+
+      logger.debug(`Got ${actions.length} code actions for ${params.path}`);
+      return { actions };
+    } catch (error) {
+      logger.error('Failed to get code actions', error);
+      throw new ProtocolError(
+        ErrorCode.InternalError,
+        `Failed to get code actions: ${String(error)}`,
+        { path: params.path }
+      );
+    }
+  }
+
+  /**
    * Get all open text documents
    */
   async getOpenDocuments(): Promise<Array<{ uri: string; languageId: string; isDirty: boolean }>> {

@@ -99,4 +99,25 @@ export abstract class BasePluginManager<TContext extends PluginContext = PluginC
       this.emit('plugin-unloaded', id);
     }
   }
+
+  /**
+   * Gracefully shut down all loaded plugins.
+   * Calls `deactivate()` on each plugin instance if available.
+   */
+  async shutdown(): Promise<void> {
+    const plugins = Array.from(this.plugins.entries());
+    for (const [id, plugin] of plugins) {
+      try {
+        if (plugin.instance && typeof plugin.instance.deactivate === 'function') {
+          await plugin.instance.deactivate();
+        }
+        plugin.status = 'stopped' as any;
+        console.log(`[PluginManager] Plugin ${id} deactivated.`);
+      } catch (e) {
+        console.error(`[PluginManager] Error deactivating plugin ${id}:`, e);
+      }
+    }
+    this.plugins.clear();
+    this.emit('shutdown');
+  }
 }
