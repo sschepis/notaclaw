@@ -26,6 +26,7 @@ export async function executeFunction(runner: any, name: string, args: Record<st
 
             const result = await tool.function.script(parsedArgs, { 
                 ...runner.context, 
+                runner, // Pass the runner instance to allow recursive calls
                 state: runner.state, 
                 tools: toolFunctions,
                 require 

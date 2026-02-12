@@ -26,6 +26,10 @@ export async function activate(context: PluginContext) {
         return await chainManager.syncPersonalities();
     });
 
+    context.ipc.handle('list-tools', async () => {
+        return await context.services.tools.list();
+    });
+
     context.ipc.handle('run-chain', async ({ id, input }) => {
         const config = await chainManager.getHydratedChain(id);
         if (!config) throw new Error('Chain not found');
@@ -33,6 +37,34 @@ export async function activate(context: PluginContext) {
         // Create runner with current config
         const runner = context.workflow.createRunner(config, {});
         
+        // Listen for execution events
+        runner.on('runWithDepthStart', (data: any) => {
+            context.ipc.send('chain-execution-update', { 
+                type: 'node-start', 
+                nodeId: data.prompt, // Assuming prompt name maps to node ID or label
+                timestamp: Date.now() 
+            });
+        });
+
+        runner.on('promptExecutionCompleted', (data: any) => {
+            // Send full result for inspection, but maybe check size if needed
+            context.ipc.send('chain-execution-update', { 
+                type: 'node-complete', 
+                nodeId: data.prompt, 
+                result: data.result, // Send full object
+                timestamp: Date.now() 
+            });
+        });
+
+        runner.on('aiError', (data: any) => {
+            context.ipc.send('chain-execution-update', { 
+                type: 'node-error', 
+                nodeId: data.promptName, 
+                error: data.error.message,
+                timestamp: Date.now() 
+            });
+        });
+
         // Execute the 'main' prompt (or first prompt)
         // Assuming the input is passed as initialArgs
         // The runner.run method we added to constructor.ts takes (promptName, initialArgs, providerName)

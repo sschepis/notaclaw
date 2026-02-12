@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { Node, Edge, Connection, addEdge, applyNodeChanges, applyEdgeChanges, NodeChange, EdgeChange } from 'reactflow';
+import { Node, Edge, Connection, addEdge, applyNodeChanges, applyEdgeChanges, NodeChange, EdgeChange, Position } from 'reactflow';
 import { jsonToGraph, graphToJson, validateChain } from './utils';
+import dagre from 'dagre';
 
 export interface ChainMeta {
     id: string;
@@ -16,6 +17,7 @@ interface PromptEditorState {
     status: string;
     viewMode: 'json' | 'graph';
     sidebarFilter: string;
+    availableTools: any[];
     
     // Graph state
     nodes: Node[];
@@ -28,6 +30,7 @@ interface PromptEditorState {
     runInput: string;
     runResult: string;
     isRunning: boolean;
+    executionStatus: Record<string, { status: 'pending' | 'running' | 'completed' | 'error', result?: any, error?: string }>;
 
     // New chain modal
     showNewChainModal: boolean;
@@ -39,10 +42,13 @@ interface PromptEditorState {
     // Actions
     setChains: (chains: ChainMeta[]) => void;
     loadChains: (ipc: any) => Promise<void>;
+    initListeners: (ipc: any) => void;
     loadChain: (id: string, ipc: any) => Promise<void>;
     saveChain: (ipc: any) => Promise<void>;
     deleteChain: (id: string, ipc: any) => Promise<void>;
     createChain: (id: string, ipc: any) => Promise<void>;
+    
+    layoutGraph: () => void;
     
     setChainConfig: (config: string) => void;
     setViewMode: (mode: 'json' | 'graph') => void;
@@ -77,6 +83,7 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
     status: '',
     viewMode: 'graph',
     sidebarFilter: '',
+    availableTools: [],
     
     nodes: [],
     edges: [],
@@ -87,6 +94,7 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
     runInput: '{\n  "query": "Hello world"\n}',
     runResult: '',
     isRunning: false,
+    executionStatus: {},
 
     showNewChainModal: false,
     newChainId: '',
@@ -94,6 +102,40 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
 
     setChains: (chains) => set({ chains }),
     
+    initListeners: (ipc) => {
+        if (!ipc) return;
+        
+        // We need to be careful not to add multiple listeners
+        // But the IPC wrapper usually handles this or we can just rely on this being called once
+        
+        ipc.on('chain-execution-update', (data: any) => {
+             const { nodes } = get();
+             const { type, nodeId, result, error } = data;
+             
+             // Find node by name (prompt name or function name)
+             const targetNode = nodes.find(n => 
+                 n.data.name === nodeId || 
+                 (n.data.function && n.data.function.name === nodeId)
+             );
+             
+             if (!targetNode) return;
+             
+             set(state => {
+                 const newStatus = { ...state.executionStatus };
+                 
+                 if (type === 'node-start') {
+                     newStatus[targetNode.id] = { status: 'running' };
+                 } else if (type === 'node-complete') {
+                     newStatus[targetNode.id] = { status: 'completed', result };
+                 } else if (type === 'node-error') {
+                     newStatus[targetNode.id] = { status: 'error', error };
+                 }
+                 
+                 return { executionStatus: newStatus };
+             });
+        });
+    },
+
     loadChains: async (ipc) => {
         if (!ipc) return;
         try {
@@ -214,6 +256,42 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
         set({ showNewChainModal: false, newChainId: '' });
     },
 
+    layoutGraph: () => {
+        const { nodes, edges } = get();
+        const dagreGraph = new dagre.graphlib.Graph();
+        dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+        const nodeWidth = 200;
+        const nodeHeight = 100;
+
+        dagreGraph.setGraph({ rankdir: 'LR' });
+
+        nodes.forEach((node) => {
+            dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+        });
+
+        edges.forEach((edge) => {
+            dagreGraph.setEdge(edge.source, edge.target);
+        });
+
+        dagre.layout(dagreGraph);
+
+        const newNodes = nodes.map((node) => {
+            const nodeWithPosition = dagreGraph.node(node.id);
+            return {
+                ...node,
+                targetPosition: Position.Left,
+                sourcePosition: Position.Right,
+                position: {
+                    x: nodeWithPosition.x - nodeWidth / 2,
+                    y: nodeWithPosition.y - nodeHeight / 2,
+                },
+            };
+        });
+
+        set({ nodes: newNodes });
+    },
+
     setChainConfig: (config) => set({ chainConfig: config }),
     
     setViewMode: (mode) => {
@@ -268,7 +346,7 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
         const { selectedChain, runInput } = get();
         if (!ipc || !selectedChain) return;
         
-        set({ isRunning: true, runResult: 'Running...' });
+        set({ isRunning: true, runResult: 'Running...', executionStatus: {} });
         try {
             const input = JSON.parse(runInput);
             const result = await ipc.invoke('run-chain', { id: selectedChain, input });

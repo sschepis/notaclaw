@@ -1,0 +1,467 @@
+{
+  "_source": "plugin",
+  "_id": "software-factory",
+  "_name": "Software Factory",
+  "_description": "Advanced software development agent with specialized workflows.",
+  "prompts": [
+    {
+      "name": "main",
+      "system": "You are an advanced AI assistant equipped with both general-purpose and specialized workflows. You have access to various tools and structured prompts to help with different aspects of performing tasks. Use these capabilities to assist the user with their tasks.\n\n        Primary Task: {state.primaryTask}\n\n        Current query: {state.primaryTask}\n\n        Historical context:\n        {history}\n\n        Work Products:\n        {state.work_products}\n\n        Available Prompts:\n\n        {availablePrompts}\n\n        Instructions:\n\n        1. Analyze the current query to determine the scope of the task.\n        2. If the query can be answered directly using your knowledge or the information in the state, use the 'completeTask' function.\n        3. If the query can be completed with a single function call, use the 'completeWithFunction' function.\n        3. If the task requires decomposition, use the 'taskDecomposer' prompt.\n        4. For specific expertise, use the 'expertRouter' prompt to determine the appropriate expert module.\n        5. Use 'executeBash' for running bash commands and 'callStructuredPrompt' for other prompts.\n\n        Always provide clear, concise, and visually appealing responses. If you need more information, ask the user.\n        After executing a command or calling a prompt, summarize or interpret the results.\n        Consider the work products when formulating your responses and making decisions.",
+      "user": "{state.primaryTask}",
+      "requestFormat": {
+        "history": "string",
+        "primaryTask": "string",
+        "availablePrompts": "string"
+      },
+      "responseFormat": {
+        "result": "string",
+        "taskCompleted": "boolean"
+      },
+      "tools": [
+        "executeBash",
+        "callStructuredPrompt",
+        "completeWithFunction",
+        "completeTask",
+        "respond"
+      ],
+      "then": {
+        "{state.taskCompleted} === true": {
+          "function": "completeTask",
+          "arguments": {
+            "response": "{result.response}"
+          }
+        },
+        "{state.taskCompleted} !== true": {
+          "prompt": "main",
+          "arguments": {
+            "primaryTask": "{state.primaryTask}",
+            "history": "{history}\nQ: {state.primaryTask}\nA: {result.response}"
+          }
+        }
+      }
+    },
+    {
+      "name": "taskDecomposer",
+      "system": "You are a task decomposition expert for software development workflows. Break down complex tasks into smaller, manageable subtasks.\n        \n        Given task: {task}\n        \n        Break this task down into a list of subtasks. Each subtask should be a single, actionable item related to software development.\n        Return the list of subtasks as a JSON array of strings.",
+      "user": "Please decompose the following software development task: {task}",
+      "requestFormat": {
+        "task": "string"
+      },
+      "responseFormat": {
+        "subtasks": "array"
+      },
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": {
+            "subtasks": "{subtasks}"
+          }
+        }
+      }
+    },
+    {
+      "name": "expertRouter",
+      "system": "You are an expert router for software development tasks. Determine which expert module should handle a given task.\n        Available expert modules: {expertModules}\n        \n        Given task: {task}\n        \n        Determine which expert module is best suited to handle this software development task. If no expert module is suitable, respond with \"general\".\n        Return your decision as a single string.",
+      "user": "Please route the following software development task: {task}",
+      "requestFormat": {
+        "task": "string",
+        "expertModules": "array"
+      },
+      "responseFormat": {
+        "expertModule": "string"
+      },
+      "then": {
+        "expertModule !== 'general'": {
+          "prompt": "{expertModule}",
+          "arguments": {
+            "task": "{task}"
+          }
+        },
+        "true": {
+          "prompt": "main",
+          "arguments": {
+            "query": "{task}",
+            "history": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "projectStateAnalyzer",
+      "system": "You are a project state analyzer. Analyze the current state of the software project.\n        \n        Project path: {projectPath}\n        \n        Analyze the project and return information about its current state.",
+      "user": "Please analyze the project at: {projectPath}",
+      "requestFormat": {
+        "projectPath": "string"
+      },
+      "responseFormat": {
+        "exists": "boolean",
+        "hasRequirements": "boolean",
+        "currentState": "string",
+        "existingFiles": "array"
+      },
+      "tools": [
+        "executeBash",
+        "completeTask"
+      ],
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": "{result}"
+        }
+      }
+    },
+    {
+      "name": "requirementsEnhancer",
+      "system": "You are a requirements enhancement expert. Enhance and improve the existing requirements for a software project.\n        \n        Existing requirements: {existingRequirements}\n        Project context: {projectContext}\n        \n        Enhance the requirements, ensuring they are comprehensive and clear.",
+      "user": "Please enhance the following requirements: {existingRequirements}",
+      "requestFormat": {
+        "existingRequirements": "string",
+        "projectContext": "string"
+      },
+      "responseFormat": {
+        "enhancedRequirements": "string"
+      },
+      "tools": [
+        "completeTask"
+      ],
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": "{result}"
+        }
+      }
+    },
+    {
+      "name": "applicationDesigner",
+      "system": "You are an application design expert. Create a comprehensive application design based on the given requirements.\n        \n        Requirements: {requirements}\n        \n        Design the application architecture, components, data model, and API endpoints.",
+      "user": "Please design an application based on these requirements: {requirements}",
+      "requestFormat": {
+        "requirements": "string"
+      },
+      "responseFormat": {
+        "design": {
+          "architecture": "string",
+          "components": "array",
+          "dataModel": "string",
+          "apiEndpoints": "array"
+        }
+      },
+      "tools": [
+        "completeTask"
+      ],
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": "{result}"
+        }
+      }
+    },
+    {
+      "name": "taskListGenerator",
+      "system": "You are a task list generator for software development projects. Generate a list of tasks based on the application design and current project state.\n        \n        Design: {design}\n        Current state: {currentState}\n        Existing files: {existingFiles}\n        \n        Generate a comprehensive list of tasks to complete the application.",
+      "user": "Please generate a task list for the following design and project state: {design}, {currentState}",
+      "requestFormat": {
+        "design": "object",
+        "currentState": "string",
+        "existingFiles": "array"
+      },
+      "responseFormat": {
+        "tasks": "array"
+      },
+      "tools": [
+        "completeTask"
+      ],
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": "{result}"
+        }
+      }
+    },
+    {
+      "name": "taskExecutor",
+      "system": "You are a task executor for software development. Execute the given task, generate code, and perform tests.\n        \n        Task: {task}\n        Project context: {projectContext}\n        \n        Execute the task, generate the necessary code, and perform relevant tests.",
+      "user": "Please execute the following task: {task}",
+      "requestFormat": {
+        "task": "object",
+        "projectContext": "string"
+      },
+      "responseFormat": {
+        "completedTask": "object",
+        "generatedCode": "string",
+        "testResults": "object"
+      },
+      "tools": [
+        "executeBash",
+        "completeTask"
+      ],
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": "{result}"
+        }
+      }
+    },
+    {
+      "name": "documentationGenerator",
+      "system": "You are a documentation generator for software projects. Generate comprehensive documentation based on the requirements, design, and generated code.\n        \n        Requirements: {requirements}\n        Design: {design}\n        Generated code: {generatedCode}\n        \n        Generate README, API documentation, and component documentation.",
+      "user": "Please generate documentation for the following project: {requirements}, {design}",
+      "requestFormat": {
+        "requirements": "string",
+        "design": "object",
+        "generatedCode": "string"
+      },
+      "responseFormat": {
+        "documentation": {
+          "readme": "string",
+          "api": "string",
+          "componentDocs": "string"
+        }
+      },
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": "{result}"
+        }
+      }
+    },
+    {
+      "name": "testCoverageAnalyzer",
+      "system": "You are a test coverage analyzer. Analyze the test coverage of the generated code.\n        \n        Generated code: {generatedCode}\n        Test results: {testResults}\n        \n        Analyze the test coverage and provide a detailed report.",
+      "user": "Please analyze the test coverage for the following code and test results: {generatedCode}, {testResults}",
+      "requestFormat": {
+        "generatedCode": "string",
+        "testResults": "object"
+      },
+      "responseFormat": {
+        "coverageReport": {
+          "overall": "number",
+          "byComponent": "object"
+        }
+      },
+      "tools": [
+        "completeTask"
+      ],
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": "{result}"
+        }
+      }
+    },
+    {
+      "name": "cicdAutomationGenerator",
+      "system": "You are a CI/CD automation generator. Generate CI/CD configuration based on the project structure and test commands.\n        \n        Project structure: {projectStructure}\n        Test command: {testCommand}\n        \n        Generate a CI/CD configuration file suitable for the project.",
+      "user": "Please generate a CI/CD configuration for the following project structure and test command: {projectStructure}, {testCommand}",
+      "requestFormat": {
+        "projectStructure": "array",
+        "testCommand": "string"
+      },
+      "responseFormat": {
+        "cicdConfig": "string"
+      },
+      "tools": [
+        "completeTask"
+      ],
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": "{result}"
+        }
+      }
+    },
+    {
+      "name": "gitProjectInitializer",
+      "system": "You are a Git project initializer. Initialize a Git repository and make the initial commit with the provided files.\n        \n        Project path: {projectPath}\n        Initial files: {initialFiles}\n        \n        Initialize the Git repository and make the initial commit.",
+      "user": "Please initialize a Git repository at {projectPath} with the following files: {initialFiles}",
+      "requestFormat": {
+        "projectPath": "string",
+        "initialFiles": "array"
+      },
+      "responseFormat": {
+        "gitInitialized": "boolean",
+        "initialCommitHash": "string"
+      },
+      "tools": [
+        "executeBash",
+        "completeTask"
+      ],
+      "then": {
+        "true": {
+          "function": "completeTask",
+          "arguments": "{result}"
+        }
+      }
+    },
+    {
+      "name": "stateManager",
+      "system": "You are a state management expert. You can get, set, and list state values using the provided tools.\n\n        Instructions:\n        1. Use 'getState' to retrieve a value from the state.\n        2. Use 'setState' to set a value in the state.\n        3. Use 'listStateKeys' to get a list of all keys in the state.\n\n        Always provide clear and concise responses about the actions you've taken and their results.",
+      "user": "Perform the following state management task: {task}",
+      "requestFormat": {
+        "task": "string"
+      },
+      "responseFormat": {
+        "result": "string"
+      },
+      "tools": [
+        "getState",
+        "setState",
+        "listStateKeys",
+        "respond"
+      ],
+      "then": {
+        "true": {
+          "function": "respond",
+          "arguments": {
+            "response": "{result}"
+          }
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "executeBash",
+        "description": "Execute a bash command",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "The bash command to execute"
+            }
+          },
+          "required": [
+            "command"
+          ]
+        },
+        "script": "async ({ command }, context) => {\n  const { exec } = context.require('child_process');\n  return new Promise((resolve, reject) => {\n    exec(command.trim(), { cwd: process.cwd() }, (error, stdout, stderr) => {\n      if (error) {\n        resolve(error.message || stderr);\n      } else {\n        resolve(stdout);\n      }\n    });\n  });\n}"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "callStructuredPrompt",
+        "description": "Call a structured prompt",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "promptName": {
+              "type": "string",
+              "description": "The name of the prompt to call"
+            },
+            "args": {
+              "type": "object",
+              "description": "Arguments to pass to the prompt"
+            }
+          },
+          "required": [
+            "promptName",
+            "args"
+          ]
+        },
+        "script": "async ({ promptName, args }, context) => {\n  if (!context.runner || typeof context.runner.run !== 'function') {\n      throw new Error('Runner context not available for recursive call');\n  }\n  return context.runner.run(promptName, args);\n}"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "completeTask",
+        "description": "Complete the original task",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "response": {
+              "type": "string",
+              "description": "The response to complete"
+            }
+          },
+          "required": [
+            "response"
+          ]
+        },
+        "script": "async ({ response }, context) => {\n  console.log(response);\n  context.state.set('taskCompleted', true);\n  return { response, taskCompleted: true };\n}"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "respond",
+        "description": "Respond to the user",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "response": {
+              "type": "string",
+              "description": "The response to send to the user"
+            }
+          },
+          "required": [
+            "response"
+          ]
+        },
+        "script": "async ({ response }) => {\n  console.log(response);\n  return { response };\n}"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "getState",
+        "description": "Get a value from the state",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "The key of the state value to get"
+            }
+          },
+          "required": [
+            "key"
+          ]
+        },
+        "script": "async ({ key }, context) => {\n  return { value: context.state.get(key) };\n}"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "setState",
+        "description": "Set a value in the state",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "The key of the state value to set"
+            },
+            "value": {
+              "type": "string",
+              "description": "The value to set in the state"
+            }
+          },
+          "required": [
+            "key",
+            "value"
+          ]
+        },
+        "script": "async ({ key, value }, context) => {\n  context.state.set(key, value);\n  return { success: true };\n}"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "listStateKeys",
+        "description": "List all keys in the state",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "script": "async ({}, context) => {\n  return { keys: Object.keys(context.state.getAll()) };\n}"
+      }
+    }
+  ]
+}

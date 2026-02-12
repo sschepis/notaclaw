@@ -37,7 +37,8 @@ export const ChainEditor: React.FC<ChainEditorProps> = ({ context }) => {
         setRunInput,
         runResult,
         isRunning,
-        runChain
+        runChain,
+        layoutGraph
     } = usePromptEditorStore();
 
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -149,6 +150,20 @@ export const ChainEditor: React.FC<ChainEditorProps> = ({ context }) => {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {/* View mode toggle */}
                     <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a4a' }}>
+                        <button
+                            onClick={layoutGraph}
+                            style={{
+                                padding: '5px 12px',
+                                background: '#1e1e3a',
+                                color: '#aaa',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                fontWeight: 500,
+                                borderRight: '1px solid #2a2a4a'
+                            }}
+                            title="Auto-layout nodes"
+                        >✨ Clean Up</button>
                         <button
                             onClick={() => setViewMode('graph')}
                             style={{

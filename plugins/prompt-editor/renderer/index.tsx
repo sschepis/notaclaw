@@ -52,6 +52,8 @@ export function activate(context: any) {
     // Ensure default chain exists
     if (context.ipc) {
         const store = usePromptEditorStore.getState();
+        store.initListeners(context.ipc);
+        
         // We check if default chain exists, if not create it
         context.ipc.invoke('get-chain', 'default-agent-chain').catch(async () => {
             console.log('[PromptEditor] Creating default chain...');

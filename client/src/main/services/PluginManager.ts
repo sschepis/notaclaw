@@ -431,6 +431,10 @@ export class PluginManager extends BasePluginManager<PluginContext> {
             register: (tool) => {
                 check('dsn:register-tool');
                 this.serviceRegistry.registerToolHandler(tool.name, tool.handler);
+            },
+            list: async () => {
+                check('dsn:invoke-tool'); // Or a new permission? Using invoke-tool for now or read access
+                return this.serviceRegistry.getAllToolDefinitions();
             }
         },
         gateways: {

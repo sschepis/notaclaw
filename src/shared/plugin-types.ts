@@ -167,6 +167,7 @@ export interface PluginContext {
         parameters: any; 
         handler: (args: any) => Promise<any> 
       }): void;
+      list(): Promise<any[]>;
     };
     gateways: {
       register(gateway: GatewayDefinition): void;
