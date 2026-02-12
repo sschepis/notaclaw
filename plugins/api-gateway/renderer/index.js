@@ -34,11 +34,15 @@ var GatewayPanel = ({ context }) => {
   const [port, setPort] = (0, import_react.useState)(3e3);
   (0, import_react.useEffect)(() => {
     const fetchStatus = async () => {
-      const data = await context.ipc.invoke("gateway:get-status");
-      if (data) {
-        setStatus(data.status);
-        setPort(data.port);
-        setLogs(data.logs);
+      try {
+        const data = await context.ipc.invoke("gateway:get-status");
+        if (data) {
+          setStatus(data.status);
+          setPort(data.port);
+          setLogs(data.logs || []);
+        }
+      } catch (e) {
+        console.warn("[GatewayPanel] Could not fetch status:", e.message);
       }
     };
     fetchStatus();
@@ -46,11 +50,15 @@ var GatewayPanel = ({ context }) => {
     return () => clearInterval(interval);
   }, [context]);
   const handleSavePort = async () => {
-    await context.ipc.invoke("gateway:set-port", { port: Number(port) });
-    const data = await context.ipc.invoke("gateway:get-status");
-    if (data) {
-      setStatus(data.status);
-      setPort(data.port);
+    try {
+      await context.ipc.invoke("gateway:set-port", { port: Number(port) });
+      const data = await context.ipc.invoke("gateway:get-status");
+      if (data) {
+        setStatus(data.status);
+        setPort(data.port);
+      }
+    } catch (e) {
+      console.error("[GatewayPanel] Failed to set port:", e.message);
     }
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "flex flex-col h-full p-4 text-white", children: [

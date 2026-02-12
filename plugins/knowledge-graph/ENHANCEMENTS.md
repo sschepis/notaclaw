@@ -38,13 +38,17 @@
 ## UI/UX Enhancements
 
 ### 8. Interactive Graph Visualization
+- **Status**: Implemented (Basic)
 - Enhance the graph visualization with zoom, pan, filtering, and node expansion capabilities. Use WebGL for performance.
+- *Update*: Added `GraphPanel` with SVG-based force-directed layout, zoom/pan controls, and node details.
 
 ### 9. Entity Editor
 - Provide a rich editor for creating and modifying entities and relationships manually.
 
 ### 10. Graph Explorer
+- **Status**: Implemented
 - Create a dedicated explorer interface to browse the graph, view node details, and trace paths between entities.
+- *Update*: Integrated `GraphPanel` into `MemoryPanel` as a new "Graph Explorer" tab.
 
 ---
 

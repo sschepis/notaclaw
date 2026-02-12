@@ -2,10 +2,14 @@ import React from 'react';
 import { Bot, Users, Plus, List } from 'lucide-react';
 import { AgentsPanel } from './AgentsPanel';
 import { RendererPluginContext } from '../../../client/src/shared/plugin-types';
+import { setIpc } from './ipc';
 
 export const activate = (context: RendererPluginContext) => {
     console.log('[Agent Essentials] Renderer activated');
     const { React, useAppStore, ui } = context;
+    
+    // Set IPC for components to use
+    setIpc(context.ipc);
 
     const AgentEssentialsButton = () => {
         const { activeSidebarView, setActiveSidebarView } = useAppStore();

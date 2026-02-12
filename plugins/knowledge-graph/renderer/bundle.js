@@ -1,4 +1,6 @@
 "use strict";
+
+// plugins/knowledge-graph/renderer/bundle.js
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -26,8 +28,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// plugins/knowledge-graph/renderer/index.tsx
 var index_exports = {};
 __export(index_exports, {
   activate: () => activate,
@@ -35,34 +35,20 @@ __export(index_exports, {
 });
 module.exports = __toCommonJS(index_exports);
 var import_react4 = __toESM(require("react"));
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/createLucideIcon.js
 var import_react2 = require("react");
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/shared/src/utils/mergeClasses.js
 var mergeClasses = (...classes) => classes.filter((className, index, array) => {
   return Boolean(className) && className.trim() !== "" && array.indexOf(className) === index;
 }).join(" ").trim();
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/shared/src/utils/toKebabCase.js
 var toKebabCase = (string) => string.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/shared/src/utils/toCamelCase.js
 var toCamelCase = (string) => string.replace(
   /^([A-Z])|[\s-_]+(\w)/g,
   (match, p1, p2) => p2 ? p2.toUpperCase() : p1.toLowerCase()
 );
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/shared/src/utils/toPascalCase.js
 var toPascalCase = (string) => {
   const camelCase = toCamelCase(string);
   return camelCase.charAt(0).toUpperCase() + camelCase.slice(1);
 };
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/Icon.js
 var import_react = require("react");
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/defaultAttributes.js
 var defaultAttributes = {
   xmlns: "http://www.w3.org/2000/svg",
   width: 24,
@@ -74,8 +60,6 @@ var defaultAttributes = {
   strokeLinecap: "round",
   strokeLinejoin: "round"
 };
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/shared/src/utils/hasA11yProp.js
 var hasA11yProp = (props) => {
   for (const prop in props) {
     if (prop.startsWith("aria-") || prop === "role" || prop === "title") {
@@ -84,8 +68,6 @@ var hasA11yProp = (props) => {
   }
   return false;
 };
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/Icon.js
 var Icon = (0, import_react.forwardRef)(
   ({
     color = "currentColor",
@@ -115,8 +97,6 @@ var Icon = (0, import_react.forwardRef)(
     ]
   )
 );
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/createLucideIcon.js
 var createLucideIcon = (iconName, iconNode) => {
   const Component = (0, import_react2.forwardRef)(
     ({ className, ...props }, ref) => (0, import_react2.createElement)(Icon, {
@@ -133,8 +113,6 @@ var createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-
-// plugins/knowledge-graph/node_modules/lucide-react/dist/esm/icons/network.js
 var __iconNode = [
   ["rect", { x: "16", y: "16", width: "6", height: "6", rx: "1", key: "4q2zg0" }],
   ["rect", { x: "2", y: "16", width: "6", height: "6", rx: "1", key: "8cvhb9" }],
@@ -143,8 +121,6 @@ var __iconNode = [
   ["path", { d: "M12 12V8", key: "2874zd" }]
 ];
 var Network = createLucideIcon("network", __iconNode);
-
-// plugins/knowledge-graph/renderer/MemoryPanel.tsx
 var import_react3 = __toESM(require("react"));
 var Icon2 = ({ d, className }) => /* @__PURE__ */ import_react3.default.createElement("svg", { className, fill: "none", stroke: "currentColor", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react3.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d }));
 var Search = ({ className }) => /* @__PURE__ */ import_react3.default.createElement(Icon2, { className, d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" });
@@ -270,8 +246,6 @@ var MemoryPanel = ({ context }) => {
     }
   ), /* @__PURE__ */ import_react3.default.createElement(Button, { size: "sm", onClick: handleGlobalQuery, className: "h-7 px-2 bg-purple-600 text-white" }, /* @__PURE__ */ import_react3.default.createElement(Search, { className: "w-3 h-3" })))), /* @__PURE__ */ import_react3.default.createElement("div", { className: "flex-1 overflow-y-auto p-3 space-y-2" }, queryResults.length === 0 ? /* @__PURE__ */ import_react3.default.createElement("div", { className: "text-center py-8 text-gray-500 text-xs" }, "Enter a query to search global memory.") : queryResults.map((frag, i) => /* @__PURE__ */ import_react3.default.createElement("div", { key: frag.id || i, className: "p-2.5 bg-white/5 rounded-lg border border-white/5" }, /* @__PURE__ */ import_react3.default.createElement("div", { className: "flex justify-between mb-1" }, /* @__PURE__ */ import_react3.default.createElement("span", { className: "text-[10px] text-gray-500" }, frag.sourceNode?.substring(0, 12) ?? "local", "..."), frag.similarity !== void 0 && /* @__PURE__ */ import_react3.default.createElement("span", { className: `text-[10px] font-mono font-bold ${frag.similarity > 0.7 ? "text-emerald-400" : "text-amber-400"}` }, (frag.similarity * 100).toFixed(0), "%")), /* @__PURE__ */ import_react3.default.createElement("p", { className: "text-xs text-gray-200" }, frag.content)))))));
 };
-
-// plugins/knowledge-graph/renderer/index.tsx
 var activate = (context) => {
   console.log("[Knowledge Graph Explorer] Renderer activated");
   const { ui } = context;

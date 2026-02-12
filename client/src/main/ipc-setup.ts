@@ -18,7 +18,8 @@ import {
     logger,
     marketplaceService,
     openClawGateway,
-    agentTaskRunner
+    agentTaskRunner,
+    teamManager
 } from './services-setup';
 
 export function registerIPC(getMainWindow: () => BrowserWindow | null) {
@@ -221,6 +222,40 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     ipcMain.handle('agent:getTask', async (_, { taskId }) => agentTaskRunner.getTask(taskId));
     ipcMain.handle('agent:getActiveTask', async (_, { conversationId }) => agentTaskRunner.getActiveTaskForConversation(conversationId));
 
+    // Team IPC
+    ipcMain.handle('team:create', async (_, { name, agentIds }) => teamManager.createTeam(name, agentIds));
+    ipcMain.handle('team:list', async () => teamManager.getTeams());
+    ipcMain.handle('team:get', async (_, { teamId }) => teamManager.getTeam(teamId));
+    ipcMain.handle('team:update', async (_, { teamId, updates }) => teamManager.updateTeam(teamId, updates));
+    ipcMain.handle('team:addAgent', async (_, { teamId, agentId }) => {
+        const team = await teamManager.getTeam(teamId);
+        if (!team) throw new Error("Team not found");
+        if (!team.agentIds.includes(agentId)) {
+            return teamManager.updateTeam(teamId, { agentIds: [...team.agentIds, agentId] });
+        }
+        return team;
+    });
+    ipcMain.handle('team:removeAgent', async (_, { teamId, agentId }) => {
+        const team = await teamManager.getTeam(teamId);
+        if (!team) throw new Error("Team not found");
+        return teamManager.updateTeam(teamId, { agentIds: team.agentIds.filter(id => id !== agentId) });
+    });
+    ipcMain.handle('team:delete', async (_, { teamId }) => teamManager.deleteTeam(teamId));
+    ipcMain.handle('team:summon', async (_, { teamId }) => {
+        // Placeholder for summoning logic
+        console.log(`Team summoned: ${teamId}`);
+        return true;
+    });
+    ipcMain.handle('team:step', async (_, { teamId, observation }) => {
+        // Placeholder for team stepping logic
+        console.log(`Team step: ${teamId}`, observation);
+        return { agentResults: [] };
+    });
+    ipcMain.handle('team:dismiss', async (_, { teamId }) => {
+        console.log(`Team dismissed: ${teamId}`);
+        return true;
+    });
+
     // OpenClaw Gateway IPC
     ipcMain.handle('openclaw:connect', async (_, { url }) => {
         try {
@@ -310,6 +345,21 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     ipcMain.handle('config:removePeer', async (_, peerUrl) => configManager.removePeer(peerUrl));
     ipcMain.handle('config:getLogging', async () => configManager.getLoggingConfig());
     ipcMain.handle('config:updateLogging', async (_, updates) => configManager.updateLoggingConfig(updates));
+
+    // Workspace IPC
+    ipcMain.handle('config:getWorkspace', async () => configManager.getWorkspacePath());
+    ipcMain.handle('config:setWorkspace', async (_, path) => configManager.setWorkspacePath(path));
+    ipcMain.handle('dialog:selectWorkspace', async () => {
+        const mainWindow = getMainWindow();
+        if (!mainWindow) return null;
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openDirectory', 'createDirectory'],
+            title: 'Select Workspace Folder',
+            buttonLabel: 'Select Workspace'
+        });
+        if (result.canceled || result.filePaths.length === 0) return null;
+        return result.filePaths[0];
+    });
 
     // Production Logger IPC
     ipcMain.handle('logger:get', async (_, limit) => logger.getLogs(limit));

@@ -1,7 +1,7 @@
 {
   "name": "@alephnet/secure-backup",
   "version": "1.0.0",
-  "description": "Automated, encrypted backups of local graph and identity.",
+  "description": "Encrypted backup and restore of application data with scheduling, retention, and integrity verification.",
   "main": "dist/main/index.js",
   "types": "dist/main/index.d.ts",
   "scripts": {
@@ -13,7 +13,10 @@
   "keywords": [
     "alephnet",
     "plugin",
-    "secure-backup"
+    "secure-backup",
+    "encryption",
+    "backup",
+    "restore"
   ],
   "author": "AlephNet",
   "license": "MIT",
@@ -28,12 +31,14 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.ts"],
     "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"]
   }
 }

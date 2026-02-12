@@ -17,41 +17,49 @@ interface Context {
   dsn: {
     registerTool: (tool: Tool, handler: (args: any) => Promise<any>) => void;
   };
+  storage: {
+    get: (key: string) => Promise<any>;
+    set: (key: string, value: any) => Promise<void>;
+  };
   on: (event: string, callback: () => void) => void;
 }
 
 describe('Document Reader Plugin', () => {
   let mockContext: Context;
-  let registeredTool: any;
-  let toolHandler: any;
+  let registeredTools: { [name: string]: any } = {};
+  let toolHandlers: { [name: string]: any } = {};
 
   beforeEach(() => {
-    registeredTool = null;
-    toolHandler = null;
+    registeredTools = {};
+    toolHandlers = {};
     mockContext = {
       dsn: {
         registerTool: (tool: Tool, handler: (args: any) => Promise<any>) => {
-          registeredTool = tool;
-          toolHandler = handler;
+          registeredTools[tool.name] = tool;
+          toolHandlers[tool.name] = handler;
         }
+      },
+      storage: {
+        get: jest.fn().mockResolvedValue([]),
+        set: jest.fn().mockResolvedValue(undefined)
       },
       on: jest.fn()
     };
   });
 
-  test('should register summarize_document tool on activation', () => {
-    activate(mockContext);
-    expect(registeredTool).toBeDefined();
-    expect(registeredTool.name).toBe('summarize_document');
+  test('should register summarize_document tool on activation', async () => {
+    await activate(mockContext);
+    expect(registeredTools['summarize_document']).toBeDefined();
   });
 
   test('should summarize content correctly', async () => {
-    activate(mockContext);
+    await activate(mockContext);
+    const handler = toolHandlers['summarize_document'];
     // Ensure we have a valid handler
-    expect(toolHandler).toBeDefined();
+    expect(handler).toBeDefined();
 
     const content = "This is sentence one. This is sentence two. This is sentence three. This is sentence four.";
-    const result = await toolHandler({ content, maxLength: 200 });
+    const result = await handler({ content, maxLength: 200 });
     
     // The implementation takes the first 3 sentences
     expect(result.summary).toContain("sentence one");
@@ -62,12 +70,13 @@ describe('Document Reader Plugin', () => {
   });
   
   test('should truncate long summaries', async () => {
-      activate(mockContext);
+      await activate(mockContext);
+      const handler = toolHandlers['summarize_document'];
       const longSentence = "This is a very long sentence designed to exceed the maximum length limit set for the summary. ";
       const content = longSentence.repeat(10);
       const maxLength = 50;
       
-      const result = await toolHandler({ content, maxLength });
+      const result = await handler({ content, maxLength });
       
       // implementation: summary.substring(0, maxLength) + '...'
       // expected length: 50 + 3 = 53

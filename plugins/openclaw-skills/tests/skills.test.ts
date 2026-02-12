@@ -8,6 +8,7 @@ jest.mock('fs/promises', () => {
     readdir: jest.fn(),
     readFile: jest.fn(),
     stat: jest.fn(),
+    access: jest.fn(),
     Dirent: class {
       constructor(name: string, type: string) {
         // @ts-ignore
@@ -63,7 +64,7 @@ describe('OpenClaw Skills', () => {
     }));
   });
 
-  test('scans directory and loads SKILL.md', async () => {
+  test('scans directory and loads legacy and modern skills', async () => {
     // Mock stat
     (fs.stat as unknown as jest.Mock).mockImplementation((path: string) => {
         if (path.includes('skills')) return Promise.resolve({});
@@ -86,6 +87,12 @@ describe('OpenClaw Skills', () => {
         return Promise.resolve([]);
     });
 
+    // Mock fs.access
+    (fs.access as unknown as jest.Mock).mockImplementation((path: string) => {
+        if (path.endsWith('skill.json')) return Promise.resolve();
+        return Promise.reject(new Error('ENOENT'));
+    });
+
     // Mock readFile
     (fs.readFile as unknown as jest.Mock).mockImplementation((file: string) => {
         if (file.endsWith('SKILL.md')) {
@@ -96,21 +103,61 @@ describe('OpenClaw Skills', () => {
 </skill>
             `);
         }
+        if (file.endsWith('skill.json')) {
+            return Promise.resolve(JSON.stringify({
+                name: 'modern-skill',
+                version: '1.0.0',
+                description: 'A modern skill',
+                entryPoint: 'index.js',
+                inputs: {
+                    arg1: { type: 'string', description: 'Argument 1' }
+                }
+            }));
+        }
         return Promise.reject(new Error('ENOENT'));
+    });
+
+    // Mock readdir to include modern skill
+    (fs.readdir as unknown as jest.Mock).mockImplementation((dir: string) => {
+        if (dir.endsWith('skills')) {
+            return Promise.resolve([
+                { name: 'my-skill', isDirectory: () => true },
+                { name: 'modern-skill-dir', isDirectory: () => true }
+            ]);
+        }
+        if (dir.endsWith('my-skill')) {
+             return Promise.resolve([
+                { name: 'SKILL.md', isDirectory: () => false }
+            ]);
+        }
+        if (dir.endsWith('modern-skill-dir')) {
+            return Promise.resolve([
+               { name: 'skill.json', isDirectory: () => false },
+               { name: 'index.js', isDirectory: () => false }
+           ]);
+       }
+        return Promise.resolve([]);
     });
 
     process.env.OPENCLAW_SKILLS_PATH = '/test/skills';
 
     await activate(context);
 
-    // Verify
+    // Verify Legacy Skill
     expect(context.services.tools.register).toHaveBeenCalledWith(expect.objectContaining({
         name: 'my-cool-skill'
     }));
     
+    // Verify Modern Skill
+    expect(context.services.tools.register).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'modern-skill',
+        description: 'A modern skill'
+    }));
+    
     // Test IPC
     const skills = await ipcHandlers['skills:list']();
-    expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('my-cool-skill');
+    expect(skills).toHaveLength(2);
+    expect(skills.find((s: any) => s.name === 'my-cool-skill')).toBeDefined();
+    expect(skills.find((s: any) => s.name === 'modern-skill')).toBeDefined();
   });
 });

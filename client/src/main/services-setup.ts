@@ -30,10 +30,12 @@ import { MarketplaceService } from './services/MarketplaceService';
 import { getOpenClawGateway } from './services/OpenClawGatewayService';
 import { DesktopAccessibilityLearner } from './services/desktop-learner';
 import { AgentTaskRunner } from './services/agent-runner';
+import { TeamManager } from './services/TeamManager';
 
 // Instantiate core services
 export const aiManager = new AIProviderManager();
 export const personalityManager = new PersonalityManager(aiManager);
+export const teamManager = new TeamManager();
 export const dsnNode = new DSNNode(aiManager, personalityManager);
 export const identityManager = new IdentityManager();
 export const alephNetClient = new AlephNetClient(dsnNode.getBridge(), aiManager, identityManager, dsnNode.getDomainManager());

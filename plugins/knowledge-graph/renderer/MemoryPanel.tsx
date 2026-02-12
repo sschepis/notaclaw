@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { GraphPanel } from './GraphPanel';
 
 // Icons
 const Icon = ({ d, className }: any) => (
@@ -36,7 +37,7 @@ export const MemoryPanel = ({ context }: { context: any }) => {
     storeMemory, queryMemoryField, deleteMemoryField, queryGlobalMemory
   } = useAlephStore();
 
-  const [tab, setTab] = useState<'fields' | 'global'>('fields');
+  const [tab, setTab] = useState<'fields' | 'global' | 'graph'>('fields');
   
   // Create Field State
   const [showCreate, setShowCreate] = useState(false);
@@ -160,17 +161,19 @@ export const MemoryPanel = ({ context }: { context: any }) => {
     <div className="h-full flex flex-col text-white">
       <div className="flex items-center justify-between p-3 border-b border-white/5">
         <div className="flex gap-3">
-          {(['fields', 'global'] as const).map(t => (
+          {(['fields', 'global', 'graph'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`text-xs font-medium capitalize ${tab === t ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'} transition-colors`}>
-              {t === 'fields' ? 'My Fields' : 'Global Memory'}
+              {t === 'fields' ? 'My Fields' : t === 'global' ? 'Global Memory' : 'Graph Explorer'}
             </button>
           ))}
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {tab === 'fields' ? (
+        {tab === 'graph' ? (
+          <GraphPanel context={context} />
+        ) : tab === 'fields' ? (
           <div className="h-full flex flex-col">
             <div className="flex justify-end p-3 border-b border-white/5">
               <Button size="sm" onClick={() => setShowCreate(true)} className="h-6 text-[10px] bg-blue-600 px-2 text-white">

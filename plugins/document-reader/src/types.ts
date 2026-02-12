@@ -14,5 +14,9 @@ export interface Context {
   dsn: {
     registerTool: (tool: Tool, handler: (args: any) => Promise<any>) => void;
   };
+  storage: {
+    get: (key: string) => Promise<any>;
+    set: (key: string, value: any) => Promise<void>;
+  };
   on: (event: string, callback: () => void) => void;
 }

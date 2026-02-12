@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
+import * as ReactDOMClient from 'react-dom/client';
 import * as FramerMotion from 'framer-motion';
 import * as LucideReact from 'lucide-react';
 import * as JSXRuntime from 'react/jsx-runtime';
@@ -281,24 +282,16 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
            this.ipcHandlers.set(fullChannel, handler);
         },
         invoke: async (channel, data) => {
-            // We use the generic plugin:invoke-renderer mechanism or a direct IPC invoke if allowed
-            // But here we want to invoke main process handlers from the plugin renderer
-            // The standard way in this architecture seems to be sending a message and waiting for response,
-            // or using window.electronAPI if exposed.
-            
-            // Let's assume we can use window.electronAPI.invokePlugin (if we added it) or just wrap standard IPC.
-            // Since we don't have a direct 'invoke' bridge for arbitrary channels, we might need to rely on
-            // specific APIs or add a generic one.
-            
-            // However, we added 'plugin:invoke-tool' to ipcMain.
-            // But that's a specific channel.
-            
-            // If the plugin wants to invoke a channel it registered in main?
-            // PluginManager.ts sets up `plugin:${id}:${channel}` handling.
-            // But `ipcMain.handle` was used there.
-            
-            // To invoke it from renderer:
-            return window.electronAPI.pluginInvokeRenderer(plugin.id, channel, data);
+            try {
+                return await window.electronAPI.pluginInvokeRenderer(plugin.id, channel, data);
+            } catch (e: any) {
+                // Gracefully handle missing handlers — the main plugin may not have loaded yet
+                if (e?.message?.includes('No handler registered')) {
+                    warn(`Plugin "${plugin.id}" invoke "${channel}": handler not registered in main process`);
+                    return null;
+                }
+                throw e;
+            }
         }
       },
       services: {
@@ -400,6 +393,7 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
               case 'react': return React;
               case 'react/jsx-runtime': return JSXRuntime;
               case 'react-dom': return ReactDOM;
+              case 'react-dom/client': return ReactDOMClient;
               case 'framer-motion': return FramerMotion;
               case 'lucide-react': return LucideReact;
               case 'alephnet': return { useAlephStore, useAppStore, useFenceStore, useSlotRegistry };

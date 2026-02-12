@@ -1,0 +1,17 @@
+{
+  "id": "prompt-editor",
+  "name": "prompt-editor",
+  "version": "0.1.0",
+  "description": "Visual editor for AI prompt chains and workflows.",
+  "main": "dist/main/index.js",
+  "renderer": "dist/renderer/index.js",
+  "permissions": [
+    "workflow:create",
+    "store:read",
+    "store:write",
+    "fs:read",
+    "fs:write",
+    "ai:complete",
+    "dsn:register-tool"
+  ]
+}

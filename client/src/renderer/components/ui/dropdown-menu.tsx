@@ -7,10 +7,24 @@ const DropdownMenuContext = React.createContext<{
   setOpen: (open: boolean) => void;
 }>({ open: false, setOpen: () => {} });
 
-const DropdownMenu: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [open, setOpen] = React.useState(false);
+const DropdownMenu: React.FC<{ 
+  children: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}> = ({ children, open: controlledOpen, onOpenChange }) => {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+  const setOpen = React.useCallback((newOpen: boolean) => {
+    if (isControlled) {
+      onOpenChange?.(newOpen);
+    } else {
+      setUncontrolledOpen(newOpen);
+    }
+  }, [isControlled, onOpenChange]);
+
   return (
-    <DropdownMenuContext.Provider value={{ open, setOpen }}>
+    <DropdownMenuContext.Provider value={{ open: !!open, setOpen }}>
       <div className="relative inline-block text-left">{children}</div>
     </DropdownMenuContext.Provider>
   );

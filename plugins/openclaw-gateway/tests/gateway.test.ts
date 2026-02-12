@@ -25,23 +25,29 @@ describe('OpenClaw Gateway', () => {
         }
       },
       traits: {
-        register: jest.fn((trait) => {
+        register: jest.fn((trait: any) => {
           traits[trait.id] = trait;
         })
       },
       services: {
         gateways: {
-          register: jest.fn((gw) => {
+          register: jest.fn((gw: any) => {
             gateway = gw;
           })
         }
       },
       dsn: {
-        registerTool: jest.fn((def, fn) => {
+        registerTool: jest.fn((def: any, fn: any) => {
           tools[def.name] = fn;
         })
       }
     };
+  });
+
+  afterEach(async () => {
+    if (gateway) {
+        await gateway.disconnect();
+    }
   });
 
   test('activate registers traits and gateway', async () => {
@@ -75,7 +81,8 @@ describe('OpenClaw Gateway', () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       statusText: 'OK',
-      json: async () => ({ version: '1.0.0', capabilities: ['compute'] })
+      json: async () => ({ version: '1.0.0', capabilities: ['compute'] }),
+      text: async () => JSON.stringify({ version: '1.0.0', capabilities: ['compute'] })
     });
 
     await gateway.connect();
@@ -90,7 +97,8 @@ describe('OpenClaw Gateway', () => {
     // Mock failure
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
-      statusText: 'Not Found'
+      statusText: 'Not Found',
+      text: async () => 'Not Found'
     });
 
     await gateway.connect();
@@ -105,11 +113,13 @@ describe('OpenClaw Gateway', () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ version: '1.0.0', capabilities: ['compute'] })
+        json: async () => ({ version: '1.0.0', capabilities: ['compute'] }),
+        text: async () => JSON.stringify({ version: '1.0.0', capabilities: ['compute'] })
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ id: 'task-123' })
+        json: async () => ({ id: 'task-123' }),
+        text: async () => JSON.stringify({ id: 'task-123' })
       });
 
     await gateway.connect();
@@ -129,11 +139,13 @@ describe('OpenClaw Gateway', () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ version: '1.0.0', capabilities: ['compute'] })
+        json: async () => ({ version: '1.0.0', capabilities: ['compute'] }),
+        text: async () => JSON.stringify({ version: '1.0.0', capabilities: ['compute'] })
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ id: 'task-tool' })
+        json: async () => ({ id: 'task-tool' }),
+        text: async () => JSON.stringify({ id: 'task-tool' })
       });
 
     await gateway.connect();

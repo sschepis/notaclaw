@@ -105,6 +105,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const shouldRestartRef = useRef(false);
   const isStartingRef = useRef(false);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check for browser support
   const SpeechRecognitionAPI = 
@@ -114,12 +115,46 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
   
   const isSupported = !!SpeechRecognitionAPI;
 
+  // Stop listening
+  const stopListening = useCallback(() => {
+    shouldRestartRef.current = false;
+    isStartingRef.current = false;
+
+    // Clear silence timeout
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        // Ignore stop errors
+      }
+    }
+
+    setIsListening(false);
+    setInterimTranscript('');
+  }, []);
+
+  // Reset silence timeout
+  const resetSilenceTimeout = useCallback(() => {
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+    }
+    
+    silenceTimeoutRef.current = setTimeout(() => {
+      stopListening();
+    }, 5000);
+  }, [stopListening]);
+
   // Create recognition instance
   const createRecognition = useCallback(() => {
     if (!SpeechRecognitionAPI) return null;
 
     const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = true;
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = lang;
     recognition.maxAlternatives = 1;
@@ -129,6 +164,8 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
 
   // Handle recognition results
   const handleResult = useCallback((event: SpeechRecognitionEvent) => {
+    resetSilenceTimeout();
+
     let finalTranscript = '';
     let interim = '';
 
@@ -152,7 +189,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
       setInterimTranscript('');
       onTranscript?.(finalTranscript);
     }
-  }, [onTranscript, onInterimTranscript]);
+  }, [onTranscript, onInterimTranscript, resetSilenceTimeout]);
 
   // Handle recognition end - auto-restart if still listening
   const handleEnd = useCallback(() => {
@@ -174,6 +211,10 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
     } else {
       setIsListening(false);
       setInterimTranscript('');
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
+      }
     }
   }, []);
 
@@ -185,6 +226,11 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
     switch (event.error) {
       case 'no-speech':
         // No speech detected - restart listening if still active
+        // But if we hit our own silence timeout, we should have stopped already.
+        // If the API stops for no-speech before our timeout, we might want to restart
+        // OR we might want to respect the API's decision.
+        // Given the 5s requirement, we probably want to keep listening until *our* timeout hits
+        // if the API's timeout is shorter.
         if (shouldRestartRef.current) {
           handleEnd();
         }
@@ -263,30 +309,14 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
       isStartingRef.current = true;
       recognition.start();
       setIsListening(true);
+      resetSilenceTimeout(); // Start silence timer
     } catch (e) {
       isStartingRef.current = false;
       console.error('Failed to start speech recognition:', e);
       setError('Failed to start speech recognition.');
       onError?.('Failed to start');
     }
-  }, [isSupported, isListening, initRecognition, onError]);
-
-  // Stop listening
-  const stopListening = useCallback(() => {
-    shouldRestartRef.current = false;
-    isStartingRef.current = false;
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {
-        // Ignore stop errors
-      }
-    }
-
-    setIsListening(false);
-    setInterimTranscript('');
-  }, []);
+  }, [isSupported, isListening, initRecognition, onError, resetSilenceTimeout]);
 
   // Toggle listening
   const toggleListening = useCallback(() => {
@@ -301,6 +331,10 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
   useEffect(() => {
     return () => {
       shouldRestartRef.current = false;
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
+      }
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();

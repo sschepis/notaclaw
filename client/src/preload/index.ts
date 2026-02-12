@@ -2,6 +2,20 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { alephNetBridge } from './alephnet';
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Configuration
+  configGet: () => ipcRenderer.invoke('config:get'),
+  configGetNetwork: () => ipcRenderer.invoke('config:getNetwork'),
+  configUpdateNetwork: (updates: any) => ipcRenderer.invoke('config:updateNetwork', updates),
+  configAddPeer: (peerUrl: string) => ipcRenderer.invoke('config:addPeer', peerUrl),
+  configRemovePeer: (peerUrl: string) => ipcRenderer.invoke('config:removePeer', peerUrl),
+  configGetLogging: () => ipcRenderer.invoke('config:getLogging'),
+  configUpdateLogging: (updates: any) => ipcRenderer.invoke('config:updateLogging', updates),
+  
+  // Workspace
+  configGetWorkspace: () => ipcRenderer.invoke('config:getWorkspace'),
+  configSetWorkspace: (path: string) => ipcRenderer.invoke('config:setWorkspace', path),
+  selectWorkspace: () => ipcRenderer.invoke('dialog:selectWorkspace'),
+
   // ─── AlephNet APIs (all tiers) ────────────────────────────────
   ...alephNetBridge,
 
@@ -83,6 +97,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pluginInvokeTool: (toolName: string, args: any) =>
     ipcRenderer.invoke('plugin:invoke-tool', { toolName, args }),
 
+  pluginInvokeRenderer: (pluginId: string, channel: string, data: any) =>
+    ipcRenderer.invoke('plugin:ipc:invoke', { pluginId, channel, data }),
+
   // Session Management
   sessionStart: () => ipcRenderer.invoke('session:start'),
   sessionStop: () => ipcRenderer.invoke('session:stop'),
@@ -138,6 +155,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('agent:taskMessage', callback);
     return () => { ipcRenderer.removeListener('agent:taskMessage', callback); };
   },
+
+  // Team Management
+  teamCreate: (params: { name: string; agentIds: string[] }) => ipcRenderer.invoke('team:create', params),
+  teamList: () => ipcRenderer.invoke('team:list'),
+  teamGet: (params: { teamId: string }) => ipcRenderer.invoke('team:get', params),
+  teamUpdate: (params: { teamId: string; updates: any }) => ipcRenderer.invoke('team:update', params),
+  teamDelete: (params: { teamId: string }) => ipcRenderer.invoke('team:delete', params),
+  teamSummon: (params: { teamId: string }) => ipcRenderer.invoke('team:summon', params),
+  teamStep: (params: { teamId: string; observation: string }) => ipcRenderer.invoke('team:step', params),
+  teamDismiss: (params: { teamId: string }) => ipcRenderer.invoke('team:dismiss', params),
 
   // OpenClaw Gateway
   openclawConnect: (options: { url?: string }) => 

@@ -48,30 +48,29 @@ async function buildPlugin(pluginPath) {
         }
     }
 
-    if (!actualEntry) {
-        console.log(`Skipping ${pkg.name}: No entry point found`);
-        return;
+    if (actualEntry) {
+        console.log(`Building ${pkg.name}...`);
+        
+        try {
+            await esbuild.build({
+                entryPoints: [actualEntry],
+                outfile: path.join(pluginPath, pkg.main),
+                bundle: true,
+                platform: 'node',
+                format: 'cjs',
+                target: 'node18',
+                external: ['electron', ...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {})],
+                allowOverwrite: true,
+            });
+            console.log(`✓ Built ${pkg.name}`);
+        } catch (e) {
+            console.error(`✗ Failed to build ${pkg.name}:`, e.message);
+        }
+    } else {
+        console.log(`Skipping main build for ${pkg.name}: No entry point found`);
     }
 
-    console.log(`Building ${pkg.name}...`);
-    
-    try {
-        await esbuild.build({
-            entryPoints: [actualEntry],
-            outfile: path.join(pluginPath, pkg.main),
-            bundle: true,
-            platform: 'node',
-            format: 'cjs',
-            target: 'node18',
-            external: ['electron', ...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.peerDependencies || {})],
-            allowOverwrite: true,
-        });
-        console.log(`✓ Built ${pkg.name}`);
-    } catch (e) {
-        console.error(`✗ Failed to build ${pkg.name}:`, e.message);
-    }
-
-    // Build renderer entry if specified in manifest.json
+    // Always attempt renderer build regardless of main build result
     await buildRendererEntry(pluginPath, pkg);
 }
 
@@ -106,6 +105,14 @@ async function buildRendererEntry(pluginPath, pkg) {
         path.join(pluginPath, srcRelative + '.ts'),
         path.join(pluginPath, srcRelative + '.jsx'),
         path.join(pluginPath, srcRelative + '.js'),
+    );
+
+    // Also check src/ prefixed paths (e.g., src/renderer/index.tsx)
+    rendererSrcCandidates.push(
+        path.join(pluginPath, 'src', srcRelative + '.tsx'),
+        path.join(pluginPath, 'src', srcRelative + '.ts'),
+        path.join(pluginPath, 'src', srcRelative + '.jsx'),
+        path.join(pluginPath, 'src', srcRelative + '.js'),
     );
 
     let rendererEntry = null;

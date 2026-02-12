@@ -10,7 +10,7 @@ export const defaultLayout: IJsonModel = {
         borderBarSize: 32,
         splitterSize: 6, // Larger hit area, visual will be thinner
         tabSetMinHeight: 32,
-        tabSetMinWidth: 32,
+        tabSetMinWidth: 200,
     },
     borders: [],
     layout: {
@@ -22,6 +22,7 @@ export const defaultLayout: IJsonModel = {
                 weight: 15,
                 enableClose: false,
                 id: "sidebar-panel",
+                minWidth: 200,
                 children: [
                     {
                         type: "tab",
@@ -90,6 +91,7 @@ export const defaultLayout: IJsonModel = {
                 type: "tabset",
                 weight: 25,
                 id: "inspector-panel",
+                minWidth: 200,
                 children: [
                     {
                         type: "tab",

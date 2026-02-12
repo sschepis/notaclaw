@@ -33,6 +33,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
   private serviceRegistry: ServiceRegistry;
   private personalityManager: PersonalityManager;
   private storageCache: Record<string, any> | null = null;
+  private registeredIPCChannels: Set<string> = new Set();
+  private pluginIPCHandlers: Map<string, (data: any) => Promise<any>> = new Map();
 
   constructor(
     dsnNode: DSNNode,
@@ -179,6 +181,10 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       try {
         const manifestContent = await fs.readFile(manifestPath, 'utf-8');
         manifest = JSON.parse(manifestContent);
+        // Ensure id is set (fallback to name or directory basename)
+        if (!manifest.id) {
+          manifest.id = manifest.name || path.basename(pluginPath);
+        }
       } catch {
         try {
           const packageContent = await fs.readFile(packagePath, 'utf-8');
@@ -413,7 +419,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         },
         handle: (channel, handler) => {
             const targetChannel = `plugin:${manifest.id}:${channel}`;
-            ipcMain.handle(targetChannel, (_event, data) => handler(data));
+            this.registeredIPCChannels.add(targetChannel);
+            this.pluginIPCHandlers.set(targetChannel, handler);
         },
         invoke: async (_channel, _data) => {
            throw new Error("Invoke not yet implemented");
@@ -502,6 +509,21 @@ export class PluginManager extends BasePluginManager<PluginContext> {
   // Note: uninstallPlugin is overridden above.
   
   private setupIPC() {
+    // Centralized plugin IPC invoke handler — routes renderer invoke calls
+    // to the plugin's registered ipcMain.handle channel. Returns null if the
+    // handler hasn't been registered yet (avoids Electron "No handler" errors).
+    ipcMain.handle('plugin:ipc:invoke', async (_event, { pluginId, channel, data }) => {
+        const targetChannel = `plugin:${pluginId}:${channel}`;
+        // Check if a handler is registered by attempting to call it.
+        // ipcMain doesn't expose a "has handler" API, so we track registered channels.
+        if (!this.registeredIPCChannels.has(targetChannel)) {
+            console.warn(`[PluginManager] No handler registered for ${targetChannel} — returning null`);
+            return null;
+        }
+        // Forward to the actual handler via internal invoke
+        return await this.pluginIPCHandlers.get(targetChannel)?.(data) ?? null;
+    });
+
     ipcMain.handle('get-plugins', () => {
       return Array.from(this.plugins.values()).map(p => ({
         ...p.manifest,

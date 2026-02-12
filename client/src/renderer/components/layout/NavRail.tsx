@@ -7,6 +7,8 @@ import { usePluginNavigations } from '../../services/SlotRegistry';
 import { SlotErrorBoundary } from '../ui/SlotErrorBoundary';
 import { NavRailFooterSlot } from '../ui/ExtensionSlotV2';
 import type { NavigationDefinition } from '../../../shared/slot-types';
+import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
+import { PluginLoader } from '../../services/PluginLoader';
 
 interface NavRailProps {
   currentMode: 'chat' | 'canvas';
@@ -149,6 +151,28 @@ export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode, onOpenSe
   // Get plugin-registered navigation items
   const pluginNavigations = usePluginNavigations();
 
+  const [contextMenuState, setContextMenuState] = React.useState<{ id: string; pluginId: string; x: number; y: number } | null>(null);
+
+  const handleDisable = async (id: string) => {
+      try {
+          await (window as any).electronAPI.pluginDisable(id);
+          await PluginLoader.getInstance().unloadPlugin(id);
+      } catch (e) {
+          console.error("Failed to disable plugin", e);
+      }
+      setContextMenuState(null);
+  };
+
+  const handleUninstall = async (id: string) => {
+      try {
+          await (window as any).electronAPI.pluginUninstall(id);
+          await PluginLoader.getInstance().unloadPlugin(id);
+      } catch (e) {
+          console.error("Failed to uninstall plugin", e);
+      }
+      setContextMenuState(null);
+  };
+
   return (
     <TooltipProvider>
     <div className="w-[52px] h-full bg-card/80 backdrop-blur-xl border-r border-border flex flex-col items-center py-4 space-y-4 z-50 shadow-2xl relative">
@@ -236,24 +260,47 @@ export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode, onOpenSe
         {pluginNavigations.length > 0 && (
           <div className="flex flex-col space-y-2 w-full items-center mt-2 pt-2 border-t border-border">
             {pluginNavigations.map((nav) => (
-              <PluginNavButton
-                key={nav.id}
-                nav={nav}
-                isActive={activeSidebarView === nav.view.id}
-                onClick={() => {
-                  setActiveSidebarView(nav.view.id as any);
-                  setLayoutAction({
-                    type: 'open',
-                    component: nav.view.id,
-                    name: nav.view.name.toUpperCase(),
-                    icon: nav.view.id
-                  });
+              <div 
+                key={nav.id} 
+                onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenuState({ id: nav.id, pluginId: nav.pluginId, x: e.clientX, y: e.clientY });
                 }}
-              />
+              >
+                  <PluginNavButton
+                    nav={nav}
+                    isActive={activeSidebarView === nav.view.id}
+                    onClick={() => {
+                      setActiveSidebarView(nav.view.id as any);
+                      setLayoutAction({
+                        type: 'open',
+                        component: nav.view.id,
+                        name: nav.view.name.toUpperCase(),
+                        icon: nav.view.id
+                      });
+                    }}
+                  />
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Context Menu */}
+      {contextMenuState && (
+        <ContextMenu
+            open={!!contextMenuState}
+            onOpenChange={(open) => !open && setContextMenuState(null)}
+            position={contextMenuState}
+        >
+            <ContextMenuItem onClick={() => handleDisable(contextMenuState.pluginId)}>
+                Disable
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => handleUninstall(contextMenuState.pluginId)} className="text-destructive focus:text-destructive">
+                Uninstall
+            </ContextMenuItem>
+        </ContextMenu>
+      )}
 
       {/* Bottom Actions */}
       <div className="flex flex-col items-center space-y-3 mb-2 w-full pt-2 border-t border-border">

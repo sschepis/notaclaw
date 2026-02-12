@@ -23,9 +23,12 @@ interface LayoutManagerProps {
 export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpen, setInspectorOpen }) => {
     const [model, setModel] = useState<Model | null>(null);
     const { activeSidebarView, layoutAction, setLayoutAction } = useAppStore();
+    const pluginPanels = usePluginPanels();
+    const bottomPanelTabs = useBottomPanelTabs();
 
     useEffect(() => {
         // Clear old layout versions to ensure clean slate
+        localStorage.removeItem('alephnet-layout-v6');
         localStorage.removeItem('alephnet-layout-v5');
         localStorage.removeItem('alephnet-layout-v4');
         localStorage.removeItem('alephnet-layout-v3');
@@ -33,8 +36,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
         localStorage.removeItem('alephnet-layout');
         
         // Load from local storage or use default
-        // Bump version to v6 to reset corrupted layouts
-        const savedLayout = localStorage.getItem('alephnet-layout-v6');
+        // Bump version to v7 to reset corrupted layouts
+        const savedLayout = localStorage.getItem('alephnet-layout-v7');
         let jsonModel: IJsonModel = defaultLayout;
 
         if (savedLayout) {
@@ -45,11 +48,11 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
                     jsonModel = parsed;
                 } else {
                     console.log("Saved layout missing stage-panel, using default");
-                    localStorage.removeItem('alephnet-layout-v6');
+                    localStorage.removeItem('alephnet-layout-v7');
                 }
             } catch (e) {
                 console.error("Failed to parse saved layout, using default", e);
-                localStorage.removeItem('alephnet-layout-v6');
+                localStorage.removeItem('alephnet-layout-v7');
             }
         }
 
@@ -75,16 +78,23 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
                                     layoutAction.component === 'bottom-panel-terminal' ||
                                     bottomPanelTabs.some(t => t.id === layoutAction.component);
 
+                // Check if target is a plugin panel with specific location
+                const pluginPanel = pluginPanels.find(p => p.id === layoutAction.component);
+                const defaultLocation = pluginPanel?.defaultLocation;
+
                 const bottomPanelNode = model.getNodeById("bottom-panel");
                 const stagePanelNode = model.getNodeById("stage-panel");
+                const sidebarNode = model.getNodeById("sidebar");
 
-                if (isBottomTab && bottomPanelNode) {
+                if (defaultLocation === 'left' && sidebarNode) {
+                     // Add to the same parent as sidebar
+                     parentId = sidebarNode.getParent()?.getId() || "root";
+                } else if (isBottomTab && bottomPanelNode) {
                     parentId = "bottom-panel";
                 } else if (stagePanelNode) {
                     parentId = "stage-panel";
                 } else {
                     // No stage-panel exists - add to the right of sidebar's parent
-                    const sidebarNode = model.getNodeById("sidebar");
                     if (sidebarNode) {
                         const sidebarParent = sidebarNode.getParent();
                         const sidebarGrandparent = sidebarParent?.getParent();
@@ -108,7 +118,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
             }
             setLayoutAction(null);
         }
-    }, [layoutAction, model, setLayoutAction]);
+    }, [layoutAction, model, setLayoutAction, pluginPanels, bottomPanelTabs]);
 
     // Sync Sidebar Tab Name with Active View and ensure it's open
     useEffect(() => {
@@ -175,8 +185,6 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
     }, [inspectorOpen, model]);
 
     // Get plugin-registered panels and tabs
-    const pluginPanels = usePluginPanels();
-    const bottomPanelTabs = useBottomPanelTabs();
     const stageViews = useSlotRegistry((state) => state.stageViews);
 
     const factory = useCallback((node: TabNode) => {
@@ -285,7 +293,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
     }, []);
 
     const onModelChange = useCallback((newModel: Model) => {
-        localStorage.setItem('alephnet-layout-v6', JSON.stringify(newModel.toJson()));
+        localStorage.setItem('alephnet-layout-v7', JSON.stringify(newModel.toJson()));
     }, []);
 
     const onAction = useCallback((action: Action) => {

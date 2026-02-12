@@ -2,20 +2,8 @@
 import * as fs from 'fs/promises';
 import { Dirent } from 'fs';
 import * as path from 'path';
-
-// Removed promisify imports as we use fs/promises
-
-
-interface Skill {
-  id: string;
-  name: string;
-  description: string;
-  path: string;
-  dir: string;
-  version: string;
-  semanticDomain: string;
-  type: string;
-}
+import { ModernSkillAdapter } from '../src/ModernSkillAdapter';
+import { Skill, LegacySkill } from '../src/types';
 
 interface PluginContext {
   ipc: {
@@ -34,7 +22,7 @@ interface PluginContext {
 
 class LegacySkillAdapter {
   context: PluginContext;
-  skills: Map<string, Skill>;
+  skills: Map<string, LegacySkill>;
   searchPaths: string[];
 
   constructor(context: PluginContext) {
@@ -52,7 +40,7 @@ class LegacySkillAdapter {
   }
 
   async initialize() {
-    console.log(`[OpenClaw Skills] Scanning for skills in: ${this.searchPaths.join(', ')}`);
+    console.log(`[OpenClaw Skills] Scanning for legacy skills in: ${this.searchPaths.join(', ')}`);
     
     for (const p of this.searchPaths) {
         try {
@@ -110,7 +98,7 @@ class LegacySkillAdapter {
     }
   }
 
-  parseSkill(content: string, filePath: string): Skill | null {
+  parseSkill(content: string, filePath: string): LegacySkill | null {
     // Robust parsing needed
     if (typeof content !== 'string') return null;
 
@@ -174,10 +162,6 @@ class LegacySkillAdapter {
         console.error(`[OpenClaw Skills] Failed to register ${tool.name}:`, e.message);
       }
     });
-    
-    // IPC endpoints for UI
-    this.context.ipc.handle('skills:list', async () => Array.from(this.skills.values()));
-    this.context.ipc.handle('skills:execute', async ({ name, args }: { name: string, args: any }) => this.executeSkill(name, args));
   }
 
   async executeSkill(name: string, args: any) {
@@ -216,21 +200,61 @@ When a skill is executed, its content is injected as context for you to follow.
 Use case: When the user references a known skill or task pattern, you can invoke the skill
 to get detailed instructions on how to proceed.
 
-Skills are registered dynamically based on what's found in the user's OpenClaw workspace.
-Use 'skills:list' IPC to see available skills, or invoke them via the registered tool handlers.`,
+Skills are registered dynamically based on what's found in the user's OpenClaw workspace.`,
       activationMode: 'dynamic',
       triggerKeywords: ['skill', 'openclaw', 'legacy', 'SKILL.md', 'task template'],
       priority: 10,
       source: '@alephnet/openclaw-skills'
     });
 
-    const adapter = new LegacySkillAdapter(context);
-    await adapter.initialize();
+    const home = process.env.HOME || (process.platform === 'win32' ? process.env.USERPROFILE : '') || '';
+    const searchPaths = [
+        process.env.OPENCLAW_SKILLS_PATH || '',
+        path.join(home, '.openclaw/workspace/skills'),
+        path.join(home, 'Development/openclaw/skills')
+    ].filter(Boolean);
+
+    const legacyAdapter = new LegacySkillAdapter(context);
+    await legacyAdapter.initialize();
+
+    const modernAdapter = new ModernSkillAdapter(searchPaths);
+    await modernAdapter.initialize();
+
+    // Register modern skills
+    for (const [name, skill] of modernAdapter.skills) {
+        context.services.tools.register({
+            name: skill.name,
+            description: skill.description,
+            parameters: {
+                type: 'object',
+                properties: skill.inputs || {}
+            },
+            handler: async (args: any) => modernAdapter.executeSkill(name, args)
+        });
+    }
     
+    // IPC endpoints for UI
+    context.ipc.handle('skills:list', async () => {
+        const legacy = Array.from(legacyAdapter.skills.values());
+        const modern = Array.from(modernAdapter.skills.values());
+        return [...legacy, ...modern];
+    });
+
+    context.ipc.handle('skills:execute', async ({ name, args }: { name: string, args: any }) => {
+        if (legacyAdapter.skills.has(name)) {
+            return legacyAdapter.executeSkill(name, args);
+        } else if (modernAdapter.skills.has(name)) {
+            return modernAdapter.executeSkill(name, args);
+        } else {
+            throw new Error(`Skill ${name} not found`);
+        }
+    });
+
     context.on('ready', () => {
       console.log('[OpenClaw Skill Manager] Ready');
     });
 };
+
   
 export const deactivate = () => {
     console.log('[OpenClaw Skill Manager] Deactivated');

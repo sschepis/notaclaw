@@ -23,7 +23,7 @@ export const BottomPanelChatTab: React.FC = () => {
                 Ideally CommandSuggestions should use a Portal, but for now we try to minimize clipping.
             */}
             <div className="flex-1 relative z-10 p-2 flex flex-col justify-start">
-                <div className="w-full max-w-4xl mx-auto">
+                <div className="w-full h-full">
                     <InputDeck onMessageSent={() => triggerScrollToBottom()} />
                 </div>
             </div>

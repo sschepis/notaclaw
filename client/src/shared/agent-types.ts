@@ -114,3 +114,16 @@ export interface AskUserArgs {
 export interface SendUpdateArgs {
   message: string;
 }
+
+// ─── Agent Teams ──────────────────────────────────────────────────────────
+
+export interface AgentTeam {
+  id: string;
+  name: string;
+  description?: string;
+  agentIds: string[];
+  created: number;
+  updated: number;
+  status: 'active' | 'inactive';
+}
+

@@ -4,6 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { StepIndicator } from './components/StepIndicator';
 import { WelcomeStep } from './steps/WelcomeStep';
+import { WorkspaceStep } from './steps/WorkspaceStep';
 import { IdentityStep } from './steps/IdentityStep';
 import { AISetupStep } from './steps/AISetupStep';
 import { ExtensionsStep } from './steps/ExtensionsStep';
@@ -21,6 +22,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ initialStep 
 
   const handleIdentityComplete = useCallback(() => {
     setStep('ai-setup');
+  }, []);
+
+  const handleWorkspaceComplete = useCallback(() => {
+    setStep('identity');
   }, []);
 
   const handleAIComplete = useCallback(() => {
@@ -63,7 +68,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ initialStep 
         <div className="bg-gray-900/70 backdrop-blur-2xl rounded-2xl border border-white/[0.08] shadow-2xl shadow-black/50 p-8 overflow-hidden">
           <AnimatePresence mode="wait">
             {step === 'welcome' && (
-              <WelcomeStep key="welcome" onNext={() => setStep('identity')} />
+              <WelcomeStep key="welcome" onNext={() => setStep('workspace')} />
+            )}
+            {step === 'workspace' && (
+              <WorkspaceStep key="workspace" onNext={handleWorkspaceComplete} />
             )}
             {step === 'identity' && (
               <IdentityStep key="identity" onComplete={handleIdentityComplete} />

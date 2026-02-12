@@ -99,6 +99,15 @@ export interface IElectronAPI {
   onSMFUpdate: (callback: (event: any, smf: any) => void) => () => void;
   onNetworkUpdate: (callback: (event: any, network: any) => void) => () => void;
 
+  // Configuration
+  configGet: () => Promise<any>;
+  configGetNetwork: () => Promise<any>;
+  configUpdateNetwork: (updates: any) => Promise<void>;
+  configAddPeer: (peerUrl: string) => Promise<void>;
+  configRemovePeer: (peerUrl: string) => Promise<void>;
+  configGetLogging: () => Promise<any>;
+  configUpdateLogging: (updates: any) => Promise<void>;
+
   // AI Provider Management
   getAISettings: () => Promise<AISettings>;
   saveAISettings: (settings: AISettings) => Promise<boolean>;

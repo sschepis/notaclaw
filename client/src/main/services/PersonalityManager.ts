@@ -667,6 +667,14 @@ export class PersonalityManager {
         let toolCallHistory = '';
 
         while (engineResult.toolResult && loopCount < MAX_LOOPS) {
+            // Check for direct markdown return (bypass AI re-prompt)
+            if (engineResult.toolResult && typeof engineResult.toolResult === 'object' && '__directMarkdown' in engineResult.toolResult) {
+                console.log('[PersonalityManager] Tool returned direct markdown, bypassing re-prompt.');
+                engineResult.text = (engineResult.toolResult as any).__directMarkdown;
+                engineResult.toolResult = undefined; // Clear tool result so we don't loop or append fallback
+                break;
+            }
+
             loopCount++;
             const toolName = engineResult.toolName || 'unknown';
             const toolOutput = JSON.stringify(engineResult.toolResult, null, 2);

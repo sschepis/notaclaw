@@ -125,9 +125,11 @@ var index_default = {
         const response = await context.ai.complete({ userPrompt: prompt });
         let code = response.text;
         code = code.replace(/```javascript/g, "").replace(/```/g, "").trim();
-        return `\`\`\`canvasviz
+        return {
+          __directMarkdown: `\`\`\`canvasviz
 ${code}
-\`\`\``;
+\`\`\``
+        };
       } catch (e) {
         return `Error generating visualization: ${e.message}`;
       }

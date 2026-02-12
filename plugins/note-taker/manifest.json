@@ -1,0 +1,15 @@
+{
+  "id": "@alephnet/note-taker",
+  "version": "0.1.0",
+  "name": "Note Taker",
+  "description": "A hierarchical note taking plugin with secure sharing.",
+  "author": "AlephNet",
+  "license": "MIT",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "store:read",
+    "store:write",
+    "dsn:invoke-tool"
+  ],
+  "semanticDomain": "cognitive"
+}

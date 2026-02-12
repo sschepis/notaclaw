@@ -11,6 +11,8 @@ import { ServiceRegistry } from './ServiceRegistry';
 import { SignedEnvelopeService } from './SignedEnvelopeService';
 import { TrustEvaluator } from './TrustEvaluator';
 import { TrustGate } from './TrustGate';
+import { createLogger } from './Logger';
+import { WorkflowEngine } from './WorkflowEngine';
 import { SignedEnvelope, Capability, TrustAssessment, CapabilityCheckResult } from '../shared/trust-types';
 import { SkillDefinition } from '../shared/types';
 import { ServiceDefinition, GatewayDefinition } from '../shared/service-types';
@@ -557,7 +559,22 @@ export class PluginManager extends BasePluginManager<PluginContext> {
             };
         }
       },
-      traits: {
+        workflow: {
+            createRunner: (config: any, options: any) => {
+                check('workflow:create');
+                return WorkflowEngine.createAIAssistantRunner(
+                    config,
+                    {
+                        aiManager: this.aiManager,
+                        dsnNode: this.dsnNode
+                    },
+                    options,
+                    createLogger(`plugin:${manifest.id}:workflow`)
+                );
+            }
+        },
+        traits: {
+
         register: (_trait: any) => {
             console.warn(`Plugin ${manifest.id} tried to register a trait (not supported in headless mode)`);
         },

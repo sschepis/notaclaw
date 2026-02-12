@@ -9,6 +9,8 @@ export const activate = (context: any) => {
             { id: 'agent-2', name: 'Writer', status: 'working', task: 'Drafting report' },
             { id: 'agent-3', name: 'Reviewer', status: 'idle', task: '' }
         ]);
+        const [taskInputFor, setTaskInputFor] = useState<string | null>(null);
+        const [taskInputValue, setTaskInputValue] = useState('Processing new directive...');
 
         const spawnAgent = () => {
             const id = `agent-${agents.length + 1}`;
@@ -16,9 +18,14 @@ export const activate = (context: any) => {
         };
 
         const assignTask = (id: string) => {
-            // Use browser prompt for now, or a custom modal in a full UI framework
-            const task = prompt("Enter task for agent:", "Processing new directive...");
+            setTaskInputFor(id);
+            setTaskInputValue('Processing new directive...');
+        };
+
+        const submitTask = (id: string) => {
+            const task = taskInputValue.trim();
             if (!task) return;
+            setTaskInputFor(null);
 
             setAgents(agents.map(a => a.id === id ? { ...a, status: 'working', task } : a));
             setTimeout(() => {
@@ -59,10 +66,36 @@ export const activate = (context: any) => {
                                 <div className="text-xs text-gray-500 italic mb-2">No active task</div>
                             )}
 
+                            {taskInputFor === agent.id && (
+                                <div className="flex gap-2 mt-2">
+                                    <input
+                                        type="text"
+                                        value={taskInputValue}
+                                        onChange={e => setTaskInputValue(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') submitTask(agent.id); if (e.key === 'Escape') setTaskInputFor(null); }}
+                                        autoFocus
+                                        className="flex-1 bg-white/10 text-white px-2 py-1 rounded text-xs border border-white/20 outline-none focus:border-blue-500"
+                                        placeholder="Enter task..."
+                                    />
+                                    <button
+                                        onClick={() => submitTask(agent.id)}
+                                        className="px-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs transition-colors"
+                                    >
+                                        Go
+                                    </button>
+                                    <button
+                                        onClick={() => setTaskInputFor(null)}
+                                        className="px-2 bg-white/10 hover:bg-white/20 text-gray-400 rounded text-xs transition-colors"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            )}
+
                             <div className="flex gap-2 mt-2">
                                 <button 
                                     onClick={() => assignTask(agent.id)}
-                                    disabled={agent.status === 'working'}
+                                    disabled={agent.status === 'working' || taskInputFor === agent.id}
                                     className="flex-1 bg-white/10 hover:bg-white/20 text-white py-1 rounded text-xs transition-colors disabled:opacity-50"
                                 >
                                     Assign Task

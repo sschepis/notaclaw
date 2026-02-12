@@ -8,6 +8,7 @@ export interface PluginContext {
   };
   ipc?: {
     send: (channel: string, data: any) => void;
+    handle: (channel: string, handler: (data: any) => any) => void;
   };
   services?: {
     gateways?: {
@@ -266,40 +267,70 @@ export default {
     
     // 1. Initialize the Gateway
     const gateway = new WebhookGateway(context, 3000);
+    const requestLogs: Array<{ type: string; message: string; timestamp: number }> = [];
     
+    // 2. Register IPC handlers for the renderer UI
+    if (context.ipc && context.ipc.handle) {
+      context.ipc.handle('gateway:get-status', async () => {
+        return {
+          status: gateway.status === 'connected' ? 'running' : gateway.status,
+          port: gateway.port,
+          logs: requestLogs.slice(-100) // Last 100 entries
+        };
+      });
+
+      context.ipc.handle('gateway:set-port', async (data: { port: number }) => {
+        if (data && typeof data.port === 'number' && data.port > 0 && data.port < 65536) {
+          await gateway.disconnect();
+          gateway.port = data.port;
+          await gateway.connect();
+          return { success: true, port: gateway.port };
+        }
+        return { success: false, error: 'Invalid port' };
+      });
+    }
+
+    // 3. Listen for normalized messages and bridge to AlephNet
+    gateway.onMessage((msg) => {
+      // Log sensitive data only in debug mode (omitted for prod logic)
+      console.log(`[API Gateway] Received from ${msg.source} (${msg.author.name})`);
+      
+      // Track request log for UI
+      requestLogs.push({
+        type: 'info',
+        message: `${msg.source} ${msg.author.name}: ${msg.content.substring(0, 100)}`,
+        timestamp: Date.now()
+      });
+      if (requestLogs.length > 500) requestLogs.splice(0, requestLogs.length - 500);
+      
+      // Publish to AlephNet Graph
+      if (context.dsn) {
+        try {
+          context.dsn.publishObservation(
+            `Message from ${msg.author.name} in #${msg.channelId}: ${msg.content}`,
+            [] // Host handles SMF projection
+          );
+        } catch (err) {
+          console.error('[API Gateway] Failed to publish observation:', err);
+        }
+      }
+      
+      // Emit via IPC for UI
+      if (context.ipc) {
+          context.ipc.send('gateway:message', msg);
+      }
+    });
+
     try {
       await gateway.connect();
       
-      // 2. Register with Host Services
+      // 4. Register with Host Services
       if (context.services && context.services.gateways) {
         context.services.gateways.register(gateway);
         console.log('[API Gateway] Registered as "webhook" gateway');
       } else {
         console.warn('[API Gateway] Host does not support gateway registration. Running standalone.');
       }
-
-      // 3. Listen for normalized messages and bridge to AlephNet
-      gateway.onMessage((msg) => {
-        // Log sensitive data only in debug mode (omitted for prod logic)
-        console.log(`[API Gateway] Received from ${msg.source} (${msg.author.name})`);
-        
-        // Publish to AlephNet Graph
-        if (context.dsn) {
-          try {
-            context.dsn.publishObservation(
-              `Message from ${msg.author.name} in #${msg.channelId}: ${msg.content}`, 
-              [] // Host handles SMF projection
-            );
-          } catch (err) {
-            console.error('[API Gateway] Failed to publish observation:', err);
-          }
-        }
-        
-        // Emit via IPC for UI
-        if (context.ipc) {
-            context.ipc.send('gateway:message', msg);
-        }
-      });
 
     } catch (err) {
       console.error('[API Gateway] Failed to start:', err);

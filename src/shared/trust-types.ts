@@ -100,6 +100,7 @@ export type Capability =
   | 'ui:notification'
   | 'ui:overlay'
   | 'ai:complete'
+  | 'workflow:create'
   // Memory capabilities
   | 'memory:read'           // Read any field user has access to
   | 'memory:write'          // Write to owned fields

@@ -1,101 +1,107 @@
-
-import { activate, deactivate } from '../main/index';
+import { activate } from '../main/index';
 
 describe('Notification Center Main Process', () => {
-  let context: any;
-  let notifications: any[] = [];
-  let handlers: { [key: string]: Function } = {};
-  let listeners: { [key: string]: Function } = {};
+    let context: any;
+    let storage: any;
+    let ipcHandlers: { [key: string]: Function } = {};
+    let ipcListeners: { [key: string]: Function } = {};
 
-  beforeEach(() => {
-    jest.useFakeTimers();
-    notifications = [];
-    handlers = {};
-    listeners = {};
-    context = {
-      ipc: {
-        on: jest.fn((channel, listener) => {
-          listeners[channel] = listener;
-        }),
-        send: jest.fn(),
-        handle: jest.fn((channel, handler) => {
-          handlers[channel] = handler;
-        })
-      },
-      on: jest.fn((event, listener) => {
-        if (event === 'ready') listener();
-      })
-    };
-  });
+    beforeEach(() => {
+        storage = {
+            data: {},
+            get: jest.fn(async (key) => storage.data[key]),
+            set: jest.fn(async (key, value) => { storage.data[key] = value; }),
+        };
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
+        ipcHandlers = {};
+        ipcListeners = {};
 
-  test('activate registers IPC handlers', () => {
-    activate(context);
-    expect(context.ipc.on).toHaveBeenCalledWith('notify', expect.any(Function));
-    expect(context.ipc.handle).toHaveBeenCalledWith('notifications:list', expect.any(Function));
-    expect(context.ipc.handle).toHaveBeenCalledWith('notifications:markRead', expect.any(Function));
-    expect(context.ipc.handle).toHaveBeenCalledWith('notifications:clear', expect.any(Function));
-  });
+        context = {
+            storage,
+            ipc: {
+                on: jest.fn((channel, handler) => { ipcListeners[channel] = handler; }),
+                handle: jest.fn((channel, handler) => { ipcHandlers[channel] = handler; }),
+                send: jest.fn(),
+            },
+            on: jest.fn(),
+            dsn: {
+                registerTool: jest.fn(),
+            }
+        };
+    });
 
-  test('notifications:list returns empty array initially', async () => {
-    activate(context);
-    const result = await handlers['notifications:list']();
-    expect(result).toEqual([]);
-  });
+    test('should activate and register handlers', async () => {
+        await activate(context);
+        expect(context.ipc.handle).toHaveBeenCalledWith('notifications:list', expect.any(Function));
+        expect(context.ipc.on).toHaveBeenCalledWith('notify', expect.any(Function));
+    });
 
-  test('notify listener adds notification', async () => {
-    activate(context);
-    const notifyListener = listeners['notify'];
-    
-    notifyListener({ title: 'Test', message: 'Message', type: 'info' });
-    
-    expect(context.ipc.send).toHaveBeenCalledWith('notification:new', expect.objectContaining({
-      title: 'Test',
-      message: 'Message',
-      type: 'info',
-      read: false
-    }));
+    test('should add a notification via notify channel', async () => {
+        await activate(context);
+        
+        const notify = ipcListeners['notify'];
+        await notify({ title: 'Test', message: 'Message' });
 
-    const listResult = await handlers['notifications:list']();
-    expect(listResult).toHaveLength(1);
-    expect(listResult[0].title).toBe('Test');
-  });
+        const list = ipcHandlers['notifications:list'];
+        const notifications = await list();
+        
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0].title).toBe('Test');
+        expect(context.ipc.send).toHaveBeenCalledWith('notification:new', expect.any(Object));
+    });
 
-  test('notifications:markRead marks notification as read', async () => {
-    activate(context);
-    const notifyListener = listeners['notify'];
-    
-    // Add a notification (we need to capture its ID or rely on list)
-    notifyListener({ title: 'Test' });
-    
-    // Get the notification from list to find its ID
-    const listResult = await handlers['notifications:list']();
-    const notificationId = listResult[0].id;
+    test('should handle overflow eviction', async () => {
+        await activate(context);
+        const notify = ipcListeners['notify'];
+        
+        // Add 105 notifications
+        for (let i = 0; i < 105; i++) {
+            await notify({ title: `Msg ${i}`, message: 'body' });
+        }
 
-    // Mark as read
-    const markReadResult = await handlers['notifications:markRead']({ id: notificationId });
-    expect(markReadResult).toEqual({ success: true });
+        const list = ipcHandlers['notifications:list'];
+        const notifications = await list();
+        
+        expect(notifications).toHaveLength(100);
+        // The last added (index 104) should be at the beginning (index 0) because of unshift
+        expect(notifications[0].title).toBe('Msg 104');
+    });
 
-    // Verify it is read
-    const updatedList = await handlers['notifications:list']();
-    expect(updatedList[0].read).toBe(true);
-  });
+    test('should mark notification as read', async () => {
+        await activate(context);
+        const notify = ipcListeners['notify'];
+        await notify({ title: 'Test', message: 'Message' });
+        
+        const list = ipcHandlers['notifications:list'];
+        let notifications = await list();
+        const id = notifications[0].id;
 
-  test('notifications:clear clears all notifications', async () => {
-    activate(context);
-    const notifyListener = listeners['notify'];
-    notifyListener({ title: 'Test 1' });
-    notifyListener({ title: 'Test 2' });
+        const markRead = ipcHandlers['notifications:markRead'];
+        await markRead({ id });
 
-    let listResult = await handlers['notifications:list']();
-    expect(listResult).toHaveLength(2);
+        notifications = await list();
+        expect(notifications[0].read).toBe(true);
+    });
 
-    await handlers['notifications:clear']();
-    
-    listResult = await handlers['notifications:list']();
-    expect(listResult).toHaveLength(0);
-  });
+    test('should clear all notifications', async () => {
+        await activate(context);
+        const notify = ipcListeners['notify'];
+        await notify({ title: 'Test', message: 'Message' });
+        
+        const clear = ipcHandlers['notifications:clear'];
+        await clear();
+
+        const list = ipcHandlers['notifications:list'];
+        const notifications = await list();
+        expect(notifications).toHaveLength(0);
+    });
+
+    test('should persist notifications', async () => {
+        await activate(context);
+        const notify = ipcListeners['notify'];
+        await notify({ title: 'Persistent', message: 'Message' });
+
+        expect(storage.set).toHaveBeenCalledWith('notifications', expect.any(Array));
+        expect(storage.data['notifications'][0].title).toBe('Persistent');
+    });
 });

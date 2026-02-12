@@ -5,11 +5,14 @@ import { AISettings, AIProviderConfig, AIRoutingRule } from '../../../shared/ai-
 import { ProvidersTab } from './tabs/ProvidersTab';
 import { RoutingRulesTab } from './tabs/RoutingRulesTab';
 import { EditProviderDialog } from './EditProviderDialog';
-import { Settings, Cpu, Palette, LayoutGrid, X } from 'lucide-react';
+import { GeneralSettings } from './GeneralSettings';
+import { PluginSettingsRenderer } from './PluginSettingsRenderer';
+import { Settings, Cpu, Palette, LayoutGrid, X, Puzzle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useSettingsTabs } from '../../services/SlotRegistry';
 import { SlotErrorBoundary } from '../ui/SlotErrorBoundary';
 import { useAppStore } from '../../store/useAppStore';
+import { usePluginStore } from '../../store/usePluginStore';
 import { BUILT_IN_THEMES, DEFAULT_CUSTOM_THEME } from '../../themes';
 import { hexToHSL, hslToHex } from '../../utils/color';
 
@@ -30,6 +33,7 @@ const DEFAULT_PROVIDER: AIProviderConfig = {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) => {
   const [activeCategory, setActiveCategory] = useState('ai');
   const { theme, setTheme, customTheme, updateCustomTheme } = useAppStore();
+  const { plugins } = usePluginStore();
   
   // AI Settings State
   const [settings, setSettings] = useState<AISettings>({ providers: [], rules: [] });
@@ -118,6 +122,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
   // Get plugin-registered settings tabs
   const pluginSettingsTabs = useSettingsTabs();
 
+  // Filter plugins that have configuration but NO registered settings tab
+  const configurablePlugins = useMemo(() => {
+    return plugins.filter(p => 
+      p.alephConfig?.configuration && 
+      p.alephConfig.configuration.length > 0 &&
+      !pluginSettingsTabs.find(t => t.pluginId === p.id)
+    );
+  }, [plugins, pluginSettingsTabs]);
+
   const NAV_ITEMS = useMemo(() => [
     { id: 'general', label: 'General', icon: Settings },
     { id: 'ai', label: 'AI & Models', icon: Cpu },
@@ -126,6 +139,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
   
   // Check if current category is a plugin tab
   const activePluginTab = pluginSettingsTabs.find(t => t.id === activeCategory);
+  
+  // Check if current category is a configurable plugin (auto-generated)
+  const activeConfigurablePlugin = configurablePlugins.find(p => `plugin:${p.id}` === activeCategory);
 
   return (
     <>
@@ -134,7 +150,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
           
           <div className="flex flex-1 overflow-hidden">
               {/* Sidebar */}
-              <div className="w-64 bg-card/60 border-r border-border p-4 space-y-2 backdrop-blur-sm flex flex-col">
+              <div className="w-64 bg-card/60 border-r border-border p-4 space-y-2 backdrop-blur-sm flex flex-col overflow-y-auto">
                   <div className="mb-6 px-4">
                 <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
                       <LayoutGrid className="w-6 h-6 text-blue-500" />
@@ -164,6 +180,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
                     {pluginSettingsTabs.length > 0 && (
                       <>
                         <div className="my-2 border-t border-border" />
+                        <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Extensions
+                        </div>
                         {pluginSettingsTabs.map(tab => {
                           const Icon = tab.icon;
                           return (
@@ -182,6 +201,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
                             </button>
                           );
                         })}
+                      </>
+                    )}
+
+                    {/* Configurable Plugins (Auto-generated) */}
+                    {configurablePlugins.length > 0 && (
+                      <>
+                        <div className="my-2 border-t border-border" />
+                        <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Plugins
+                        </div>
+                        {configurablePlugins.map(plugin => (
+                          <button
+                            key={plugin.id}
+                            onClick={() => setActiveCategory(`plugin:${plugin.id}`)}
+                            className={cn(
+                              "w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-3",
+                              activeCategory === `plugin:${plugin.id}`
+                                ? "bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/5"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                          >
+                            <Puzzle className={cn("w-4 h-4", activeCategory === `plugin:${plugin.id}` ? "text-emerald-400" : "text-muted-foreground")} />
+                            {plugin.name}
+                          </button>
+                        ))}
                       </>
                     )}
                   </div>
@@ -205,13 +249,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
                   <div className="flex-1 overflow-y-auto p-8">
                     {/* General Settings */}
                     {activeCategory === 'general' && (
-                        <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <h2 className="text-2xl font-bold text-foreground mb-6">General Settings</h2>
-                            <div className="p-8 border border-border rounded-xl bg-card/40 text-center">
-                                <Settings className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                                <p className="text-muted-foreground">Application preferences will appear here.</p>
-                            </div>
-                        </div>
+                        <GeneralSettings />
                     )}
 
                     {/* AI Settings */}
@@ -375,7 +413,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
                         </div>
                     )}
                     
-                    {/* Plugin Settings Tabs */}
+                    {/* Plugin Settings Tabs (Explicitly Registered) */}
                     {activePluginTab && (
                         <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <h2 className="text-2xl font-bold text-foreground mb-6">{activePluginTab.label}</h2>
@@ -383,6 +421,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
                                 <activePluginTab.component />
                             </SlotErrorBoundary>
                         </div>
+                    )}
+
+                    {/* Auto-generated Plugin Settings */}
+                    {activeConfigurablePlugin && (
+                        <PluginSettingsRenderer plugin={activeConfigurablePlugin} />
                     )}
                   </div>
                   

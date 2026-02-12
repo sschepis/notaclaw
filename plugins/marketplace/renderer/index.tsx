@@ -8,12 +8,18 @@ export const activate = (context: any) => {
     const MarketplacePanel = () => {
         const [plugins, setPlugins] = useState<any[]>([]);
         const [loading, setLoading] = useState(false);
+        const [statusMsg, setStatusMsg] = useState('');
 
         useEffect(() => {
             const fetchPlugins = async () => {
                 if (context.ipc && context.ipc.invoke) {
-                    const list = await context.ipc.invoke('marketplace:list');
-                    setPlugins(list);
+                    try {
+                        const list = await context.ipc.invoke('marketplace:list');
+                        setPlugins(list || []);
+                    } catch (e: any) {
+                        console.error('[Marketplace] Failed to fetch plugin list:', e);
+                        setPlugins([]);
+                    }
                 }
             };
             fetchPlugins();
@@ -21,11 +27,12 @@ export const activate = (context: any) => {
 
         const handleInstall = async (pluginId: string) => {
             setLoading(true);
+            setStatusMsg('');
             try {
                 const result = await context.ipc.invoke('marketplace:install', { pluginId });
-                alert(result.message);
+                setStatusMsg(result.message || 'Installed successfully');
             } catch (e: any) {
-                alert('Installation failed: ' + e.message);
+                setStatusMsg('Installation failed: ' + e.message);
             } finally {
                 setLoading(false);
             }
@@ -54,7 +61,8 @@ export const activate = (context: any) => {
                             <p className="text-sm text-gray-300">{plugin.description}</p>
                         </div>
                     ))}
-                    {plugins.length === 0 && <div className="text-center text-gray-500 mt-8">Loading registry...</div>}
+                    {statusMsg && <div className="text-center text-yellow-400 mt-4 text-sm">{statusMsg}</div>}
+                    {plugins.length === 0 && <div className="text-center text-gray-500 mt-8">No plugins available.</div>}
                 </div>
             </div>
         );

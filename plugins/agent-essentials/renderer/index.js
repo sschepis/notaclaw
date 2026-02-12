@@ -33,10 +33,10 @@ __export(index_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(index_exports);
-var import_lucide_react6 = require("lucide-react");
+var import_lucide_react8 = require("lucide-react");
 
 // plugins/agent-essentials/renderer/AgentsPanel.tsx
-var import_react5 = require("react");
+var import_react7 = require("react");
 var import_alephnet6 = require("alephnet");
 
 // plugins/agent-essentials/renderer/views/AgentListView.tsx
@@ -2841,7 +2841,7 @@ var AgentListView = () => {
               agent.templateId
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { children: [
-              agent.beliefs.length,
+              agent.beliefs?.length || 0,
               " beliefs"
             ] })
           ] })
@@ -2909,11 +2909,11 @@ var AgentDetailView = ({ agentId, onBack }) => {
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "p-3 border-b border-white/5", children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-2", children: "Goal Priors" }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "flex gap-2 flex-wrap", children: Object.entries(agent.goalPriors).map(([key, val]) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "text-[10px] px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-full", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "flex gap-2 flex-wrap", children: agent.goalPriors ? Object.entries(agent.goalPriors).map(([key, val]) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "text-[10px] px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-full", children: [
         key,
         ": ",
         val
-      ] }, key)) })
+      ] }, key)) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "text-[10px] text-gray-500 italic", children: "No goal priors defined" }) })
     ] }),
     agent.status === "active" && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "p-3 border-b border-white/5", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "flex gap-2", children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
@@ -3130,8 +3130,306 @@ var LogView = () => {
   ] }, `${step.timestamp}-${i}`)) });
 };
 
-// plugins/agent-essentials/renderer/AgentsPanel.tsx
+// plugins/agent-essentials/renderer/components/FileExplorer.tsx
+var import_react5 = require("react");
+var import_lucide_react6 = require("lucide-react");
+
+// plugins/agent-essentials/renderer/ipc.ts
+var ipc = null;
+var setIpc = (i) => {
+  ipc = i;
+};
+var getIpc = () => {
+  if (!ipc) {
+    console.warn("IPC not initialized");
+  }
+  return ipc;
+};
+
+// plugins/agent-essentials/renderer/components/FileExplorer.tsx
 var import_jsx_runtime8 = require("react/jsx-runtime");
+var FileExplorer = () => {
+  const [currentPath, setCurrentPath] = (0, import_react5.useState)("~/alephnet/sandbox");
+  const [files, setFiles] = (0, import_react5.useState)([]);
+  const [selectedFile, setSelectedFile] = (0, import_react5.useState)(null);
+  const [fileContent, setFileContent] = (0, import_react5.useState)("");
+  const [loading, setLoading] = (0, import_react5.useState)(false);
+  const [error, setError] = (0, import_react5.useState)(null);
+  const [showHidden, setShowHidden] = (0, import_react5.useState)(false);
+  const filteredFiles = showHidden ? files : files.filter((f) => !f.startsWith("."));
+  const ipc2 = getIpc();
+  const loadFiles = async (path) => {
+    if (!ipc2) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await ipc2.invoke("fs:list", { path });
+      setFiles(result);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const loadFileContent = async (path) => {
+    if (!ipc2) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const content = await ipc2.invoke("fs:read", { path });
+      setFileContent(content);
+      setSelectedFile(path);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  (0, import_react5.useEffect)(() => {
+    loadFiles(currentPath);
+  }, [currentPath]);
+  const handleNavigate = (path) => {
+    setCurrentPath(path);
+    setSelectedFile(null);
+  };
+  const handleFileClick = (filename) => {
+    const newPath = `${currentPath}/${filename}`;
+    loadFiles(newPath).catch(() => {
+      loadFileContent(newPath);
+    });
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex flex-col h-full bg-gray-900 text-white p-4", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center justify-between mb-4 bg-gray-800 p-2 rounded-lg", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center space-x-2 text-sm text-gray-400 overflow-hidden", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_lucide_react6.Home, { size: 16, className: "flex-shrink-0" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "truncate", children: currentPath })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center space-x-2 flex-shrink-0", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          "button",
+          {
+            onClick: () => setShowHidden(!showHidden),
+            className: `p-1 rounded transition-colors ${showHidden ? "bg-blue-600 text-white" : "hover:bg-white/10 text-gray-400"}`,
+            title: showHidden ? "Hide hidden files" : "Show hidden files",
+            children: showHidden ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_lucide_react6.Eye, { size: 16 }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_lucide_react6.EyeOff, { size: 16 })
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { onClick: () => loadFiles(currentPath), className: "p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_lucide_react6.RefreshCw, { size: 16 }) })
+      ] })
+    ] }),
+    error && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bg-red-500/20 text-red-400 p-2 rounded mb-2 text-sm", children: error }),
+    selectedFile ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex-1 flex flex-col min-h-0", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center mb-2", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { onClick: () => setSelectedFile(null), className: "mr-2 p-1 hover:bg-white/10 rounded", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_lucide_react6.ArrowLeft, { size: 16 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-medium", children: selectedFile.split("/").pop() })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        "textarea",
+        {
+          className: "flex-1 bg-black/50 p-2 rounded font-mono text-xs resize-none focus:outline-none focus:ring-1 focus:ring-blue-500",
+          value: fileContent,
+          readOnly: true
+        }
+      )
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex-1 overflow-y-auto min-h-0 space-y-1", children: [
+      currentPath !== "~/alephnet/sandbox" && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+        "div",
+        {
+          className: "flex items-center p-2 hover:bg-white/5 rounded cursor-pointer",
+          onClick: () => {
+            const parts = currentPath.split("/");
+            parts.pop();
+            setCurrentPath(parts.join("/"));
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_lucide_react6.Folder, { size: 16, className: "text-yellow-500 mr-2" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: ".." })
+          ]
+        }
+      ),
+      filteredFiles.map((file, idx) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+        "div",
+        {
+          className: "flex items-center p-2 hover:bg-white/5 rounded cursor-pointer group",
+          onClick: () => handleNavigate(`${currentPath}/${file}`),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_lucide_react6.FileText, { size: 16, className: "text-blue-400 mr-2" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "flex-1", children: file })
+          ]
+        },
+        idx
+      )),
+      filteredFiles.length === 0 && !loading && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-center text-gray-500 py-4", children: "No files found" })
+    ] })
+  ] });
+};
+
+// plugins/agent-essentials/renderer/components/SystemMonitor.tsx
+var import_react6 = require("react");
+var import_lucide_react7 = require("lucide-react");
+var import_jsx_runtime9 = require("react/jsx-runtime");
+var SystemMonitor = () => {
+  const [stats, setStats] = (0, import_react6.useState)(null);
+  const [loading, setLoading] = (0, import_react6.useState)(false);
+  const [error, setError] = (0, import_react6.useState)(null);
+  const ipc2 = getIpc();
+  const fetchStats = async () => {
+    if (!ipc2) return;
+    try {
+      const data = await ipc2.invoke("sys:info", {});
+      setStats(data);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  (0, import_react6.useEffect)(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 5e3);
+    return () => clearInterval(interval);
+  }, []);
+  if (!stats) {
+    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "p-4 text-gray-500", children: "Loading system stats..." });
+  }
+  const { cpu, memory, os, network } = stats;
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex flex-col h-full bg-gray-900 text-white p-4 space-y-4 overflow-y-auto", children: [
+    error && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "bg-red-500/20 text-red-400 p-2 rounded text-sm", children: error }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "bg-white/5 p-4 rounded-lg", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center mb-2 text-blue-400", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(import_lucide_react7.Cpu, { size: 20, className: "mr-2" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { className: "font-semibold", children: "CPU" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "space-y-1 text-sm", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Model:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-right", children: [
+              cpu.manufacturer,
+              " ",
+              cpu.brand
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Cores:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
+              cpu.physicalCores,
+              " Physical / ",
+              cpu.cores,
+              " Logical"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Speed:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
+              cpu.speed,
+              " GHz"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-2", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-xs text-gray-400 mb-1", children: "Load" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "w-full bg-gray-700 h-2 rounded-full overflow-hidden", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              "div",
+              {
+                className: "bg-blue-500 h-full transition-all duration-500",
+                style: { width: `${cpu.load}%` }
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-right text-xs mt-1", children: [
+              cpu.load.toFixed(1),
+              "%"
+            ] })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "bg-white/5 p-4 rounded-lg", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center mb-2 text-purple-400", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(import_lucide_react7.Activity, { size: 20, className: "mr-2" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { className: "font-semibold", children: "Memory" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "space-y-1 text-sm", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Total:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
+              (memory.total / 1024 / 1024 / 1024).toFixed(1),
+              " GB"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Used:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
+              (memory.used / 1024 / 1024 / 1024).toFixed(1),
+              " GB"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Free:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
+              (memory.free / 1024 / 1024 / 1024).toFixed(1),
+              " GB"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-2", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-xs text-gray-400 mb-1", children: "Usage" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "w-full bg-gray-700 h-2 rounded-full overflow-hidden", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              "div",
+              {
+                className: "bg-purple-500 h-full transition-all duration-500",
+                style: { width: `${memory.used / memory.total * 100}%` }
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-right text-xs mt-1", children: [
+              (memory.used / memory.total * 100).toFixed(1),
+              "%"
+            ] })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "bg-white/5 p-4 rounded-lg", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center mb-2 text-green-400", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(import_lucide_react7.HardDrive, { size: 20, className: "mr-2" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { className: "font-semibold", children: "System" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "space-y-1 text-sm", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Platform:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "capitalize", children: os.platform })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Distro:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: os.distro })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Release:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: os.release })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-400", children: "Hostname:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: os.hostname })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "bg-white/5 p-4 rounded-lg", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center mb-2 text-yellow-400", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(import_lucide_react7.Wifi, { size: 20, className: "mr-2" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { className: "font-semibold", children: "Network" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "space-y-2 text-sm max-h-40 overflow-y-auto", children: network.map((iface, idx) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "border-b border-white/5 pb-2 last:border-0", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "font-medium text-gray-300", children: iface.iface }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between text-xs", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-500", children: "IPv4:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: iface.ip4 })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex justify-between text-xs", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-500", children: "MAC:" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: iface.mac })
+          ] })
+        ] }, idx)) })
+      ] })
+    ] })
+  ] });
+};
+
+// plugins/agent-essentials/renderer/AgentsPanel.tsx
+var import_jsx_runtime10 = require("react/jsx-runtime");
 var AgentsPanel = () => {
   const {
     agents: { activeAgentId, activeTeamId },
@@ -3140,48 +3438,51 @@ var AgentsPanel = () => {
     setActiveAgent,
     setActiveTeam
   } = (0, import_alephnet6.useAlephStore)();
-  const [tab, setTab] = (0, import_react5.useState)("agents");
-  (0, import_react5.useEffect)(() => {
+  const [tab, setTab] = (0, import_react7.useState)("agents");
+  (0, import_react7.useEffect)(() => {
     loadAgents();
     loadTeams();
   }, []);
   if (activeAgentId) {
-    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(AgentDetailView, { agentId: activeAgentId, onBack: () => setActiveAgent(null) });
+    return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(AgentDetailView, { agentId: activeAgentId, onBack: () => setActiveAgent(null) });
   }
   if (activeTeamId) {
-    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(TeamDetailView, { teamId: activeTeamId, onBack: () => setActiveTeam(null) });
+    return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(TeamDetailView, { teamId: activeTeamId, onBack: () => setActiveTeam(null) });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "h-full flex flex-col", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "flex border-b border-white/5 bg-white/5", children: ["agents", "teams", "log"].map((t) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "h-full flex flex-col", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "flex border-b border-white/5 bg-white/5 overflow-x-auto", children: ["agents", "teams", "log", "files", "system"].map((t) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
       "button",
       {
         onClick: () => setTab(t),
-        className: `flex-1 py-2.5 text-xs font-medium capitalize transition-colors relative ${tab === t ? "text-blue-400" : "text-gray-500 hover:text-gray-300"}`,
+        className: `flex-1 py-2.5 px-3 text-xs font-medium capitalize transition-colors relative whitespace-nowrap ${tab === t ? "text-blue-400" : "text-gray-500 hover:text-gray-300"}`,
         children: [
           t,
           " ",
-          tab === t && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" })
+          tab === t && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" })
         ]
       },
       t
     )) }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex-1 overflow-y-auto p-3 space-y-2", children: [
-      tab === "agents" && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(AgentListView, {}),
-      tab === "teams" && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(TeamListView, {}),
-      tab === "log" && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(LogView, {})
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "flex-1 overflow-y-auto p-3 space-y-2", children: [
+      tab === "agents" && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(AgentListView, {}),
+      tab === "teams" && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(TeamListView, {}),
+      tab === "log" && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(LogView, {}),
+      tab === "files" && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(FileExplorer, {}),
+      tab === "system" && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(SystemMonitor, {})
     ] })
   ] });
 };
 
 // plugins/agent-essentials/renderer/index.tsx
-var import_jsx_runtime9 = require("react/jsx-runtime");
+var import_jsx_runtime11 = require("react/jsx-runtime");
 var activate = (context) => {
   console.log("[Agent Essentials] Renderer activated");
-  const { React: React9, useAppStore, ui } = context;
+  const { React: React11, useAppStore, ui } = context;
+  setIpc(context.ipc);
   const AgentEssentialsButton = () => {
     const { activeSidebarView, setActiveSidebarView } = useAppStore();
     const isActive = activeSidebarView === "agents";
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       "button",
       {
         className: `w-9 h-9 rounded-lg flex items-center justify-center transition-all ${isActive ? "bg-blue-600 text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"}`,
@@ -3196,17 +3497,17 @@ var activate = (context) => {
     cleanups.push(context.ui.registerStageView({
       id: "agent-essentials-panel",
       name: "Agent Essentials",
-      icon: import_lucide_react6.Bot,
+      icon: import_lucide_react8.Bot,
       component: AgentsPanel
     }));
     cleanups.push(context.ui.registerNavigation({
       id: "agent-essentials-nav",
       label: "Agents",
-      icon: import_lucide_react6.Bot,
+      icon: import_lucide_react8.Bot,
       view: {
         id: "agent-essentials-panel",
         name: "Agent Essentials",
-        icon: import_lucide_react6.Bot,
+        icon: import_lucide_react8.Bot,
         component: AgentsPanel
       },
       order: 20
@@ -3218,7 +3519,7 @@ var activate = (context) => {
     cleanups.push(ui.registerCommand({
       id: "agent-essentials:open-agents",
       label: "Open Agents Panel",
-      icon: import_lucide_react6.Bot,
+      icon: import_lucide_react8.Bot,
       category: "Agent Essentials",
       action: () => {
         const store = useAppStore.getState();
@@ -3228,7 +3529,7 @@ var activate = (context) => {
     cleanups.push(ui.registerCommand({
       id: "agent-essentials:list-agents",
       label: "List Active Agents",
-      icon: import_lucide_react6.List,
+      icon: import_lucide_react8.List,
       category: "Agent Essentials",
       action: () => {
         const store = useAppStore.getState();
@@ -3238,7 +3539,7 @@ var activate = (context) => {
     cleanups.push(ui.registerCommand({
       id: "agent-essentials:create-agent",
       label: "Create New Agent",
-      icon: import_lucide_react6.Plus,
+      icon: import_lucide_react8.Plus,
       category: "Agent Essentials",
       action: () => {
         const store = useAppStore.getState();
@@ -3248,7 +3549,7 @@ var activate = (context) => {
     cleanups.push(ui.registerCommand({
       id: "agent-essentials:manage-teams",
       label: "Manage Agent Teams",
-      icon: import_lucide_react6.Users,
+      icon: import_lucide_react8.Users,
       category: "Agent Essentials",
       action: () => {
         const store = useAppStore.getState();

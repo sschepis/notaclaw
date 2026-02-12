@@ -30,6 +30,7 @@ interface InputAreaProps {
   interimTranscript?: string;
   selectedModel?: string | null;
   onModelChange?: (model: string) => void;
+  className?: string;
 }
 
 export const InputArea: React.FC<InputAreaProps> = ({
@@ -55,6 +56,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
   interimTranscript = '',
   selectedModel,
   onModelChange,
+  className,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -78,6 +80,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
             ? 'bg-background border-primary/50 shadow-glow-sm'
             : 'bg-muted/10 border-border/40 hover:border-primary/20 hover:bg-muted/20'}
         ${isGenerating ? 'opacity-75' : ''}
+        ${className || ''}
     `}>
       {/* Drop overlay */}
       <AnimatePresence>
@@ -110,7 +113,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
         rows={1}
         disabled={isGenerating}
         readOnly={isListening}
-        className={`bg-transparent border-none placeholder-muted-foreground focus-visible:ring-0 text-sm p-3 w-full resize-none custom-scrollbar font-medium leading-relaxed min-h-[60px] ${
+        className={`bg-transparent border-none placeholder-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 text-sm p-3 w-full resize-none custom-scrollbar font-medium leading-relaxed min-h-[60px] flex-1 ${
           isGenerating ? 'text-muted-foreground cursor-not-allowed' : 'text-foreground'
         } ${isListening ? 'cursor-wait' : ''}`}
       />

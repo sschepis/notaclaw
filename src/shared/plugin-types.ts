@@ -188,6 +188,11 @@ export interface PluginContext {
     complete(request: any): Promise<{ text: string; raw?: any }>;
   };
 
+  // Workflow Engine
+  workflow: {
+    createRunner(config: any, options?: any): any;
+  };
+
   // Trait Registry
   traits: {
     register(trait: TraitDefinition): void;

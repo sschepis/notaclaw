@@ -91,6 +91,7 @@ export interface AppState {
   smf: number[]; // 16-dim vector
   network: NetworkState;
   hasIdentity: boolean;
+  workspacePath: string | null;
   activeSidebarView: SidebarView;
   isTerminalOpen: boolean;
   navOrder: string[];
@@ -142,6 +143,7 @@ export interface AppState {
   setSMF: (smf: number[]) => void;
   setNetwork: (network: Partial<NetworkState>) => void;
   setHasIdentity: (hasIdentity: boolean) => void;
+  setWorkspacePath: (path: string | null) => void;
   setActiveSidebarView: (view: SidebarView) => void;
   setIsTerminalOpen: (isOpen: boolean) => void;
   setNavOrder: (order: string[]) => void;

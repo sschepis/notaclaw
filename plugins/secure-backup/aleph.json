@@ -10,12 +10,22 @@
   "skills": [
     {
       "name": "backup_data",
-      "description": "Create an encrypted backup of application data",
+      "description": "Create an encrypted backup of application data with optional passphrase protection",
       "executionLocation": "CLIENT"
     },
     {
       "name": "restore_backup",
-      "description": "Restore data from an encrypted backup",
+      "description": "Restore data from an encrypted backup with integrity verification",
+      "executionLocation": "CLIENT"
+    },
+    {
+      "name": "verify_backup",
+      "description": "Verify the integrity and authenticity of a backup file",
+      "executionLocation": "CLIENT"
+    },
+    {
+      "name": "list_backups",
+      "description": "List all available backups with metadata",
       "executionLocation": "CLIENT"
     }
   ],
@@ -25,5 +35,37 @@
     "fs:write",
     "store:read",
     "store:write"
-  ]
+  ],
+  "configuration": {
+    "secure-backup.autoBackup.enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable automatic scheduled backups"
+    },
+    "secure-backup.autoBackup.intervalMinutes": {
+      "type": "number",
+      "default": 60,
+      "description": "Interval between automatic backups in minutes"
+    },
+    "secure-backup.retention.maxBackups": {
+      "type": "number",
+      "default": 20,
+      "description": "Maximum number of backups to retain"
+    },
+    "secure-backup.retention.maxAgeDays": {
+      "type": "number",
+      "default": 90,
+      "description": "Maximum age of backups in days"
+    },
+    "secure-backup.maxSizeMB": {
+      "type": "number",
+      "default": 50,
+      "description": "Maximum backup size in megabytes"
+    },
+    "secure-backup.shutdownBackup": {
+      "type": "boolean",
+      "default": false,
+      "description": "Automatically create backup on application shutdown"
+    }
+  }
 }

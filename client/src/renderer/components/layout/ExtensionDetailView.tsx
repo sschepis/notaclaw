@@ -36,15 +36,25 @@ export const ExtensionDetailView: React.FC = () => {
                 
                 if (isInstalled && plugin?.path) {
                     // Try to read README.md from the plugin directory
-                    try {
-                        content = await window.electronAPI.readPluginFile(plugin.path + '/README.md');
-                    } catch (e) {
-                        // Try lowercase
+                    const readmeCandidates = ['README.md', 'readme.md', 'README.txt', 'readme.txt', 'README'];
+                    
+                    console.log(`[ExtensionDetailView] Looking for README in ${plugin.path}`);
+                    
+                    for (const candidate of readmeCandidates) {
                         try {
-                            content = await window.electronAPI.readPluginFile(plugin.path + '/readme.md');
-                        } catch (e2) {
-                            console.warn('No README found for plugin', pluginId);
+                            const candidatePath = `${plugin.path}/${candidate}`;
+                            content = await window.electronAPI.readPluginFile(candidatePath);
+                            if (content) {
+                                console.log(`[ExtensionDetailView] Found README at ${candidatePath}`);
+                                break;
+                            }
+                        } catch (e) {
+                            // Continue to next candidate
                         }
+                    }
+                    
+                    if (!content) {
+                        console.warn('[ExtensionDetailView] No README found for plugin', pluginId);
                     }
                 } else if (!isInstalled && skill) {
                     // For uninstalled skills, we might not have the README unless we fetch it from the registry/ClawHub

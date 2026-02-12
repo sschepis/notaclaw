@@ -364,7 +364,7 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ delay: 0.2, duration: 0.4 }}
-      className={`glass-panel border-t border-x-0 border-b-0 px-3 pt-2 pb-2 z-30 mx-0 mb-0 rounded-none shrink-0 ${
+      className={`glass-panel border-t border-x-0 border-b-0 px-3 pt-2 pb-2 z-30 mx-0 mb-0 rounded-none shrink-0 h-full flex flex-col ${
         dragOver ? 'ring-1 ring-primary ring-inset bg-primary/20' : ''
       }`}
       onDragOver={handleDragOver}
@@ -372,7 +372,7 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
       onDrop={handleDrop}
     >
       
-      <div className="max-w-4xl mx-auto space-y-2">
+      <div className="w-full h-full flex flex-col space-y-2">
         
         <AttachmentPreview 
           attachments={pendingAttachments} 
@@ -424,6 +424,7 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
           interimTranscript={interimTranscript}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
+          className="flex-1"
         />
 
         <ChatInputAfterSlot 

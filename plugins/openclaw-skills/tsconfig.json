@@ -8,8 +8,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "jsx": "react"
+    "jsx": "react",
+    "types": ["node", "jest"]
   },
-  "include": ["main/**/*", "renderer/**/*", "tests/**/*"],
+  "include": ["main/**/*", "renderer/**/*", "tests/**/*", "src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

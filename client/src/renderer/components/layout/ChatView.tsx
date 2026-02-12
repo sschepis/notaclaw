@@ -158,7 +158,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
       {/* Messages Area - takes remaining space and scrolls */}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 relative z-10 scroll-smooth">
         <div className="min-h-full flex flex-col justify-end">
-            <div className="max-w-4xl mx-auto w-full space-y-1">
+            <div className="w-full space-y-1">
                 {timeline.length === 0 ? (
                     <ChatEmptyStateSlot
                         fallback={

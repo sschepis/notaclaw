@@ -1,4 +1,6 @@
 "use strict";
+
+// plugins-extended/network-visualizer/renderer/bundle.js
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -26,8 +28,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// plugins/network-visualizer/renderer/index.tsx
 var index_exports = {};
 __export(index_exports, {
   activate: () => activate,

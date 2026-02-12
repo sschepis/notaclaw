@@ -20,6 +20,22 @@
       "dsnEnabled": true,
       "semanticDomain": "perceptual"
     },
+    "configuration": [
+      {
+        "key": "p1",
+        "label": "Prime 1",
+        "type": "number",
+        "default": 13,
+        "description": "First prime number (congruent to 1 mod 12) for the coupled system."
+      },
+      {
+        "key": "p2",
+        "label": "Prime 2",
+        "type": "number",
+        "default": 37,
+        "description": "Second prime number (congruent to 1 mod 12) for the coupled system."
+      }
+    ],
     "tools": [
       {
         "name": "send_secure_message",

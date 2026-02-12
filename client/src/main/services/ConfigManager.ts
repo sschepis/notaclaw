@@ -4,6 +4,10 @@ import fs from 'fs/promises';
 
 const CONFIG_FILE = 'config.json';
 
+export interface WorkspaceConfig {
+  path: string;
+}
+
 export interface NetworkConfig {
   peers: string[];
   bootstrapUrl: string;
@@ -19,6 +23,7 @@ export interface LoggingConfig {
 export interface AppConfig {
   network: NetworkConfig;
   logging: LoggingConfig;
+  workspace?: WorkspaceConfig;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -77,6 +82,27 @@ export class ConfigManager {
 
   getLoggingConfig(): LoggingConfig {
     return this.config.logging;
+  }
+
+  getWorkspacePath(): string | null {
+    return this.config.workspace?.path || null;
+  }
+
+  async setWorkspacePath(workspacePath: string): Promise<void> {
+    // Ensure the workspace directory exists
+    try {
+      await fs.mkdir(workspacePath, { recursive: true });
+      
+      // Create .aleph directory inside workspace
+      const alephPath = path.join(workspacePath, '.aleph');
+      await fs.mkdir(alephPath, { recursive: true });
+      
+      this.config.workspace = { path: workspacePath };
+      await this.save();
+    } catch (error) {
+      console.error('Failed to set workspace path:', error);
+      throw error;
+    }
   }
 
   async updateNetworkConfig(updates: Partial<NetworkConfig>): Promise<void> {

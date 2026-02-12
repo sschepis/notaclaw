@@ -14,17 +14,30 @@
   "author": "AlephNet",
   "license": "MIT",
   "dependencies": {
-    "react": "^18.2.0",
     "@radix-ui/react-slot": "^1.2.4",
+    "archiver": "^7.0.1",
     "class-variance-authority": "^0.7.1",
+    "clipboardy": "^5.2.1",
     "clsx": "^1.0.0",
-    "tailwind-merge": "^1.0.0",
+    "framer-motion": "^10.0.0",
     "lucide-react": "^0.563.0",
-    "framer-motion": "^10.0.0"
+    "node-notifier": "^10.0.1",
+    "puppeteer-core": "^24.37.2",
+    "react": "^18.2.0",
+    "screenshot-desktop": "^1.15.3",
+    "systeminformation": "^5.30.7",
+    "tailwind-merge": "^1.0.0",
+    "unzipper": "^0.12.3"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/archiver": "^7.0.0",
     "@types/jest": "^29.5.12",
+    "@types/node": "^20.0.0",
+    "@types/node-notifier": "^8.0.5",
+    "@types/screenshot-desktop": "^1.15.0",
+    "@types/systeminformation": "^3.23.1",
+    "@types/unzipper": "^0.10.11",
+    "memfs": "^4.56.10",
     "typescript": "^5.0.0"
   }
 }

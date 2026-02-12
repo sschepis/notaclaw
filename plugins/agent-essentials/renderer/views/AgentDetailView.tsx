@@ -59,9 +59,13 @@ export const AgentDetailView: React.FC<AgentDetailViewProps> = ({ agentId, onBac
       <div className="p-3 border-b border-white/5">
         <h4 className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-2">Goal Priors</h4>
         <div className="flex gap-2 flex-wrap">
-          {Object.entries(agent.goalPriors).map(([key, val]) => (
-            <span key={key} className="text-[10px] px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-full">{key}: {val as any}</span>
-          ))}
+          {agent.goalPriors ? (
+            Object.entries(agent.goalPriors).map(([key, val]) => (
+              <span key={key} className="text-[10px] px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-full">{key}: {val as any}</span>
+            ))
+          ) : (
+            <span className="text-[10px] text-gray-500 italic">No goal priors defined</span>
+          )}
         </div>
       </div>
 

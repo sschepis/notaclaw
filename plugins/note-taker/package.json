@@ -1,0 +1,24 @@
+{
+  "name": "@alephnet/note-taker",
+  "version": "0.1.0",
+  "description": "A hierarchical note taking plugin with secure sharing.",
+  "main": "renderer/index.tsx",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "keywords": [
+    "alephnet",
+    "plugin",
+    "notes"
+  ],
+  "author": "AlephNet",
+  "license": "MIT",
+  "dependencies": {
+    "lucide-react": "^0.344.0"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

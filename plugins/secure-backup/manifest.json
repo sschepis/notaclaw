@@ -1,13 +1,15 @@
 {
   "id": "@alephnet/secure-backup",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "name": "Secure Backup",
-  "description": "Automated, encrypted backups of local graph and identity.",
+  "description": "Encrypted backup and restore of application data with scheduling, retention, and integrity verification.",
   "main": "dist/main/index.js",
   "renderer": "renderer/index.js",
   "permissions": [
+    "fs:read",
     "fs:write",
     "store:read",
+    "store:write",
     "network:http"
   ]
 }

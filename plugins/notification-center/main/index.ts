@@ -1,3 +1,11 @@
+import { PluginContext } from '../../../src/shared/plugin-types';
+
+interface NotificationAction {
+  id: string;
+  label: string;
+  action: string;
+  data?: any;
+}
 
 interface Notification {
   id: string;
@@ -5,40 +13,97 @@ interface Notification {
   title: string;
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  category?: string;
+  source?: string;
   read: boolean;
+  actions?: NotificationAction[];
+  data?: any;
 }
 
-interface IpcHandler {
-  on(channel: string, listener: (data: any) => void): void;
-  send(channel: string, data: any): void;
-  handle(channel: string, handler: (data: any) => Promise<any>): void;
+interface NotificationSettings {
+  maxHistory: number;
+  soundEnabled: boolean;
+  soundVolume: number;
+  dndEnabled: boolean;
+  desktopNotifications: boolean;
 }
 
-interface PluginContext {
-  ipc: IpcHandler;
-  on(event: string, listener: () => void): void;
-}
+const DEFAULT_SETTINGS: NotificationSettings = {
+  maxHistory: 100,
+  soundEnabled: true,
+  soundVolume: 0.5,
+  dndEnabled: false,
+  desktopNotifications: false,
+};
 
-export const activate = (context: PluginContext) => {
-  const notifications: Notification[] = [];
-
+export const activate = async (context: PluginContext) => {
   console.log('[Notification Center] Main process activated');
 
-  // IPC to receive notifications from other parts of the system
-  context.ipc.on('notify', (data: Partial<Notification>) => {
-    const notification: Notification = {
-      id: Date.now().toString(),
+  let notifications: Notification[] = [];
+  let settings: NotificationSettings = { ...DEFAULT_SETTINGS };
+
+  // Load from storage
+  try {
+    if (context.storage) {
+        const storedNotifications = await context.storage.get('notifications');
+        if (Array.isArray(storedNotifications)) {
+        notifications = storedNotifications;
+        }
+        const storedSettings = await context.storage.get('settings');
+        if (storedSettings) {
+        settings = { ...DEFAULT_SETTINGS, ...storedSettings };
+        }
+    }
+  } catch (err) {
+    console.error('[Notification Center] Failed to load storage:', err);
+  }
+
+  const persist = async () => {
+    try {
+      if (context.storage) {
+        await context.storage.set('notifications', notifications);
+        await context.storage.set('settings', settings);
+      }
+    } catch (err) {
+      console.error('[Notification Center] Failed to save storage:', err);
+    }
+  };
+
+  // IPC Handlers
+
+  context.ipc.on('notify', async (data: Partial<Notification>) => {
+     // Logic to add notification
+     const notification: Notification = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       timestamp: Date.now(),
       title: data.title || 'Notification',
       message: data.message || '',
-      type: data.type || 'info', // info, success, warning, error
-      read: false
+      type: data.type || 'info',
+      priority: data.priority || 'medium',
+      category: data.category || 'system',
+      source: data.source || 'unknown',
+      read: false,
+      actions: data.actions || [],
+      data: data.data
     };
 
-    notifications.unshift(notification);
-    if (notifications.length > 100) notifications.pop();
+    // Deduplication (simple: same title and message within 2 seconds)
+    const duplicate = notifications.find(n => 
+        n.title === notification.title && 
+        n.message === notification.message && 
+        n.timestamp > notification.timestamp - 2000
+    );
 
-    // Broadcast to renderer
+    if (duplicate) return;
+
+    notifications.unshift(notification);
+    if (notifications.length > settings.maxHistory) {
+        notifications = notifications.slice(0, settings.maxHistory);
+    }
+
+    await persist();
+
     context.ipc.send('notification:new', notification);
   });
 
@@ -46,34 +111,122 @@ export const activate = (context: PluginContext) => {
     return notifications;
   });
 
-  context.ipc.handle('notifications:markRead', async ({ id }: { id: string }) => {
-    const notif = notifications.find(n => n.id === id);
-    if (notif) {
-      notif.read = true;
-      return { success: true };
+  context.ipc.handle('notifications:markRead', async (data: { id?: string, ids?: string[] }) => {
+    let updated = false;
+    if (data.id) {
+        const n = notifications.find(x => x.id === data.id);
+        if (n && !n.read) {
+            n.read = true;
+            updated = true;
+            context.ipc.send('notification:update', n);
+        }
+    } else if (data.ids) {
+        data.ids.forEach(id => {
+            const n = notifications.find(x => x.id === id);
+            if (n && !n.read) {
+                n.read = true;
+                updated = true;
+                context.ipc.send('notification:update', n);
+            }
+        });
     }
-    return { success: false };
-  });
-
-  context.ipc.handle('notifications:clear', async () => {
-    notifications.length = 0;
+    if (updated) await persist();
     return { success: true };
   });
 
+  context.ipc.handle('notifications:markAllRead', async () => {
+    let updated = false;
+    notifications.forEach(n => {
+        if (!n.read) {
+            n.read = true;
+            updated = true;
+        }
+    });
+    if (updated) {
+        await persist();
+        context.ipc.send('notifications:allRead', {});
+    }
+    return { success: true };
+  });
+
+  context.ipc.handle('notifications:delete', async (data: { id?: string, ids?: string[] }) => {
+    const initialLength = notifications.length;
+    if (data.id) {
+        notifications = notifications.filter(n => n.id !== data.id);
+    } else if (data.ids) {
+        notifications = notifications.filter(n => !data.ids?.includes(n.id));
+    }
+    if (notifications.length !== initialLength) {
+        await persist();
+        context.ipc.send('notifications:listUpdated', notifications);
+    }
+    return { success: true };
+  });
+
+  context.ipc.handle('notifications:clear', async () => {
+    notifications = [];
+    await persist();
+    context.ipc.send('notifications:cleared', {});
+    return { success: true };
+  });
+  
+  context.ipc.handle('notifications:getSettings', async () => {
+      return settings;
+  });
+
+  context.ipc.handle('notifications:updateSettings', async (newSettings: Partial<NotificationSettings>) => {
+      settings = { ...settings, ...newSettings };
+      await persist();
+      context.ipc.send('notifications:settingsUpdated', settings);
+      return settings;
+  });
+
+    // DSN Tool Registration
+    if (context.dsn && context.dsn.registerTool) {
+        context.dsn.registerTool({
+            name: 'send_notification',
+            description: 'Send a notification to the user',
+            executionLocation: 'SERVER',
+            version: '1.0.0',
+            semanticDomain: 'meta',
+            primeDomain: [2],
+            smfAxes: [0, 0, 0, 0],
+            requiredTier: 'Neophyte',
+            parameters: {
+                type: 'object',
+                properties: {
+                    title: { type: 'string' },
+                    message: { type: 'string' },
+                    type: { type: 'string', enum: ['info', 'success', 'warning', 'error'] },
+                    priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }
+                },
+                required: ['title', 'message']
+            }
+        }, async (args: any) => {
+             const notification: Notification = {
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                timestamp: Date.now(),
+                title: args.title,
+                message: args.message,
+                type: args.type || 'info',
+                priority: args.priority || 'medium',
+                category: 'agent',
+                source: 'dsn',
+                read: false
+            };
+            
+             notifications.unshift(notification);
+             if (notifications.length > settings.maxHistory) {
+                notifications = notifications.slice(0, settings.maxHistory);
+            }
+            await persist();
+            context.ipc.send('notification:new', notification);
+            return { success: true, id: notification.id };
+        });
+    }
+
   context.on('ready', () => {
     console.log('[Notification Center] Ready');
-
-    // Test notification
-    setTimeout(() => {
-      context.ipc.send('notification:new', {
-        id: 'test-1',
-        timestamp: Date.now(),
-        title: 'Welcome',
-        message: 'Notification Center is active.',
-        type: 'success',
-        read: false
-      });
-    }, 2000);
   });
 };
 

@@ -117,7 +117,9 @@ export default {
           // Clean up markdown if present
           code = code.replace(/```javascript/g, '').replace(/```/g, '').trim();
           
-          return `\`\`\`canvasviz\n${code}\n\`\`\``;
+          return {
+            __directMarkdown: `\`\`\`canvasviz\n${code}\n\`\`\``
+          };
       } catch (e: any) {
           return `Error generating visualization: ${e.message}`;
       }

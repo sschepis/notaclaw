@@ -17,7 +17,7 @@
   ],
   "actions": [
     {
-      "name": "generate_canvas_visualization",
+      "name": "generate_canvas_viz",
       "type": "dsn-tool",
       "description": "Generate an HTML5 Canvas visualization rendered inline in the chat",
       "executionLocation": "CLIENT"
@@ -35,7 +35,7 @@
   ],
   "skills": [
     {
-      "name": "generate_canvas_visualization",
+      "name": "generate_canvas_viz",
       "description": "Generate an HTML5 Canvas visualization rendered inline in the chat. The AI should output JavaScript code inside a ```canvas fence block.",
       "executionLocation": "CLIENT"
     }

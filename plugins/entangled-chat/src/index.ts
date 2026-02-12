@@ -1,155 +1,102 @@
 import { Context } from './types';
-
-class Peer {
-    id: string;
-    topics: Set<string>;
-    status: string;
-    latency: number;
-
-    constructor(id: string, topics: string[] = []) {
-        this.id = id;
-        this.topics = new Set(topics);
-        this.status = 'connected';
-        this.latency = Math.floor(Math.random() * 50) + 10;
-    }
-
-    matches(topics: string[]): boolean {
-        for (const t of topics) {
-            if (this.topics.has(t)) return true;
-        }
-        return false;
-    }
-}
-
-class EntanglementManager {
-  private localTopics: Set<string>;
-  private peers: Map<string, Peer>;
-  private messages: any[];
-  private context: Context;
-
-  constructor(context: Context) {
-    this.context = context;
-    this.localTopics = new Set(['general']);
-    this.peers = new Map();
-    this.messages = [];
-    
-    // Seed some mock peers
-    this.addPeer('node_alpha', ['physics', 'quantum', 'general']);
-    this.addPeer('node_beta', ['ai', 'general']);
-    this.addPeer('node_gamma', ['crypto', 'privacy']);
-  }
-
-  addPeer(id: string, topics: string[]) {
-      this.peers.set(id, new Peer(id, topics));
-  }
-
-  setLocalTopics(topics: string[]) {
-    this.localTopics = new Set(topics);
-    console.log(`[Entanglement] Local topics updated: ${Array.from(this.localTopics).join(', ')}`);
-  }
-
-  broadcast(content: string, topics: string[]) {
-    const msgId = 'msg_' + Date.now();
-    const timestamp = Date.now();
-    const message = { id: msgId, content, topics, sender: 'me', timestamp };
-    
-    // Store locally
-    this.messages.push(message);
-
-    let sentCount = 0;
-    const recipients: string[] = [];
-    
-    for (const peer of this.peers.values()) {
-        if (peer.matches(topics)) {
-            console.log(`[Entanglement] Routing message to ${peer.id} (Matched topics)`);
-            
-            // Send via DSN observation as a placeholder for P2P routing
-            if (this.context.dsn && this.context.dsn.publishObservation) {
-                this.context.dsn.publishObservation(JSON.stringify({
-                    type: 'entangled-message',
-                    to: peer.id,
-                    content,
-                    topics
-                }), []);
-            }
-
-            recipients.push(peer.id);
-            sentCount++;
-        }
-    }
-
-    return { 
-        status: 'sent', 
-        messageId: msgId, 
-        recipientCount: sentCount,
-        recipients 
-    };
-  }
-
-  getMessages() {
-      return this.messages;
-  }
-
-  getPeers() {
-      return Array.from(this.peers.values()).map(p => ({
-          id: p.id,
-          topics: Array.from(p.topics),
-          status: p.status,
-          latency: p.latency
-      }));
-  }
-}
+import { ChatEngine } from './ChatEngine';
 
 export function activate(context: Context) {
   console.log('[Entangled Chat] Activating...');
   
-  const manager = new EntanglementManager(context);
+  const chatEngine = new ChatEngine();
 
   context.dsn.registerTool({
-    name: 'updateTopics',
-    description: 'Updates the local node subscription topics',
+    name: 'initializeIdentity',
+    description: 'Initializes the user identity for the chat system',
     executionLocation: 'SERVER',
     parameters: {
       type: 'object',
       properties: {
-        topics: { type: 'array', items: { type: 'string' } }
+        username: { type: 'string' }
       },
-      required: ['topics']
+      required: ['username']
     },
     semanticDomain: 'social',
     primeDomain: [11],
     smfAxes: [0.5, 0.5],
     requiredTier: 'Neophyte',
     version: '1.0.0'
-  }, async (args: { topics: string[] }) => {
-    manager.setLocalTopics(args.topics);
-    return { status: 'success', topics: args.topics };
+  }, async (args: { username: string }) => {
+    await chatEngine.init(args.username);
+    return { status: 'success', user: chatEngine.identityManager.getUser() };
   });
 
   context.dsn.registerTool({
-    name: 'sendMessage',
-    description: 'Sends a message to peers interested in specific topics',
+    name: 'createConversation',
+    description: 'Creates a new conversation',
     executionLocation: 'SERVER',
     parameters: {
       type: 'object',
       properties: {
-        content: { type: 'string' },
-        topics: { type: 'array', items: { type: 'string' } }
+        participants: { type: 'array', items: { type: 'string' } },
+        type: { type: 'string', enum: ['direct', 'group'] },
+        name: { type: 'string' }
       },
-      required: ['content', 'topics']
+      required: ['participants', 'type']
+    },
+    semanticDomain: 'social',
+    primeDomain: [11],
+    smfAxes: [0.5, 0.5],
+    requiredTier: 'Initiate',
+    version: '1.0.0'
+  }, async (args: { participants: string[], type: 'direct' | 'group', name?: string }) => {
+    const conversation = await chatEngine.createConversation(args.participants, args.type, args.name);
+    return { status: 'success', conversation };
+  });
+
+  context.dsn.registerTool({
+    name: 'sendMessage',
+    description: 'Sends a message to a conversation',
+    executionLocation: 'SERVER',
+    parameters: {
+      type: 'object',
+      properties: {
+        conversationId: { type: 'string' },
+        content: { type: 'string' },
+        type: { type: 'string', enum: ['text', 'image', 'video', 'file', 'code'] }
+      },
+      required: ['conversationId', 'content']
     },
     semanticDomain: 'social',
     primeDomain: [11, 7],
     smfAxes: [0.8, 0.4],
     requiredTier: 'Initiate',
     version: '1.0.0'
-  }, async (args: { content: string, topics: string[] }) => {
-    return manager.broadcast(args.content, args.topics);
+  }, async (args: { conversationId: string, content: string, type?: 'text' | 'image' | 'video' | 'file' | 'code' }) => {
+    const message = await chatEngine.sendMessage(args.conversationId, args.content, args.type);
+    return { status: 'success', message };
+  });
+
+  context.dsn.registerTool({
+    name: 'getMessages',
+    description: 'Retrieves messages for a conversation',
+    executionLocation: 'SERVER',
+    parameters: {
+      type: 'object',
+      properties: {
+        conversationId: { type: 'string' }
+      },
+      required: ['conversationId']
+    },
+    semanticDomain: 'social',
+    primeDomain: [11],
+    smfAxes: [0.4],
+    requiredTier: 'Neophyte',
+    version: '1.0.0'
+  }, async (args: { conversationId: string }) => {
+      const messages = await chatEngine.getMessages(args.conversationId);
+      return { messages };
   });
 
   context.dsn.registerTool({
     name: 'getNetworkState',
-    description: 'Returns current peers and messages',
+    description: 'Returns current network state',
     executionLocation: 'SERVER',
     parameters: { type: 'object', properties: {} },
     semanticDomain: 'social',
@@ -159,8 +106,8 @@ export function activate(context: Context) {
     version: '1.0.0'
   }, async () => {
       return {
-          peers: manager.getPeers(),
-          messages: manager.getMessages()
+          peerId: chatEngine.networkManager.getPeerId(),
+          user: chatEngine.identityManager.getUser()
       };
   });
 

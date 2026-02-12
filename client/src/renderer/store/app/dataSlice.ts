@@ -8,6 +8,7 @@ export interface DataSlice {
   smf: number[];
   network: NetworkState;
   hasIdentity: boolean;
+  workspacePath: string | null;
 
   setWallet: (wallet: WalletState) => void;
   setAgentState: (agent: AgentState) => void;
@@ -15,6 +16,7 @@ export interface DataSlice {
   setSMF: (smf: number[]) => void;
   setNetwork: (network: Partial<NetworkState>) => void;
   setHasIdentity: (hasIdentity: boolean) => void;
+  setWorkspacePath: (path: string | null) => void;
 }
 
 export const createDataSlice: StateCreator<AppState, [], [], DataSlice> = (set) => ({
@@ -24,6 +26,7 @@ export const createDataSlice: StateCreator<AppState, [], [], DataSlice> = (set) 
   smf: new Array(16).fill(0),
   network: { nodeId: '', status: 'OFFLINE', peers: 0, latency: 0 },
   hasIdentity: false,
+  workspacePath: null,
 
   setWallet: (wallet) => set({ wallet }),
   setAgentState: (agent) => set({ agent }),
@@ -31,4 +34,5 @@ export const createDataSlice: StateCreator<AppState, [], [], DataSlice> = (set) 
   setSMF: (smf) => set({ smf }),
   setNetwork: (network) => set((state) => ({ network: { ...state.network, ...network } })),
   setHasIdentity: (hasIdentity) => set({ hasIdentity }),
+  setWorkspacePath: (workspacePath) => set({ workspacePath }),
 });

@@ -63,7 +63,7 @@ export const AgentListView: React.FC = () => {
             </div>
             <div className="flex gap-2 text-[9px] text-gray-500">
               {agent.templateId && <span>template: {agent.templateId}</span>}
-              <span>{agent.beliefs.length} beliefs</span>
+              <span>{agent.beliefs?.length || 0} beliefs</span>
             </div>
           </MotionDiv>
         ))

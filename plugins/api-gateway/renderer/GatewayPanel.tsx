@@ -7,11 +7,16 @@ export const GatewayPanel = ({ context }: { context: any }) => {
 
     useEffect(() => {
         const fetchStatus = async () => {
-            const data = await context.ipc.invoke('gateway:get-status');
-            if (data) {
-                setStatus(data.status);
-                setPort(data.port);
-                setLogs(data.logs);
+            try {
+                const data = await context.ipc.invoke('gateway:get-status');
+                if (data) {
+                    setStatus(data.status);
+                    setPort(data.port);
+                    setLogs(data.logs || []);
+                }
+            } catch (e) {
+                // Backend plugin may not be loaded yet — silently retry on next interval
+                console.warn('[GatewayPanel] Could not fetch status:', (e as Error).message);
             }
         };
 
@@ -21,12 +26,16 @@ export const GatewayPanel = ({ context }: { context: any }) => {
     }, [context]);
 
     const handleSavePort = async () => {
-        await context.ipc.invoke('gateway:set-port', { port: Number(port) });
-        // Refresh
-        const data = await context.ipc.invoke('gateway:get-status');
-        if (data) {
-            setStatus(data.status);
-            setPort(data.port);
+        try {
+            await context.ipc.invoke('gateway:set-port', { port: Number(port) });
+            // Refresh
+            const data = await context.ipc.invoke('gateway:get-status');
+            if (data) {
+                setStatus(data.status);
+                setPort(data.port);
+            }
+        } catch (e) {
+            console.error('[GatewayPanel] Failed to set port:', (e as Error).message);
         }
     };
 

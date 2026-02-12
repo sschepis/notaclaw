@@ -5,8 +5,10 @@ import { AgentDetailView } from './views/AgentDetailView';
 import { TeamListView } from './views/TeamListView';
 import { TeamDetailView } from './views/TeamDetailView';
 import { LogView } from './views/LogView';
+import { FileExplorer } from './components/FileExplorer';
+import { SystemMonitor } from './components/SystemMonitor';
 
-type Tab = 'agents' | 'teams' | 'log';
+type Tab = 'agents' | 'teams' | 'log' | 'files' | 'system';
 
 export const AgentsPanel: React.FC = () => {
   const {
@@ -30,10 +32,10 @@ export const AgentsPanel: React.FC = () => {
   // List view
   return (
     <div className="h-full flex flex-col">
-      <div className="flex border-b border-white/5 bg-white/5">
-        {(['agents', 'teams', 'log'] as Tab[]).map(t => (
+      <div className="flex border-b border-white/5 bg-white/5 overflow-x-auto">
+        {(['agents', 'teams', 'log', 'files', 'system'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-2.5 text-xs font-medium capitalize transition-colors relative ${tab === t ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>
+            className={`flex-1 py-2.5 px-3 text-xs font-medium capitalize transition-colors relative whitespace-nowrap ${tab === t ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>
             {t} {tab === t && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
           </button>
         ))}
@@ -43,6 +45,8 @@ export const AgentsPanel: React.FC = () => {
         {tab === 'agents' && <AgentListView />}
         {tab === 'teams' && <TeamListView />}
         {tab === 'log' && <LogView />}
+        {tab === 'files' && <FileExplorer />}
+        {tab === 'system' && <SystemMonitor />}
       </div>
     </div>
   );
