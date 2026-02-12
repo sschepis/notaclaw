@@ -20,19 +20,37 @@ module.exports = {
             }, async (args) => {
                 console.log('Generating artifact:', args.title);
                 
-                // Save to plugin storage for persistence
                 const artifactId = Date.now().toString();
-                if (context.storage) {
-                    await context.storage.set(`artifact:${artifactId}`, {
-                        id: artifactId,
-                        ...args,
-                        createdAt: Date.now()
-                    });
-                }
+                const artifact = {
+                    id: artifactId,
+                    ...args,
+                    createdAt: Date.now()
+                };
+
+                // Save to storage
+                await saveArtifact(context, artifact);
 
                 // Send to renderer to display
-                context.ipc.send('artifact-generated', { id: artifactId, ...args });
+                if (context.ipc) {
+                    context.ipc.send('artifact-generated', artifact);
+                }
+                
                 return { success: true, message: `Artifact ${args.title} generated and saved (ID: ${artifactId})` };
+            });
+        }
+
+        // IPC Handlers for Renderer
+        if (context.ipc) {
+            context.ipc.on('load-artifacts', async () => {
+                const artifacts = await loadArtifacts(context);
+                // Sort by createdAt desc
+                artifacts.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                context.ipc.send('artifacts-loaded', artifacts);
+            });
+
+            context.ipc.on('save-artifact', async (artifact) => {
+                await saveArtifact(context, { ...artifact, updatedAt: Date.now() });
+                context.ipc.send('artifact-saved', artifact);
             });
         }
     });
@@ -42,3 +60,25 @@ module.exports = {
     console.log('[@alephnet/html-artifacts] Deactivated');
   }
 };
+
+async function loadArtifacts(context) {
+    if (!context.storage) return [];
+    try {
+        const all = await context.storage.get('artifacts');
+        return all ? Object.values(all) : [];
+    } catch (e) {
+        console.error('Failed to load artifacts:', e);
+        return [];
+    }
+}
+
+async function saveArtifact(context, artifact) {
+    if (!context.storage) return;
+    try {
+        const all = await context.storage.get('artifacts') || {};
+        all[artifact.id] = artifact;
+        await context.storage.set('artifacts', all);
+    } catch (e) {
+        console.error('Failed to save artifact:', e);
+    }
+}

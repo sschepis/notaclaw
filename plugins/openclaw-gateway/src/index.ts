@@ -1,5 +1,6 @@
 import { PluginContext } from '../../../src/shared/plugin-types';
 import { GatewayDefinition } from '../../../src/shared/service-types';
+import { ConnectionManager, NodeConfig } from './ConnectionManager';
 
 export const activate = async (context: PluginContext) => {
     console.log('OpenClaw Gateway activating...');
@@ -40,13 +41,9 @@ Note: Tasks are executed on remote nodes. Results may take time depending on com
     });
 
     const config = context.manifest.alephConfig?.configuration || {};
-    const endpoints: Array<{ name: string; url: string }> = config.endpoints || [];
+    const endpoints: NodeConfig[] = config.endpoints || [];
 
-    // Helper to round-robin or select endpoint
-    const getEndpoint = () => {
-        if (endpoints.length === 0) throw new Error("No OpenClaw endpoints configured");
-        return endpoints[0]; // Simple selection for now
-    };
+    const connectionManager = new ConnectionManager(endpoints);
 
     // Implement the Gateway Interface
     const gateway: GatewayDefinition = {
@@ -57,24 +54,11 @@ Note: Tasks are executed on remote nodes. Results may take time depending on com
         networkName: 'OpenClaw',
         
         connect: async () => {
-            console.log(`Connecting to ${endpoints.length} OpenClaw endpoints...`);
-            let connectedCount = 0;
-            for (const ep of endpoints) {
-                try {
-                    const response = await fetch(`${ep.url}/health`);
-                    if (response.ok) {
-                        console.log(`Connected to OpenClaw node: ${ep.name} (${ep.url})`);
-                        connectedCount++;
-                    } else {
-                        console.warn(`Failed to connect to ${ep.name}: ${response.statusText}`);
-                    }
-                } catch (e) {
-                    console.warn(`Failed to connect to ${ep.name}:`, e);
-                }
-            }
-            
-            if (connectedCount > 0) {
+            await connectionManager.connect();
+            const activeNode = connectionManager.getActiveNode();
+            if (activeNode) {
                 gateway.status = 'connected';
+                console.log(`Connected to OpenClaw node: ${activeNode}`);
             } else {
                 gateway.status = 'error';
                 console.error('Could not connect to any OpenClaw endpoints');
@@ -82,37 +66,21 @@ Note: Tasks are executed on remote nodes. Results may take time depending on com
         },
 
         disconnect: async () => {
-            console.log('Disconnecting from OpenClaw network...');
+            await connectionManager.disconnect();
             gateway.status = 'disconnected';
+            console.log('Disconnected from OpenClaw network');
         },
 
         submitTask: async (task: any) => {
-            const ep = getEndpoint();
-            console.log(`Submitting task to ${ep.name}...`);
-            
-            const response = await fetch(`${ep.url}/tasks`, {
+            const response = await connectionManager.request('/tasks', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(task)
             });
-
-            if (!response.ok) {
-                throw new Error(`OpenClaw task submission failed: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data.id;
+            return response.id;
         },
 
         getTaskStatus: async (taskId: string) => {
-            const ep = getEndpoint();
-            const response = await fetch(`${ep.url}/tasks/${taskId}`);
-            
-            if (!response.ok) {
-                throw new Error(`OpenClaw status check failed: ${response.statusText}`);
-            }
-
-            return await response.json();
+            return await connectionManager.request(`/tasks/${taskId}`);
         }
     };
 
@@ -178,11 +146,9 @@ Note: Tasks are executed on remote nodes. Results may take time depending on com
         primeDomain: [2, 3],
         smfAxes: []
     }, async (args: any) => {
-        const ep = getEndpoint();
-        const response = await fetch(`${ep.url}/tasks/${args.taskId}/cancel`, {
+        await connectionManager.request(`/tasks/${args.taskId}/cancel`, {
             method: 'POST'
         });
-        if (!response.ok) throw new Error(`Failed to cancel task: ${response.statusText}`);
         return { success: true };
     });
 
@@ -200,7 +166,11 @@ Note: Tasks are executed on remote nodes. Results may take time depending on com
         primeDomain: [2, 3],
         smfAxes: []
     }, async () => {
-        return endpoints;
+        return endpoints.map(ep => ({
+            name: ep.name,
+            url: ep.url,
+            connected: connectionManager.getActiveNode() === ep.name
+        }));
     });
 
     console.log('OpenClaw Gateway activated.');

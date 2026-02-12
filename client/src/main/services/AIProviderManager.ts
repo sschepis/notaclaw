@@ -7,6 +7,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { AIProviderConfig, AISettings, AIRequestOptions, AIResponse, AIContentType } from '../../shared/ai-types';
+import { fetchWithTimeout, TIMEOUT_DEFAULTS } from '../../shared/utils/retry';
 
 const DEFAULT_SETTINGS: AISettings = {
   providers: [],
@@ -159,8 +160,9 @@ export class AIProviderManager {
           const modelsUrl = `https://${host}/v1beta1/projects/${project}/locations/${location}/publishers/google/models`;
           
           console.log(`Fetching Vertex models from: ${modelsUrl}`);
-          const response = await fetch(modelsUrl, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
+          const response = await fetchWithTimeout(modelsUrl, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+            timeoutMs: TIMEOUT_DEFAULTS.token,
           });
           
           if (response.ok) {
@@ -468,7 +470,7 @@ export class AIProviderManager {
         return await this.getVertexEmbeddings(provider, text);
       } else if (provider.type === 'openai') {
         const endpoint = provider.endpoint || 'https://api.openai.com/v1';
-        const response = await fetch(`${endpoint}/embeddings`, {
+        const response = await fetchWithTimeout(`${endpoint}/embeddings`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${provider.apiKey}`,
@@ -477,7 +479,8 @@ export class AIProviderManager {
           body: JSON.stringify({
             input: text,
             model: 'text-embedding-3-small'
-          })
+          }),
+          timeoutMs: TIMEOUT_DEFAULTS.embedding,
         });
         
         if (!response.ok) {
@@ -509,7 +512,7 @@ export class AIProviderManager {
     const model = 'text-embedding-004';
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:predict`;
 
-    const response = await fetch(endpoint, {
+    const response = await fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -517,7 +520,8 @@ export class AIProviderManager {
       },
       body: JSON.stringify({
         instances: [{ content: text }]
-      })
+      }),
+      timeoutMs: TIMEOUT_DEFAULTS.embedding,
     });
 
     if (!response.ok) {
@@ -777,10 +781,11 @@ export class AIProviderManager {
     const signature = sign.sign(serviceAccount.private_key, 'base64url');
     const jwt = `${unsignedToken}.${signature}`;
 
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+    const tokenResponse = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
+      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+      timeoutMs: TIMEOUT_DEFAULTS.token,
     });
 
     if (!tokenResponse.ok) throw new Error(`Vertex Token Error: ${tokenResponse.status}`);
@@ -807,7 +812,8 @@ export class AIProviderManager {
     const host = this.vertexHost(location);
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
 
-    const response = await fetch(endpoint, {
+    const timeoutMs = options.timeoutMs || TIMEOUT_DEFAULTS[options.contentType] || TIMEOUT_DEFAULTS.chat;
+    const response = await fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -819,7 +825,8 @@ export class AIProviderManager {
           temperature: options.temperature ?? 0.7,
           maxOutputTokens: options.maxTokens ?? 2048
         }
-      })
+      }),
+      timeoutMs,
     });
 
     if (!response.ok) {
@@ -858,7 +865,8 @@ export class AIProviderManager {
     // Anthropic on Vertex uses rawPredict or streamRawPredict
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/anthropic/models/${model}:rawPredict`;
 
-    const response = await fetch(endpoint, {
+    const timeoutMs = options.timeoutMs || TIMEOUT_DEFAULTS[options.contentType] || TIMEOUT_DEFAULTS.chat;
+    const response = await fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -869,7 +877,8 @@ export class AIProviderManager {
         messages: [{ role: 'user', content: prompt }],
         max_tokens: options.maxTokens ?? 2048,
         temperature: options.temperature ?? 0.7
-      })
+      }),
+      timeoutMs,
     });
 
     if (!response.ok) {
@@ -986,13 +995,15 @@ export class AIProviderManager {
     console.log('[Vertex AI Chat] Request to:', endpoint);
     console.log('[Vertex AI Chat] Request body:', JSON.stringify(requestBody, null, 2).substring(0, 2000));
     
-    const response = await fetch(endpoint, {
+    const timeoutMs = options.timeoutMs || TIMEOUT_DEFAULTS[options.contentType] || TIMEOUT_DEFAULTS.chat;
+    const response = await fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      timeoutMs,
     });
 
     const responseText = await response.text();
@@ -1086,13 +1097,15 @@ export class AIProviderManager {
         : JSON.stringify(systemMessage.content);
     }
 
-    const response = await fetch(endpoint, {
+    const timeoutMs = options.timeoutMs || TIMEOUT_DEFAULTS[options.contentType] || TIMEOUT_DEFAULTS.chat;
+    const response = await fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      timeoutMs,
     });
 
     if (!response.ok) {

@@ -116,6 +116,10 @@ export interface IAlephNetAPI {
   aiConversationLoadSessionState: (params?: void) => Promise<{ activeConversationId: string | null; openConversationIds: string[]; lastUpdated: number } | null>;
   aiConversationClearSessionState: (params?: void) => Promise<void>;
 
+  // ─── Conversation Sync ─────────────────────────────────────────
+  aiConversationSubscribe: (params?: void) => Promise<void>;
+  onAIConversationChanged: (callback: (event: any, data: { type: string; conversationId: string; data?: any }) => void) => () => void;
+
   // ─── Memory Promotion ──────────────────────────────────────────
   memoryPromote: (params: { content: string; reason: string; category: string; significance: number; conversationId?: string; sourceFieldId?: string; metadata?: Record<string, unknown> }) => Promise<{ success: boolean; fragmentId?: string; userFieldId?: string; error?: string }>;
   memoryProcessForPromotion: (params: { content: string; role: string; conversationId?: string }) => Promise<Array<{ success: boolean; fragmentId?: string; userFieldId?: string; error?: string }>>;

@@ -119,6 +119,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendAppResponse: (requestId: string, response: any) => 
     ipcRenderer.send(`app:response:${requestId}`, response),
 
+  // ─── Agent Task Runner ──────────────────────────────────────────
+  agentStartTask: (params: { conversationId: string; message: string; metadata: any }) =>
+    ipcRenderer.invoke('agent:startTask', params),
+  agentStopTask: (params: { taskId: string }) =>
+    ipcRenderer.invoke('agent:stopTask', params),
+  agentUserResponse: (params: { taskId: string; response: string }) =>
+    ipcRenderer.invoke('agent:userResponse', params),
+  agentGetTask: (params: { taskId: string }) =>
+    ipcRenderer.invoke('agent:getTask', params),
+  agentGetActiveTask: (params: { conversationId: string }) =>
+    ipcRenderer.invoke('agent:getActiveTask', params),
+  onAgentTaskUpdate: (callback: (event: any, data: any) => void) => {
+    ipcRenderer.on('agent:taskUpdate', callback);
+    return () => { ipcRenderer.removeListener('agent:taskUpdate', callback); };
+  },
+  onAgentTaskMessage: (callback: (event: any, data: any) => void) => {
+    ipcRenderer.on('agent:taskMessage', callback);
+    return () => { ipcRenderer.removeListener('agent:taskMessage', callback); };
+  },
+
   // OpenClaw Gateway
   openclawConnect: (options: { url?: string }) => 
     ipcRenderer.invoke('openclaw:connect', options),

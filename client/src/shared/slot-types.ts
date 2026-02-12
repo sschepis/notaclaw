@@ -293,6 +293,36 @@ export interface SettingsTabOptions {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Bottom Panel Tab Registration
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface BottomPanelTabDefinition {
+  /** Unique tab ID */
+  id: string;
+  /** Plugin that registered this */
+  pluginId: string;
+  /** Display name shown on tab */
+  name: string;
+  /** Icon component or lucide icon name */
+  icon: React.ComponentType<{ size?: number; className?: string }> | string;
+  /** Tab content component */
+  component: React.ComponentType;
+  /** Priority for ordering (lower = earlier) */
+  priority: number;
+  /** Whether user can close this tab */
+  enableClose: boolean;
+}
+
+export interface BottomPanelTabOptions {
+  id: string;
+  name: string;
+  icon: React.ComponentType<{ size?: number; className?: string }> | string;
+  component: React.ComponentType;
+  priority?: number;
+  enableClose?: boolean;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Command Palette Registration
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -347,6 +377,7 @@ export interface SlotContextMap {
   'layout:panel': undefined;
   'layout:stage-view': undefined;
   'layout:sidebar-view': undefined;
+  'layout:bottom-panel-tab': undefined;
   
   // Navigation slots
   'nav:rail-item': NavRailContext;
@@ -441,4 +472,7 @@ export interface UIExtensionAPI {
   
   // Command palette
   registerCommand(options: CommandOptions): () => void;
+  
+  // Bottom panel tabs
+  registerBottomPanelTab(options: BottomPanelTabOptions): () => void;
 }

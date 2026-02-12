@@ -52,6 +52,8 @@ describe('OpenClaw Gateway', () => {
     }));
     
     expect(context.services.gateways.register).toHaveBeenCalled();
+    // Gateway is registered inside activate, so we need to capture it
+    // The beforeEach mock captures it into 'gateway' variable
     expect(gateway).toBeDefined();
     expect(gateway.id).toBe('openclaw-gateway');
   });
@@ -72,12 +74,13 @@ describe('OpenClaw Gateway', () => {
     // Mock health check response
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      statusText: 'OK'
+      statusText: 'OK',
+      json: async () => ({ version: '1.0.0', capabilities: ['compute'] })
     });
 
     await gateway.connect();
     
-    expect(global.fetch).toHaveBeenCalledWith('http://test-node/health');
+    expect(global.fetch).toHaveBeenCalledWith('http://test-node/health', expect.anything());
     expect(gateway.status).toBe('connected');
   });
 
@@ -98,11 +101,18 @@ describe('OpenClaw Gateway', () => {
   test('submitTask sends request', async () => {
     await activate(context);
     
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: 'task-123' })
-    });
+    // Mock health check first for connection
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ version: '1.0.0', capabilities: ['compute'] })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'task-123' })
+      });
 
+    await gateway.connect();
     const taskId = await gateway.submitTask({ description: 'test' });
     
     expect(global.fetch).toHaveBeenCalledWith('http://test-node/tasks', expect.objectContaining({
@@ -115,11 +125,18 @@ describe('OpenClaw Gateway', () => {
   test('tool openclaw_submit_task calls gateway.submitTask', async () => {
     await activate(context);
     
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: 'task-tool' })
-    });
+    // Mock health check first for connection
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ version: '1.0.0', capabilities: ['compute'] })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'task-tool' })
+      });
 
+    await gateway.connect();
     const result = await tools['openclaw_submit_task']({ description: 'via tool' });
     expect(result).toBe('task-tool');
   });

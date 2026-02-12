@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { MessageBubble } from '../ui/MessageBubble';
-import { InputDeck } from '../ui/InputDeck';
 import { ProgressSpinner } from '../ui/ProgressSpinner';
 import { useAppStore, Message } from '../../store/useAppStore';
 import { useTaskStore, useTasksForConversation } from '../../store/useTaskStore';
@@ -31,13 +30,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
     deleteMessagesAfter, 
     isGenerating,
     setIsGenerating,
-    setGenerationProgress
+    setGenerationProgress,
+    activeTaskByConversation,
+    scrollSignal
   } = useAppStore();
   
   const { tasks } = useTaskStore();
   const conversationTasks = useTasksForConversation(activeConversationId || '');
   
   const messages = activeConversationId ? conversations[activeConversationId]?.messages || [] : [];
+  const activeTask = activeConversationId ? activeTaskByConversation[activeConversationId] : null;
   
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +79,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [timeline, isGenerating, activeConversationId]);
+  }, [timeline, isGenerating, activeConversationId, scrollSignal]);
 
   const handleEditMessage = (id: string, newContent: string) => {
     updateMessage(id, newContent);
@@ -210,6 +212,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
                               sender={msg.sender}
                               timestamp={msg.timestamp}
                               attachments={msg.attachments}
+                              metadata={msg.metadata}
                               onEdit={handleEditMessage}
                               onDelete={handleDeleteMessage}
                               onRerun={handleRerunMessage}
@@ -251,10 +254,26 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
       </div>
       </div>
 
-      {/* Input Area - at bottom (InputDeck handles its own extension slots internally) */}
-      <div className="shrink-0 z-20">
-        <InputDeck onMessageSent={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })} />
-      </div>
+      {/* Agent Status Bar */}
+      <AnimatePresence>
+        {activeTask && !['completed', 'cancelled', 'error'].includes(activeTask.status) && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="shrink-0 px-4 py-2 bg-background/80 backdrop-blur border-t border-border flex items-center gap-3 text-xs font-mono z-20"
+          >
+             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+             <span className="text-primary font-bold uppercase tracking-wider">
+               {activeTask.status === 'thinking' ? 'Thinking' : 
+                activeTask.status === 'tool_executing' ? `Executing: ${activeTask.currentTool || 'Tool'}` :
+                activeTask.status === 'waiting_user' ? 'Waiting for Input' :
+                'Processing'}
+             </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };

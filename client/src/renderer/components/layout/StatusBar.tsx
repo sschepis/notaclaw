@@ -3,7 +3,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { Terminal } from 'lucide-react';
 
 export const StatusBar: React.FC = () => {
-    const { network, isTerminalOpen, setIsTerminalOpen } = useAppStore();
+    const { network, setLayoutAction } = useAppStore();
     
     const isOnline = network.status === 'ONLINE';
     const isConnecting = network.status === 'CONNECTING';
@@ -39,10 +39,10 @@ export const StatusBar: React.FC = () => {
                  <span className="flex items-center gap-1"><span className="w-1 h-1 bg-emerald-500 rounded-full"></span>CPU: 12%</span>
                  <span className="flex items-center gap-1"><span className="w-1 h-1 bg-amber-500 rounded-full"></span>LAT: {network.latency}ms</span>
                  
-                 <button 
-                    onClick={() => setIsTerminalOpen(!isTerminalOpen)}
-                    className={`flex items-center gap-1 hover:text-foreground transition-colors ${isTerminalOpen ? 'text-primary' : ''}`}
-                    title="Toggle Terminal"
+                 <button
+                    onClick={() => setLayoutAction({ type: 'open', component: 'bottom-panel-terminal', name: 'Terminal', icon: 'terminal' })}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                    title="Open Terminal"
                  >
                     <Terminal size={10} />
                     <span>TERM</span>

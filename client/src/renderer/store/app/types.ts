@@ -69,12 +69,17 @@ export interface Tab {
 
 export type SidebarView = 'explorer' | 'extensions' | 'settings' | 'friends' | 'tasks' | 'messages' | 'groups' | 'memory' | 'coherence' | 'agents' | 'secrets' | 'connections' | 'services' | 'marketplace';
 
+import { AgentTask } from '../../../shared/agent-types';
+
 export interface AppState {
   // Data
   conversations: Record<string, Conversation>;
   activeConversationId: string | null;
   openConversationIds: string[];
   loadingConversations: boolean;
+  
+  // Agent Tasks
+  activeTaskByConversation: Record<string, AgentTask>;
   
   // Tabs
   tabs: Tab[];
@@ -104,8 +109,13 @@ export interface AppState {
   layoutAction: { type: 'open', component: string, name: string, icon?: string, props?: any } | null;
   setLayoutAction: (action: { type: 'open', component: string, name: string, icon?: string, props?: any } | null) => void;
 
+  // Scroll Signal
+  scrollSignal: number;
+  triggerScrollToBottom: () => void;
+
   // Actions
   loadConversations: () => Promise<void>;
+  loadConversationMessages: (id: string) => Promise<void>;
   createConversation: (title?: string) => Promise<string>;
   startDraftConversation: () => void;
   deleteConversation: (id: string) => Promise<void>;
@@ -149,4 +159,10 @@ export interface AppState {
   setEditingMessageId: (id: string | null) => void;
   setSelectedModel: (model: string | null) => void;
   loadSelectedModelFromSettings: () => Promise<void>;
+
+  // Agent Task Actions
+  startAgentTask: (conversationId: string, message: string, metadata: any) => Promise<string>;
+  stopAgentTask: (taskId: string) => Promise<void>;
+  respondToAgent: (taskId: string, response: string) => Promise<void>;
+  handleTaskUpdate: (task: AgentTask) => void;
 }

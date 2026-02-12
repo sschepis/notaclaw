@@ -1,0 +1,9 @@
+{
+  "id": "com.example.logger",
+  "version": "1.0.0",
+  "name": "System Logger",
+  "description": "Displays system logs",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": []
+}

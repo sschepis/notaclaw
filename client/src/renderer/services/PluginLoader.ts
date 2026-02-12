@@ -195,6 +195,7 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
       registerMessageDecorator: (options) => getRegistry().registerMessageDecorator(pluginId, options),
       registerSettingsTab: (options) => getRegistry().registerSettingsTab(pluginId, options),
       registerCommand: (options) => getRegistry().registerCommand(pluginId, options),
+      registerBottomPanelTab: (options) => getRegistry().registerBottomPanelTab(pluginId, options),
       showModal: (options) => getRegistry().showModal(options),
       closeModal: (id) => getRegistry().closeModal(id),
       showToast: (options) => getRegistry().showToast(options)
@@ -366,6 +367,33 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
       React,
       useAppStore,
       useAlephStore,
+
+      // Legacy plugin API bridge: maps registerComponent(location, opts) to SlotRegistry
+      registerComponent: (location: string, options: { id: string; component: React.ComponentType<any>; label?: string; icon?: any }) => {
+        const registry = useSlotRegistry.getState();
+        if (location.startsWith('sidebar:view:')) {
+          // Register as a stage view
+          registry.registerView(plugin.id, {
+            id: options.id,
+            name: options.label || options.id,
+            icon: options.icon || (() => null),
+            component: options.component,
+          });
+        } else if (location === 'sidebar:nav-item') {
+          // Register a navigation slot registration
+          registry.registerSlot('nav:rail-item' as any, plugin.id, {
+            component: options.component as any,
+            metadata: { id: options.id, label: options.label, icon: options.icon },
+          });
+        } else {
+          // Generic slot registration fallback
+          log(`registerComponent: unknown location "${location}" for plugin "${plugin.id}", registering as generic slot`);
+          registry.registerSlot(location as any, plugin.id, {
+            component: options.component as any,
+            metadata: { id: options.id },
+          });
+        }
+      },
       
       require: (id: string) => {
           switch(id) {

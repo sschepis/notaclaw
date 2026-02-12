@@ -199,6 +199,9 @@ export interface PluginContext {
 export interface RendererPluginContext extends PluginContext {
   // UI Extension API (new slot-based system)
   ui: UIExtensionAPI;
+
+  // Legacy component registration bridge
+  registerComponent: (location: string, options: { id: string; component: any; label?: string; icon?: any }) => void;
   
   // Libraries
   React: typeof import('react');

@@ -1,15 +1,17 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { Layout, Model, TabNode, IJsonModel, Actions, Action, DockLocation } from 'flexlayout-react';
-import { Sidebar as SidebarIcon, Activity, Users, Box, MessageSquare, Database, Zap, Bot, AppWindow } from 'lucide-react';
+import { Sidebar as SidebarIcon, Activity, Users, Box, MessageSquare, Database, Zap, Bot, AppWindow, Terminal, MessageSquare as MessageSquareIcon } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { Stage } from './Stage';
 import { Inspector } from './Inspector';
 import { GroupsStage } from '../groups/GroupsStage';
 import { MemoryFieldViewer } from '../memory/MemoryFieldViewer';
 import { MarketplaceStage } from '../marketplace/MarketplaceStage';
+import { BottomPanelChatTab } from './BottomPanelChatTab';
+import { ConsolePanel } from '../inspector/ConsolePanel';
 import { defaultLayout } from './layout-config';
 import { useAppStore } from '../../store/useAppStore';
-import { useSlotRegistry, usePluginPanels } from '../../services/SlotRegistry';
+import { useSlotRegistry, usePluginPanels, useBottomPanelTabs } from '../../services/SlotRegistry';
 import { SlotErrorBoundary } from '../ui/SlotErrorBoundary';
 
 interface LayoutManagerProps {
@@ -24,14 +26,15 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
 
     useEffect(() => {
         // Clear old layout versions to ensure clean slate
+        localStorage.removeItem('alephnet-layout-v5');
         localStorage.removeItem('alephnet-layout-v4');
         localStorage.removeItem('alephnet-layout-v3');
         localStorage.removeItem('alephnet-layout-v2');
         localStorage.removeItem('alephnet-layout');
         
         // Load from local storage or use default
-        // Bump version to v5 to reset corrupted layouts
-        const savedLayout = localStorage.getItem('alephnet-layout-v5');
+        // Bump version to v6 to reset corrupted layouts
+        const savedLayout = localStorage.getItem('alephnet-layout-v6');
         let jsonModel: IJsonModel = defaultLayout;
 
         if (savedLayout) {
@@ -42,11 +45,11 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
                     jsonModel = parsed;
                 } else {
                     console.log("Saved layout missing stage-panel, using default");
-                    localStorage.removeItem('alephnet-layout-v5');
+                    localStorage.removeItem('alephnet-layout-v6');
                 }
             } catch (e) {
                 console.error("Failed to parse saved layout, using default", e);
-                localStorage.removeItem('alephnet-layout-v5');
+                localStorage.removeItem('alephnet-layout-v6');
             }
         }
 
@@ -64,12 +67,20 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
                 model.doAction(Actions.selectTab(layoutAction.component));
             } else {
                 // Find a suitable parent to add the tab to
-                // Priority: stage-panel > sidebar's sibling area > root
                 let parentId = "root";
                 let dockLocation = DockLocation.CENTER;
                 
+                // Check if target is a bottom panel tab
+                const isBottomTab = layoutAction.component === 'bottom-panel-chat' ||
+                                    layoutAction.component === 'bottom-panel-terminal' ||
+                                    bottomPanelTabs.some(t => t.id === layoutAction.component);
+
+                const bottomPanelNode = model.getNodeById("bottom-panel");
                 const stagePanelNode = model.getNodeById("stage-panel");
-                if (stagePanelNode) {
+
+                if (isBottomTab && bottomPanelNode) {
+                    parentId = "bottom-panel";
+                } else if (stagePanelNode) {
                     parentId = "stage-panel";
                 } else {
                     // No stage-panel exists - add to the right of sidebar's parent
@@ -163,8 +174,9 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
         }
     }, [inspectorOpen, model]);
 
-    // Get plugin-registered panels
+    // Get plugin-registered panels and tabs
     const pluginPanels = usePluginPanels();
+    const bottomPanelTabs = useBottomPanelTabs();
     const stageViews = useSlotRegistry((state) => state.stageViews);
 
     const factory = useCallback((node: TabNode) => {
@@ -184,6 +196,10 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
                 return <div className="flex-1 min-h-0 w-full overflow-hidden bg-background flex flex-col"><MemoryFieldViewer /></div>;
             case "marketplace-stage":
                 return <div className="flex-1 min-h-0 w-full overflow-hidden bg-background flex flex-col"><MarketplaceStage /></div>;
+            case "bottom-panel-chat":
+                return <div className="flex-1 min-h-0 w-full overflow-hidden bg-background flex flex-col"><BottomPanelChatTab /></div>;
+            case "bottom-panel-terminal":
+                return <div className="flex-1 min-h-0 w-full overflow-hidden bg-background flex flex-col"><ConsolePanel /></div>;
         }
         
         // Check for plugin-registered panels
@@ -199,6 +215,19 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
             );
         }
         
+        // Check for plugin-registered bottom panel tabs
+        const bottomTab = bottomPanelTabs.find(t => t.id === component);
+        if (bottomTab) {
+            const TabComponent = bottomTab.component;
+            return (
+                <div className="flex-1 min-h-0 w-full overflow-hidden bg-background flex flex-col">
+                    <SlotErrorBoundary slotId="layout:bottom-panel-tab" extensionId={bottomTab.id}>
+                        <TabComponent />
+                    </SlotErrorBoundary>
+                </div>
+            );
+        }
+
         // Check for plugin-registered stage views
         const stageView = component ? stageViews[component] : undefined;
         if (stageView) {
@@ -213,7 +242,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
         }
         
         return <div className="p-4 text-muted-foreground">Unknown Component: {component}</div>;
-    }, [mode, pluginPanels, stageViews]);
+    }, [mode, pluginPanels, stageViews, bottomPanelTabs]);
 
     const onRenderTab = useCallback((node: TabNode, renderValues: any) => {
         const iconName = node.getIcon();
@@ -236,6 +265,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
         else if (iconName === "groups") Icon = Users;
         else if (iconName === "inspector") Icon = Activity;
         else if (iconName === "zap") Icon = Zap;
+        else if (iconName === "terminal") Icon = Terminal;
+        else if (iconName === "message-square") Icon = MessageSquareIcon;
         
         if (Icon) {
              renderValues.content = (
@@ -254,7 +285,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
     }, []);
 
     const onModelChange = useCallback((newModel: Model) => {
-        localStorage.setItem('alephnet-layout-v5', JSON.stringify(newModel.toJson()));
+        localStorage.setItem('alephnet-layout-v6', JSON.stringify(newModel.toJson()));
     }, []);
 
     const onAction = useCallback((action: Action) => {

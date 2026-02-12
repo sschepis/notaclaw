@@ -9,8 +9,10 @@ export interface UISlice {
   theme: string;
   customTheme: Theme;
   layoutAction: { type: 'open', component: string, name: string, icon?: string, props?: any } | null;
+  scrollSignal: number;
   
   setActiveSidebarView: (view: SidebarView) => void;
+  triggerScrollToBottom: () => void;
   setIsTerminalOpen: (isOpen: boolean) => void;
   setNavOrder: (order: string[]) => void;
   setTheme: (theme: string) => void;
@@ -71,8 +73,10 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
   })(),
 
   layoutAction: null,
+  scrollSignal: 0,
 
   setActiveSidebarView: (view) => set({ activeSidebarView: view }),
+  triggerScrollToBottom: () => set((state) => ({ scrollSignal: state.scrollSignal + 1 })),
   setIsTerminalOpen: (isOpen) => set({ isTerminalOpen: isOpen }),
   
   setTheme: (theme) => {

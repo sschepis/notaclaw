@@ -20,9 +20,14 @@ const fromAIMessage = (msg: AIMessage): Message => ({
     attachments: msg.attachments
 });
 
+const normalizeTitle = (title?: string | null): string => {
+    const trimmed = (title ?? '').trim();
+    return trimmed.length > 0 ? trimmed : 'Chat';
+};
+
 const fromAIConversation = (conv: AIConversation): Conversation => ({
     id: conv.id,
-    title: conv.title,
+    title: normalizeTitle(conv.title),
     messages: (conv.messages || []).map(fromAIMessage),
     createdAt: conv.createdAt,
     updatedAt: conv.updatedAt
@@ -34,6 +39,7 @@ export interface ConversationSlice {
   openConversationIds: string[];
   loadingConversations: boolean;
   loadConversations: () => Promise<void>;
+  loadConversationMessages: (id: string) => Promise<void>;
   createConversation: (title?: string) => Promise<string>;
   startDraftConversation: () => void;
   deleteConversation: (id: string) => Promise<void>;
@@ -63,9 +69,46 @@ export const createConversationSlice: StateCreator<AppState, [], [], Conversatio
               conversations[c.id] = fromAIConversation(c);
           });
           set({ conversations, loadingConversations: false } as any);
+          console.log(`[ConversationSlice] Loaded ${list.length} conversations`);
       } catch (err) {
           console.error('Failed to load conversations:', err);
           set({ loadingConversations: false } as any);
+      }
+  },
+
+  loadConversationMessages: async (id: string) => {
+      const conv = get().conversations[id];
+      if (!conv) {
+          console.warn(`[ConversationSlice] Cannot load messages - conversation ${id} not found`);
+          return;
+      }
+      
+      // If messages are already loaded, skip
+      if (conv.messages.length > 0) {
+          console.log(`[ConversationSlice] Messages already loaded for ${id} (${conv.messages.length} msgs)`);
+          return;
+      }
+
+      try {
+          console.log(`[ConversationSlice] Loading messages for conversation ${id}...`);
+          const fullConv = await window.electronAPI.aiConversationGet({ id });
+          if (fullConv && fullConv.messages?.length > 0) {
+              set(state => ({
+                  conversations: {
+                      ...state.conversations,
+                      [id]: {
+                          ...state.conversations[id],
+                          messages: fullConv.messages.map(fromAIMessage),
+                          updatedAt: fullConv.updatedAt
+                      }
+                  }
+              }));
+              console.log(`[ConversationSlice] Loaded ${fullConv.messages.length} messages for ${id}`);
+          } else {
+              console.log(`[ConversationSlice] No messages found for ${id}`);
+          }
+      } catch (err) {
+          console.error(`Failed to load messages for conversation ${id}:`, err);
       }
   },
 
@@ -163,7 +206,13 @@ export const createConversationSlice: StateCreator<AppState, [], [], Conversatio
               tabs: newTabs
           };
       });
-      // Auto-save session state (debounced implicitly by the async nature)
+
+      // Load messages for the newly active conversation (lazy loading)
+      if (id && !id.startsWith('draft-')) {
+          get().loadConversationMessages(id);
+      }
+
+      // Auto-save session state
       get().saveSessionState();
   },
 
@@ -216,23 +265,35 @@ export const createConversationSlice: StateCreator<AppState, [], [], Conversatio
         if (!targetId) return;
     }
 
+    // ─── Draft-to-Real Transition ─────────────────────────────────
     if (targetId.startsWith('draft-')) {
+        const draftId = targetId;
         const title = msg.content.substring(0, 30) || 'Chat';
         
         try {
+            // 1. Create the real conversation in the backend (persisted to GunDB + local JSON)
             const aiConv = await window.electronAPI.aiConversationCreate({ title });
+            const realId = aiConv.id;
+            
+            // 2. IMMEDIATELY persist the first message to the backend
+            await window.electronAPI.aiConversationAddMessage({
+                conversationId: realId,
+                message: toAIMessage(msg)
+            });
+            
+            // 3. Update the UI state atomically: replace draft with real conversation
             const newConversation = fromAIConversation(aiConv);
-            const realId = newConversation.id;
+            newConversation.messages = [msg]; // Include the first message in UI state
             
             set(state => {
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { [targetId!]: draft, ...restConversations } = state.conversations;
+                const { [draftId]: _draft, ...restConversations } = state.conversations;
                 
                 const newTabs = state.tabs.map(t => 
-                    t.id === targetId ? { ...t, id: realId, title: newConversation.title } : t
+                    t.id === draftId ? { ...t, id: realId, title: newConversation.title } : t
                 );
                 
-                const newOpenIds = state.openConversationIds.map(id => id === targetId ? realId : id);
+                const newOpenIds = state.openConversationIds.map(id => id === draftId ? realId : id);
                 
                 return {
                     conversations: { ...restConversations, [realId]: newConversation },
@@ -243,7 +304,31 @@ export const createConversationSlice: StateCreator<AppState, [], [], Conversatio
                 };
             });
             
-            targetId = realId;
+            // 4. Save session state with the real ID
+            get().saveSessionState();
+            
+            console.log(`[ConversationSlice] Draft ${draftId} promoted to ${realId} with first message persisted`);
+            
+            // Message is already persisted above, so we return early
+            // (don't fall through to the normal persist path below)
+            
+            // Implicit memory promotion for user messages
+            if (msg.sender === 'user' && window.electronAPI.memoryProcessForPromotion) {
+                try {
+                    const promotions = await window.electronAPI.memoryProcessForPromotion({
+                        content: msg.content,
+                        role: 'user',
+                        conversationId: realId
+                    });
+                    if (promotions && promotions.length > 0) {
+                        console.log(`Auto-promoted ${promotions.length} memory fragment(s) from message`);
+                    }
+                } catch (err) {
+                    console.warn('Implicit memory promotion failed:', err);
+                }
+            }
+            
+            return;
             
         } catch (err) {
             console.error('Failed to create real conversation from draft:', err);
@@ -251,6 +336,9 @@ export const createConversationSlice: StateCreator<AppState, [], [], Conversatio
         }
     }
 
+    // ─── Normal Message Add (non-draft) ───────────────────────────
+    
+    // Update UI state optimistically
     set((state) => {
         const conversation = state.conversations[targetId!];
         if (!conversation) return state;
@@ -268,6 +356,7 @@ export const createConversationSlice: StateCreator<AppState, [], [], Conversatio
         };
     });
 
+    // Persist to backend (GunDB + local JSON)
     try {
         await window.electronAPI.aiConversationAddMessage({
             conversationId: targetId!,
@@ -395,9 +484,33 @@ export const createConversationSlice: StateCreator<AppState, [], [], Conversatio
           const { activeConversationId, openConversationIds } = sessionState;
           const conversations = get().conversations;
 
+          // Check for missing conversations and try to fetch them
+          const missingIds = openConversationIds.filter(id => !conversations[id]);
+          if (missingIds.length > 0) {
+              console.log(`[ConversationSlice] Attempting to recover ${missingIds.length} missing conversations...`);
+              await Promise.all(missingIds.map(async (id) => {
+                  try {
+                      const conv = await window.electronAPI.aiConversationGet({ id });
+                      if (conv) {
+                          set(state => ({
+                              conversations: {
+                                  ...state.conversations,
+                                  [id]: fromAIConversation(conv)
+                              }
+                          }));
+                      }
+                  } catch (e) {
+                      console.warn(`Failed to recover conversation ${id}:`, e);
+                  }
+              }));
+          }
+
+          // Re-fetch conversations from state after potential recovery
+          const updatedConversations = get().conversations;
+
           // Filter to only IDs that still exist in loaded conversations
-          const validOpenIds = openConversationIds.filter(id => conversations[id]);
-          const validActiveId = activeConversationId && conversations[activeConversationId]
+          const validOpenIds = openConversationIds.filter(id => updatedConversations[id]);
+          const validActiveId = activeConversationId && updatedConversations[activeConversationId]
               ? activeConversationId
               : (validOpenIds.length > 0 ? validOpenIds[validOpenIds.length - 1] : null);
 
@@ -405,7 +518,7 @@ export const createConversationSlice: StateCreator<AppState, [], [], Conversatio
           const tabs: Tab[] = validOpenIds.map(id => ({
               id,
               type: 'chat' as const,
-              title: conversations[id]?.title || 'Chat'
+              title: updatedConversations[id]?.title || 'Chat'
           }));
 
           set({
@@ -415,7 +528,12 @@ export const createConversationSlice: StateCreator<AppState, [], [], Conversatio
               activeTabId: validActiveId
           });
 
-          console.log(`Restored session state: active=${validActiveId}, open=[${validOpenIds.join(',')}]`);
+          // Load messages for the active conversation
+          if (validActiveId) {
+              get().loadConversationMessages(validActiveId);
+          }
+
+          console.log(`[ConversationSlice] Restored session state: active=${validActiveId}, open=[${validOpenIds.join(',')}]`);
       } catch (err) {
           console.error('Failed to restore conversation session state:', err);
       }

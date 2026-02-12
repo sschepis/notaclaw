@@ -80,26 +80,33 @@ const ConversationList: React.FC<{
     const [search, setSearch] = useState('');
 
     const activeDomain = domains.find(d => d.id === domainId);
+    const searchLower = search.toLowerCase();
+    const safeLower = (value?: string | null) => (value ?? '').toLowerCase();
+    const getSortTimestamp = (conv: { updatedAt?: number; createdAt?: number }) => {
+        if (typeof conv.updatedAt === 'number') return conv.updatedAt;
+        if (typeof conv.createdAt === 'number') return conv.createdAt;
+        return 0;
+    };
 
     // Filter items based on search and domain
     // In a real app, we'd filter by domainId. For now, we show all if 'public', or subsets if others.
     
     const filteredConversations = conversations.filter(c => 
-        c.peerDisplayName.toLowerCase().includes(search.toLowerCase())
+        safeLower(c.peerDisplayName).includes(searchLower)
     );
 
     const filteredGroups = groups.filter(g => 
-        g.name.toLowerCase().includes(search.toLowerCase())
+        safeLower(g.name).includes(searchLower)
     );
 
     const filteredAIConversations = Object.values(aiConversations)
-        .filter(c => c.title.toLowerCase().includes(search.toLowerCase()))
+        .filter(c => safeLower(c.title).includes(searchLower))
         .filter(c => {
             // Filter by domain
             if (domainId === 'public') return true; // Show all in public for now, or filter by public domain ID
             return (c as any).domainId === domainId;
         })
-        .sort((a, b) => b.updatedAt - a.createdAt);
+        .sort((a, b) => getSortTimestamp(b) - getSortTimestamp(a));
 
     return (
         <div className="flex-1 flex flex-col min-w-0 bg-muted/10">
@@ -159,7 +166,9 @@ const ConversationList: React.FC<{
                                         <Bot size={14} className="text-primary" />
                                     </div>
                                 </div>
-                                <span className="text-sm text-muted-foreground group-hover:text-foreground truncate flex-1">{conv.title}</span>
+                                <span className="text-sm text-muted-foreground group-hover:text-foreground truncate flex-1">
+                                    {conv.title?.trim() || 'Chat'}
+                                </span>
                             </button>
                         ))}
                         {filteredAIConversations.length === 0 && (
@@ -177,33 +186,36 @@ const ConversationList: React.FC<{
                         <Plus size={12} className="text-muted-foreground opacity-0 group-hover:opacity-100 cursor-pointer hover:text-foreground transition-all" />
                     </div>
                     <div className="space-y-0.5">
-                        {filteredConversations.map(conv => (
-                            <button
-                                key={conv.peerId}
-                                onClick={() => onSelectConversation('dm', conv.peerId)}
-                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/30 text-left group transition-colors"
-                            >
-                                <div className="relative">
-                                    <Avatar className="h-6 w-6 rounded-full ring-1 ring-border">
-                                        <AvatarFallback className="bg-muted text-[10px] text-muted-foreground">
-                                            {conv.peerDisplayName.substring(0, 2).toUpperCase()}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    {conv.unreadCount > 0 && (
-                                        <div className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-primary flex items-center justify-center border border-background">
-                                            <span className="text-[8px] font-bold text-primary-foreground">{conv.unreadCount}</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex justify-between items-baseline">
-                                        <span className={`text-sm truncate ${conv.unreadCount > 0 ? 'text-foreground font-medium' : 'text-muted-foreground group-hover:text-foreground'}`}>
-                                            {conv.peerDisplayName}
-                                        </span>
+                        {filteredConversations.map(conv => {
+                            const displayName = conv.peerDisplayName || 'Unknown';
+                            return (
+                                <button
+                                    key={conv.peerId}
+                                    onClick={() => onSelectConversation('dm', conv.peerId)}
+                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/30 text-left group transition-colors"
+                                >
+                                    <div className="relative">
+                                        <Avatar className="h-6 w-6 rounded-full ring-1 ring-border">
+                                            <AvatarFallback className="bg-muted text-[10px] text-muted-foreground">
+                                                {displayName.substring(0, 2).toUpperCase()}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        {conv.unreadCount > 0 && (
+                                            <div className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-primary flex items-center justify-center border border-background">
+                                                <span className="text-[8px] font-bold text-primary-foreground">{conv.unreadCount}</span>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                            </button>
-                        ))}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-baseline">
+                                            <span className={`text-sm truncate ${conv.unreadCount > 0 ? 'text-foreground font-medium' : 'text-muted-foreground group-hover:text-foreground'}`}>
+                                                {displayName}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </button>
+                            );
+                        })}
                         {filteredConversations.length === 0 && (
                             <div className="px-2 py-4 text-center">
                                 <p className="text-xs text-muted-foreground italic">No messages yet</p>
@@ -219,18 +231,21 @@ const ConversationList: React.FC<{
                         <Plus size={12} className="text-muted-foreground opacity-0 group-hover:opacity-100 cursor-pointer hover:text-foreground transition-all" />
                     </div>
                     <div className="space-y-0.5">
-                        {filteredGroups.map(group => (
-                            <button
-                                key={group.id}
-                                onClick={() => onSelectConversation('group', group.id)}
-                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/30 text-left group transition-colors"
-                            >
-                                <div className="w-6 h-6 rounded-lg bg-muted/20 flex items-center justify-center border border-border group-hover:border-muted-foreground/30 transition-colors">
-                                    {group.visibility === 'private' ? <Lock size={12} className="text-muted-foreground" /> : <Hash size={14} className="text-muted-foreground" />}
-                                </div>
-                                <span className="text-sm text-muted-foreground group-hover:text-foreground truncate flex-1">{group.name}</span>
-                            </button>
-                        ))}
+                        {filteredGroups.map(group => {
+                            const groupName = group.name || 'Unnamed group';
+                            return (
+                                <button
+                                    key={group.id}
+                                    onClick={() => onSelectConversation('group', group.id)}
+                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/30 text-left group transition-colors"
+                                >
+                                    <div className="w-6 h-6 rounded-lg bg-muted/20 flex items-center justify-center border border-border group-hover:border-muted-foreground/30 transition-colors">
+                                        {group.visibility === 'private' ? <Lock size={12} className="text-muted-foreground" /> : <Hash size={14} className="text-muted-foreground" />}
+                                    </div>
+                                    <span className="text-sm text-muted-foreground group-hover:text-foreground truncate flex-1">{groupName}</span>
+                                </button>
+                            );
+                        })}
                          {filteredGroups.length === 0 && (
                             <div className="px-2 py-4 text-center">
                                 <p className="text-xs text-muted-foreground italic">No groups found</p>

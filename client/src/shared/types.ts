@@ -18,6 +18,14 @@ import {
 import { AIProviderConfig, AISettings } from './ai-types';
 import { PluginManifest, SkillManifest } from './plugin-types';
 import { 
+  AgentStartTaskPayload, 
+  AgentStopTaskPayload, 
+  AgentUserResponsePayload, 
+  AgentTask, 
+  AgentTaskUpdateEvent, 
+  AgentTaskMessageEvent 
+} from './agent-types';
+import { 
   SetSecretOptions, 
   GetSecretOptions, 
   DeleteSecretOptions, 
@@ -139,6 +147,15 @@ export interface IElectronAPI {
   secretsStatus: () => Promise<VaultStatus>;
   secretsLock: () => Promise<void>;
   secretsUnlock: () => Promise<void>;
+
+  // ─── Agent Task Runner ──────────────────────────────────────────
+  agentStartTask: (params: AgentStartTaskPayload) => Promise<string>;
+  agentStopTask: (params: AgentStopTaskPayload) => Promise<void>;
+  agentUserResponse: (params: AgentUserResponsePayload) => Promise<void>;
+  agentGetTask: (params: { taskId: string }) => Promise<AgentTask | null>;
+  agentGetActiveTask: (params: { conversationId: string }) => Promise<AgentTask | null>;
+  onAgentTaskUpdate: (callback: (event: any, data: AgentTaskUpdateEvent) => void) => () => void;
+  onAgentTaskMessage: (callback: (event: any, data: AgentTaskMessageEvent) => void) => () => void;
 
   // App-level Command Invocation
   onAppInvoke: (callback: (event: any, payload: { requestId: string, channel: string, data: any }) => void) => () => void;

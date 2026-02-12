@@ -17,7 +17,8 @@ import {
     configManager,
     logger,
     marketplaceService,
-    openClawGateway
+    openClawGateway,
+    agentTaskRunner
 } from './services-setup';
 
 export function registerIPC(getMainWindow: () => BrowserWindow | null) {
@@ -168,6 +169,17 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     ipcMain.handle('ai:conversation:loadSessionState', () => conversationManager.loadSessionState());
     ipcMain.handle('ai:conversation:clearSessionState', () => conversationManager.clearSessionState());
 
+    // Conversation Sync Subscription (cross-device sync via GunDB)
+    ipcMain.handle('ai:conversation:subscribe', () => {
+        conversationManager.subscribeToChanges();
+        conversationManager.on('conversationChanged', (event: any) => {
+            const mainWindow = getMainWindow();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('ai:conversation:changed', event);
+            }
+        });
+    });
+
     // Memory Promotion IPC
     ipcMain.handle('memory:promote', (_, request) => memoryPromotionService.promoteToUserMemory(request));
     ipcMain.handle('memory:processForPromotion', (_, { content, role, conversationId }) =>
@@ -200,6 +212,14 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     ipcMain.handle('task:execute', (_, { taskId, inputValues }) => taskScheduler.executeTask(taskId, inputValues));
     ipcMain.handle('task:getHistory', (_, { taskId, limit }) => taskScheduler.getTaskHistory(taskId, limit));
     ipcMain.handle('task:parse', (_, request) => taskScheduler.parseTaskRequest(request));
+
+    // Agent Task Runner IPC
+    ipcMain.handle('agent:startTask', async (_, { conversationId, message, metadata }) => 
+        agentTaskRunner.startTask(conversationId, message, metadata));
+    ipcMain.handle('agent:stopTask', async (_, { taskId }) => agentTaskRunner.stopTask(taskId));
+    ipcMain.handle('agent:userResponse', async (_, { taskId, response }) => agentTaskRunner.resolveUserResponse(taskId, response));
+    ipcMain.handle('agent:getTask', async (_, { taskId }) => agentTaskRunner.getTask(taskId));
+    ipcMain.handle('agent:getActiveTask', async (_, { conversationId }) => agentTaskRunner.getActiveTaskForConversation(conversationId));
 
     // OpenClaw Gateway IPC
     ipcMain.handle('openclaw:connect', async (_, { url }) => {

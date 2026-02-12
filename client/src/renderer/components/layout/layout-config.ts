@@ -35,20 +35,54 @@ export const defaultLayout: IJsonModel = {
                 ]
             },
             {
-                type: "tabset",
+                type: "row",
                 weight: 60,
-                selected: 0,
-                id: "stage-panel",
-                enableClose: true,
+                id: "content-column",
                 children: [
                     {
-                        type: "tab",
-                        name: "Chat",
-                        component: "stage",
+                        type: "tabset",
+                        weight: 75,
+                        selected: 0,
+                        id: "stage-panel",
                         enableClose: true,
-                        id: "stage",
-                        // @ts-ignore
-                        icon: "stage"
+                        children: [
+                            {
+                                type: "tab",
+                                name: "Chat",
+                                component: "stage",
+                                enableClose: true,
+                                id: "stage",
+                                // @ts-ignore
+                                icon: "stage"
+                            }
+                        ]
+                    },
+                    {
+                        type: "tabset",
+                        weight: 25,
+                        id: "bottom-panel",
+                        minHeight: 120,
+                        enableClose: false,
+                        children: [
+                            {
+                                type: "tab",
+                                name: "Chat Input",
+                                component: "bottom-panel-chat",
+                                enableClose: false,
+                                id: "bottom-panel-chat",
+                                // @ts-ignore
+                                icon: "message-square"
+                            },
+                            {
+                                type: "tab",
+                                name: "Terminal",
+                                component: "bottom-panel-terminal",
+                                enableClose: true,
+                                id: "bottom-panel-terminal",
+                                // @ts-ignore
+                                icon: "terminal"
+                            }
+                        ]
                     }
                 ]
             },

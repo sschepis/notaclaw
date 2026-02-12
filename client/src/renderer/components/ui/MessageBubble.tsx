@@ -17,6 +17,7 @@ interface MessageBubbleProps {
   sender: 'user' | 'agent';
   timestamp: string;
   attachments?: Attachment[];
+  metadata?: Record<string, any>;
   onEdit?: (id: string, newContent: string) => void;
   onDelete?: (id: string) => void;
   onRerun?: (id: string) => void;
@@ -29,6 +30,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   sender, 
   timestamp,
   attachments,
+  metadata,
   onEdit,
   onDelete,
   onRerun
@@ -40,6 +42,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [copied, setCopied] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const { isGenerating } = useAppStore();
+
+  const isPlan = metadata?.isPlan;
+  const isUpdate = metadata?.isUpdate;
+
+  // Override styles for plan/update messages
+  const bubbleStyles = isPlan 
+    ? { ...styles, bg: 'bg-indigo-900/20', border: 'border-indigo-500/30', text: 'text-indigo-100', icon: 'text-indigo-400' }
+    : isUpdate
+      ? { ...styles, bg: 'bg-slate-900/20', border: 'border-slate-500/20', text: 'text-slate-300', icon: 'text-slate-400' }
+      : styles;
 
   const handleCopy = async () => {
     try {
@@ -131,7 +143,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 relative p-3 rounded-lg shadow-sm backdrop-blur-md
                 ${isUser 
                     ? 'bg-secondary border border-border text-secondary-foreground rounded-tr-sm' 
-                    : `${styles.bg} border ${styles.border} ${styles.text} ${styles.glow} rounded-tl-sm`}
+                    : `${bubbleStyles.bg} border ${bubbleStyles.border} ${bubbleStyles.text} ${bubbleStyles.glow} rounded-tl-sm`}
             `}>
                 
                 <MessageAttachments attachments={attachments || []} />
@@ -150,7 +162,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 {/* Metadata Footer */}
                 {!isEditing && (
                   <div className="flex justify-between items-center mt-2 pt-2 border-t border-border opacity-50 text-[9px] uppercase tracking-wider font-bold">
-                      <span className={isUser ? 'text-muted-foreground' : styles.icon}>{type}</span>
+                      <span className={isUser ? 'text-muted-foreground' : bubbleStyles.icon}>
+                        {isPlan ? 'PLAN' : isUpdate ? 'UPDATE' : type}
+                      </span>
                       <span className="text-muted-foreground font-mono">{timestamp}</span>
                   </div>
                 )}

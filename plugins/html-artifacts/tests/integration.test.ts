@@ -13,6 +13,14 @@ describe('HTML Artifacts Plugin', () => {
       on: jest.fn((event, callback) => {
         if (event === 'ready') callback();
       }),
+      storage: {
+        get: jest.fn().mockResolvedValue({}),
+        set: jest.fn().mockResolvedValue(undefined),
+      },
+      ipc: {
+        send: jest.fn(),
+        on: jest.fn(),
+      }
     };
   });
 

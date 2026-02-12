@@ -46,6 +46,7 @@ export const activate = async (context: PluginContext) => {
 
   let currentContext: any[] = [];
   let updateInterval: any;
+  let customLayout: any = null;
 
   // Real System Data Collector
   const collectSystemData = async () => {
@@ -96,6 +97,22 @@ export const activate = async (context: PluginContext) => {
       const windowSize = 15;
       if (currentContext.length > windowSize) {
         currentContext = currentContext.slice(-windowSize);
+      }
+
+      if (customLayout) {
+        const latestSys = currentContext.filter(c => c.source === 'system').slice(-1)[0];
+        const cpuHistory = currentContext.filter(c => c.source === 'system').map(c => parseFloat(c.data?.cpu_load_1m || 0));
+
+        const updatedWidgets = customLayout.widgets.map((w: any) => {
+            if (w.id === 'cpu-metric') return { ...w, data: { value: latestSys?.data?.cpu_load_1m || 'N/A', unit: '' } };
+            if (w.id === 'mem-metric') return { ...w, data: { value: latestSys?.data?.mem_usage_percent || 'N/A', unit: '%' } };
+            if (w.id === 'cpu-chart') return { ...w, data: { points: cpuHistory } };
+            if (w.id === 'event-log') return { ...w, data: currentContext.slice(-5) };
+            return w;
+        });
+        
+        context.ipc.send('autodash:update', { ...customLayout, widgets: updatedWidgets });
+        return;
       }
 
       // Send fallback schema directly (no AI call - saves API costs)
@@ -281,9 +298,6 @@ Rules:
       }
 
       if (plan.type === 'shell' && context.services.sandbox) {
-        // Use sandbox if available, or just log for now as we don't have direct exec exposed easily
-        // actually we added exec:shell, but PluginContext doesn't expose generic exec directly unless via sandbox or custom service
-        // Let's assume we use the sandbox service
         const session = await context.services.sandbox.createSession('bash');
         const result = await session.exec(plan.payload);
         await session.close();
@@ -300,6 +314,12 @@ Rules:
       console.error('[AutoDash] Action failed:', error);
       return { success: false, error: error.message };
     }
+  });
+
+  context.ipc.handle('autodash:save-layout', async (schema: any) => {
+    console.log('[AutoDash] Saving custom layout', schema?.widgets?.length);
+    customLayout = schema;
+    return { success: true };
   });
 
   // Initial update

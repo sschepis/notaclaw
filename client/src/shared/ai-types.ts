@@ -33,6 +33,8 @@ export interface AIRequestOptions {
   temperature?: number;
   maxTokens?: number;
   stream?: boolean;
+  /** Per-request timeout in ms. If not set, uses content-type-aware defaults. */
+  timeoutMs?: number;
 }
 
 export interface AIResponse {

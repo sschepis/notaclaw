@@ -104,16 +104,21 @@
     },
     "files": [
       "dist/**/*",
+      "resources/**/*",
       "package.json"
     ],
+    "icon": "resources/icon.png",
     "mac": {
-      "artifactName": "${productName}-${version}-Mac.${ext}"
+      "artifactName": "${productName}-${version}-Mac.${ext}",
+      "icon": "resources/icon.png"
     },
     "win": {
-      "artifactName": "${productName}-${version}-Windows.${ext}"
+      "artifactName": "${productName}-${version}-Windows.${ext}",
+      "icon": "resources/icon.png"
     },
     "linux": {
-      "artifactName": "${productName}-${version}-Linux.${ext}"
+      "artifactName": "${productName}-${version}-Linux.${ext}",
+      "icon": "resources/icon.png"
     }
   }
 }

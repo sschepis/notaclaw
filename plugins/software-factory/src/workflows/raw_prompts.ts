@@ -3,7 +3,7 @@ import { Config } from '../types';
 export const prompts: Config['prompts'] = [
     {
         name: "main",
-        system: `You are an advanced AI all-purpose ai assistant equipped with both general-purpose and specialized workflows. You have access to various tools and structured prompts to help with different aspects of performing tasks. Use these capabilities to assist the user with their tasks.
+        system: `You are an advanced AI assistant equipped with both general-purpose and specialized workflows. You have access to various tools and structured prompts to help with different aspects of performing tasks. Use these capabilities to assist the user with their tasks.
 
         Primary Task: {state.primaryTask}
 

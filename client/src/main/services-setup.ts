@@ -29,6 +29,7 @@ import { AlephWallet } from '@sschepis/alephnet-node';
 import { MarketplaceService } from './services/MarketplaceService';
 import { getOpenClawGateway } from './services/OpenClawGatewayService';
 import { DesktopAccessibilityLearner } from './services/desktop-learner';
+import { AgentTaskRunner } from './services/agent-runner';
 
 // Instantiate core services
 export const aiManager = new AIProviderManager();
@@ -77,6 +78,17 @@ export const taskScheduler = new TaskScheduler(dsnNode.getBridge(), identityMana
 export const risaService = new RISAService();
 export const desktopLearner = new DesktopAccessibilityLearner(alephNetClient, aiManager, sessionManager);
 
+// Agent Task Runner
+export const agentTaskRunner = new AgentTaskRunner(
+    aiManager,
+    personalityManager,
+    conversationManager,
+    alephNetClient
+);
+
+// Inject AgentTaskRunner into DSNNode
+dsnNode.setAgentTaskRunner(agentTaskRunner);
+
 // Wire up Personality Manager
 personalityManager.setAlephNetClient(alephNetClient);
 personalityManager.setConversationManager(conversationManager);
@@ -89,6 +101,21 @@ conversationManager.setMemoryFieldCreator(async (options) => {
         scope: options.scope,
         description: options.description,
         visibility: options.visibility
+    });
+});
+
+conversationManager.setMessageSaver(async (conversationId, memoryFieldId, message) => {
+    await alephNetClient.memoryStore({
+        fieldId: memoryFieldId,
+        content: message.content,
+        metadata: {
+            role: message.role,
+            messageId: message.id,
+            sequence: message.sequence,
+            timestamp: message.timestamp,
+            conversationId: conversationId,
+            type: 'conversation_message'
+        }
     });
 });
 
@@ -159,6 +186,21 @@ export async function initializeServices(getMainWindow: () => Electron.BrowserWi
         }
     });
     
+    // Agent Task Runner Events
+    agentTaskRunner.on('taskUpdate', (event) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('agent:taskUpdate', event);
+        }
+    });
+
+    agentTaskRunner.on('taskMessage', (event) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('agent:taskMessage', event);
+        }
+    });
+
     // Start DSN Node
     logManager.info('Network', 'DSN Node Starting', 'Connecting to mesh network...');
     await dsnNode.start();

@@ -34,136 +34,144 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 var import_child_process = require("child_process");
 var os = __toESM(require("os"));
+var fs = __toESM(require("fs"));
+var path = __toESM(require("path"));
+var import_crypto = require("crypto");
 var CodeInterpreter = class {
   context;
   sessions;
-  maxOutputSize;
-  defaultTimeout;
-  maxTimeout;
+  dockerAvailable = false;
+  // Limits
+  maxMemory = "512m";
+  maxCpus = 1;
+  defaultTimeout = 1e4;
+  // 10s
+  sessionTimeout = 36e5;
+  // 1h
+  cleanupInterval = null;
   constructor(context) {
     this.context = context;
     this.sessions = /* @__PURE__ */ new Map();
-    this.maxOutputSize = 1024 * 1024;
-    this.defaultTimeout = 1e4;
-    this.maxTimeout = 6e4;
   }
-  activate() {
-    this.context.ipc.handle("exec", async (params) => this.executeCommand(params));
-    this.context.ipc.handle("spawn", async (params) => this.spawnProcess(params));
-    this.context.ipc.handle("kill", async ({ pid }) => this.killProcess(pid));
-    if (this.context.services && this.context.services.tools) {
-      this.context.services.tools.register({
-        name: "exec",
-        description: "Execute shell commands (Local Host)",
-        parameters: {
-          type: "object",
-          properties: {
-            command: { type: "string" },
-            cwd: { type: "string" },
-            timeout: { type: "number", description: "Timeout in ms (max 60000)" }
-          },
-          required: ["command"]
-        },
-        handler: async (args) => this.executeCommand(args)
-      });
+  async activate() {
+    this.dockerAvailable = await this.checkDocker();
+    console.log(`[CodeInterpreter] Docker available: ${this.dockerAvailable}`);
+    this.context.ipc.handle("create-session", async ({ language }) => this.createSession(language));
+    this.context.ipc.handle("execute", async ({ sessionId, code }) => this.executeCode(sessionId, code));
+    this.context.ipc.handle("install-package", async ({ sessionId, packageName }) => this.installPackage(sessionId, packageName));
+    this.context.ipc.handle("end-session", async ({ sessionId }) => this.endSession(sessionId));
+    this.context.ipc.handle("upload-file", async ({ sessionId, filename, content }) => this.uploadFile(sessionId, filename, content));
+    this.cleanupInterval = setInterval(() => this.cleanupSessions(), 6e4);
+  }
+  deactivate() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
     }
   }
-  async executeCommand({ command, cwd, timeout }) {
-    console.log(`[CodeInterpreter] Executing: ${command.substring(0, 50)}...`);
-    if (!command || typeof command !== "string") {
-      throw new Error("Invalid command provided");
-    }
-    if (this.isForbidden(command)) {
-      throw new Error("Command blocked by security policy");
-    }
-    return new Promise((resolve, reject) => {
-      const shell = os.platform() === "win32" ? "powershell.exe" : "/bin/bash";
-      const args = os.platform() === "win32" ? ["-Command", command] : ["-c", command];
-      const safeTimeout = Math.min(timeout || this.defaultTimeout, this.maxTimeout);
-      const child = (0, import_child_process.spawn)(shell, args, {
-        cwd: cwd || process.cwd(),
-        env: process.env,
-        // Inherit env (be careful here in prod)
-        stdio: ["ignore", "pipe", "pipe"]
-      });
-      let stdout = "";
-      let stderr = "";
-      let killed = false;
-      let outputSize = 0;
-      const timer = setTimeout(() => {
-        killed = true;
-        child.kill("SIGTERM");
-        setTimeout(() => {
-          if (!child.killed) child.kill("SIGKILL");
-        }, 1e3);
-        reject(new Error(`Command timed out after ${safeTimeout}ms`));
-      }, safeTimeout);
-      const appendOutput = (data, isError) => {
-        if (outputSize >= this.maxOutputSize) return;
-        const str = data.toString();
-        const len = str.length;
-        if (outputSize + len > this.maxOutputSize) {
-          const truncated = str.substring(0, this.maxOutputSize - outputSize);
-          if (isError) stderr += truncated + "\n[Truncated]";
-          else stdout += truncated + "\n[Truncated]";
-          outputSize = this.maxOutputSize;
-          child.kill();
-        } else {
-          if (isError) stderr += str;
-          else stdout += str;
-          outputSize += len;
-        }
-      };
-      child.stdout?.on("data", (data) => appendOutput(data, false));
-      child.stderr?.on("data", (data) => appendOutput(data, true));
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        if (!killed) reject(err);
-      });
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        if (!killed) {
-          if (code === 0) {
-            resolve({ output: stdout, code });
-          } else {
-            resolve({ output: stdout, error: stderr, code });
-          }
-        }
+  async checkDocker() {
+    return new Promise((resolve) => {
+      (0, import_child_process.exec)("docker --version", (err) => {
+        resolve(!err);
       });
     });
   }
-  isForbidden(command) {
-    const forbidden = [
-      "rm -rf /",
-      ":(){ :|:& };:",
-      "mkfs",
-      "dd if=/dev/zero"
-    ];
-    return forbidden.some((f) => command.includes(f));
-  }
-  spawnProcess({ command, cwd }) {
-    return { error: "Background processes not supported in this version." };
-  }
-  killProcess(pid) {
-    if (!pid || typeof pid !== "number") return { success: false, error: "Invalid PID" };
-    try {
-      process.kill(pid);
-      return { success: true };
-    } catch (e) {
-      return { success: false, error: e.message };
+  async createSession(language) {
+    if (!this.dockerAvailable) {
+      return { sessionId: "", error: "Docker is not available. Please install Docker to use the Code Interpreter." };
     }
+    const sessionId = (0, import_crypto.randomUUID)();
+    const image = language === "python" ? "python:3.9-slim" : "node:18-slim";
+    const workDir = path.join(os.tmpdir(), `code-interpreter-${sessionId}`);
+    fs.mkdirSync(workDir, { recursive: true });
+    const cmd = language === "python" ? "tail -f /dev/null" : "tail -f /dev/null";
+    const dockerCmd = `docker run -d --rm --network none --cpus ${this.maxCpus} --memory ${this.maxMemory} -v "${workDir}:/workspace" -w /workspace ${image} ${cmd}`;
+    try {
+      const containerId = await this.execPromise(dockerCmd);
+      this.sessions.set(sessionId, {
+        id: sessionId,
+        language,
+        containerId: containerId.trim(),
+        lastActive: Date.now(),
+        workDir
+      });
+      return { sessionId };
+    } catch (e) {
+      return { sessionId: "", error: `Failed to start session: ${e.message}` };
+    }
+  }
+  async executeCode(sessionId, code) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return { output: "", error: "Session not found", code: 1 };
+    }
+    session.lastActive = Date.now();
+    const scriptName = session.language === "python" ? "script.py" : "script.js";
+    const scriptPath = path.join(session.workDir, scriptName);
+    fs.writeFileSync(scriptPath, code);
+    const cmd = session.language === "python" ? `python ${scriptName}` : `node ${scriptName}`;
+    const dockerExec = `docker exec ${session.containerId} ${cmd}`;
+    try {
+      const output = await this.execPromise(dockerExec, { timeout: this.defaultTimeout });
+      return { output, code: 0 };
+    } catch (e) {
+      if (e.killed) {
+        return { output: "", error: "Execution timed out", code: 124 };
+      }
+      return { output: e.stdout || "", error: e.stderr || e.message, code: e.code || 1 };
+    }
+  }
+  async installPackage(sessionId, packageName) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return { success: false, error: "Session not found" };
+    const cmd = session.language === "python" ? `pip install ${packageName}` : `npm install ${packageName}`;
+    return { success: false, error: "Dynamic package installation is disabled in secure mode (Network isolated)." };
+  }
+  async uploadFile(sessionId, filename, content) {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error("Session not found");
+    const filePath = path.join(session.workDir, filename);
+    fs.writeFileSync(filePath, content);
+  }
+  async endSession(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      await this.execPromise(`docker kill ${session.containerId}`);
+      fs.rmSync(session.workDir, { recursive: true, force: true });
+      this.sessions.delete(sessionId);
+    }
+  }
+  cleanupSessions() {
+    const now = Date.now();
+    for (const [id, session] of this.sessions) {
+      if (now - session.lastActive > this.sessionTimeout) {
+        this.endSession(id);
+      }
+    }
+  }
+  execPromise(command, options = {}) {
+    return new Promise((resolve, reject) => {
+      (0, import_child_process.exec)(command, { ...options, encoding: "utf8" }, (error, stdout, stderr) => {
+        if (error) {
+          error.stdout = stdout;
+          error.stderr = stderr;
+          reject(error);
+        } else {
+          resolve(stdout);
+        }
+      });
+    });
   }
 };
+var interpreter;
 var index_default = {
-  activate: (context) => {
+  activate: async (context) => {
     console.log("[Code Interpreter] Activating...");
-    const interpreter = new CodeInterpreter(context);
-    interpreter.activate();
-    context.on("ready", () => {
-      console.log("[Code Interpreter] Ready (Local Host Mode)");
-    });
+    interpreter = new CodeInterpreter(context);
+    await interpreter.activate();
   },
   deactivate: () => {
     console.log("[Code Interpreter] Deactivated");
+    if (interpreter) interpreter.deactivate();
   }
 };

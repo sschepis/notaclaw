@@ -108,6 +108,10 @@ export const alephNetBridge = {
   aiConversationLoadSessionState: invoke('ai:conversation:loadSessionState'),
   aiConversationClearSessionState: invoke('ai:conversation:clearSessionState'),
 
+  // ─── Conversation Sync ─────────────────────────────────────────
+  aiConversationSubscribe: invoke('ai:conversation:subscribe'),
+  onAIConversationChanged: on('ai:conversation:changed'),
+
   // ─── Memory Promotion ──────────────────────────────────────────
   memoryPromote: invoke('memory:promote'),
   memoryProcessForPromotion: invoke('memory:processForPromotion'),

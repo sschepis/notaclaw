@@ -10,7 +10,6 @@ import { PluginLoader } from './services/PluginLoader';
 import { webLLMService } from './services/WebLLMService';
 import { CommandMenu } from './components/ui/CommandMenu';
 import { StatusBar } from './components/layout/StatusBar';
-import { TerminalDrawer } from './components/layout/TerminalDrawer';
 import { PluginOverlays } from './components/ui/PluginOverlays';
 import { PanelRight } from 'lucide-react';
 import { useSlotRegistry } from './services/SlotRegistry';
@@ -25,7 +24,7 @@ function App() {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('welcome');
   
-  const { addMessage, setWallet, setAgentState, setSMF, setNetwork, hasIdentity, setHasIdentity, setIsGenerating, setGenerationProgress, loadConversations, loadSelectedModelFromSettings, restoreSessionState } = useAppStore();
+  const { addMessage, setWallet, setAgentState, setSMF, setNetwork, hasIdentity, setHasIdentity, setIsGenerating, setGenerationProgress, loadConversations, loadConversationMessages, loadSelectedModelFromSettings, restoreSessionState, handleTaskUpdate } = useAppStore();
 
   useEffect(() => {
     const checkSetupState = async () => {
@@ -60,10 +59,23 @@ function App() {
         setHasIdentity(true);
         setNeedsOnboarding(false);
         setLoading(false);
-        // Load saved conversations, then restore session state (active/open tabs)
-        loadConversations().then(() => {
-            restoreSessionState();
-        });
+        
+        // Full startup sequence:
+        // 1. Load conversation list (from local cache, fast)
+        // 2. Restore session state (active conversation, open tabs)
+        // 3. restoreSessionState internally loads messages for active conversation
+        // 4. Subscribe to real-time sync for cross-device updates
+        // 5. Load persisted model selection
+        try {
+            await loadConversations();
+            await restoreSessionState();
+            
+            // Subscribe to conversation sync (cross-device via GunDB)
+            window.electronAPI.aiConversationSubscribe?.();
+        } catch (startupErr) {
+            console.error('Conversation startup sequence error:', startupErr);
+        }
+        
         loadSelectedModelFromSettings(); // Load persisted model selection
       } catch (err) {
         console.error('Setup check failed:', err);
@@ -96,6 +108,9 @@ function App() {
     let cleanupTx: (() => void) | undefined;
     let cleanupLocalInference: (() => void) | undefined;
     let cleanupAppInvoke: (() => void) | undefined;
+    let cleanupAgentTaskUpdate: (() => void) | undefined;
+    let cleanupAgentTaskMessage: (() => void) | undefined;
+    let cleanupConversationChanged: (() => void) | undefined;
 
     try {
         cleanupMessage = window.electronAPI.onMessage((_event, msg) => {
@@ -107,6 +122,17 @@ function App() {
         cleanupAgent = window.electronAPI.onAgentStateUpdate((_event, data) => setAgentState(data));
         cleanupSMF = window.electronAPI.onSMFUpdate((_event, data) => setSMF(data));
         cleanupNetwork = window.electronAPI.onNetworkUpdate((_event, data) => setNetwork(data));
+
+        // Agent Task Events
+        cleanupAgentTaskUpdate = window.electronAPI.onAgentTaskUpdate((_event, { task }) => {
+          handleTaskUpdate(task);
+        });
+
+        cleanupAgentTaskMessage = window.electronAPI.onAgentTaskMessage((_event, { conversationId, message }) => {
+          // Add message to conversation
+          addMessage(message as any, conversationId);
+          // Don't modify isGenerating here, as it's controlled by task status
+        });
 
         // AlephNet Real-time Event Subscriptions
         const aleph = useAlephStore.getState();
@@ -199,6 +225,23 @@ function App() {
                 window.electronAPI.sendAppResponse(requestId, { error: err.message });
             }
         });
+
+        // Cross-device conversation sync listener
+        cleanupConversationChanged = window.electronAPI.onAIConversationChanged?.((_event, changeEvent) => {
+            const { type, conversationId, data } = changeEvent;
+            console.log(`[App] Conversation sync event: ${type} for ${conversationId}`);
+            
+            if (type === 'conversation_updated' && data) {
+                // Reload conversations to pick up remote changes
+                loadConversations();
+            } else if (type === 'message_added') {
+                // If the conversation is currently active, reload its messages
+                const activeId = useAppStore.getState().activeConversationId;
+                if (activeId === conversationId) {
+                    loadConversationMessages(conversationId);
+                }
+            }
+        });
     } catch (e) {
         console.error('Failed to set up subscriptions:', e);
     }
@@ -217,6 +260,9 @@ function App() {
       cleanupTx?.();
       cleanupLocalInference?.();
       cleanupAppInvoke?.();
+      cleanupAgentTaskUpdate?.();
+      cleanupAgentTaskMessage?.();
+      cleanupConversationChanged?.();
     };
 
   }, []);
@@ -265,7 +311,6 @@ function App() {
         <LayoutManager mode={mode} inspectorOpen={inspectorOpen} setInspectorOpen={setInspectorOpen} />
       </div>
       
-      <TerminalDrawer />
       <StatusBar />
       
       <CommandMenu />

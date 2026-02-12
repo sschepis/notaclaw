@@ -435,6 +435,7 @@ export interface AIMessage {
   content: string;
   timestamp: number;
   attachments?: any[];
+  sequence?: number;
 }
 
 export interface AIConversation {
@@ -445,6 +446,8 @@ export interface AIConversation {
   updatedAt: number;
   domainId?: string;
   personalityId?: string;
+  messageCount?: number;
+  memoryFieldId?: string;
 }
 
 // ─── Task Conversation Types ────────────────────────────────────────────

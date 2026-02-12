@@ -28,6 +28,8 @@ import type {
   SettingsTabOptions,
   CommandDefinition,
   CommandOptions,
+  BottomPanelTabDefinition,
+  BottomPanelTabOptions,
   ModalOptions,
   ToastOptions,
 } from '../../shared/slot-types';
@@ -50,6 +52,7 @@ interface SlotRegistryState {
   messageDecorators: Record<string, MessageDecoratorDefinition>;
   settingsTabs: Record<string, SettingsTabDefinition>;
   commands: Record<string, CommandDefinition>;
+  bottomPanelTabs: Record<string, BottomPanelTabDefinition>;
   
   // Overlay state
   modals: Array<{ id: string; options: ModalOptions; resolve: (result?: unknown) => void }>;
@@ -107,6 +110,11 @@ interface SlotRegistryState {
   registerCommand: (pluginId: string, options: CommandOptions) => () => void;
   unregisterCommand: (commandId: string) => void;
   getCommands: () => CommandDefinition[];
+  
+  // Bottom panel tab actions
+  registerBottomPanelTab: (pluginId: string, options: BottomPanelTabOptions) => () => void;
+  unregisterBottomPanelTab: (tabId: string) => void;
+  getBottomPanelTabs: () => BottomPanelTabDefinition[];
   
   // Overlay actions
   showModal: <T = unknown>(options: ModalOptions<T>) => Promise<T | undefined>;
@@ -199,6 +207,7 @@ const DEFAULT_SLOT_DEFINITIONS: SlotDefinition[] = [
   { id: 'fence:renderer', category: 'specialized', description: 'Code fence rendering', allowMultiple: true },
   { id: 'settings:tab', category: 'specialized', description: 'Settings modal tabs', allowMultiple: true },
   { id: 'onboarding:step', category: 'specialized', description: 'Onboarding wizard steps', allowMultiple: true },
+  { id: 'layout:bottom-panel-tab', category: 'layout', description: 'Tabs in the bottom panel', allowMultiple: true },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -223,6 +232,7 @@ export const useSlotRegistry = create<SlotRegistryState>((set, get) => {
     messageDecorators: {},
     settingsTabs: {},
     commands: {},
+    bottomPanelTabs: {},
     modals: [],
     toasts: [],
 
@@ -528,6 +538,44 @@ export const useSlotRegistry = create<SlotRegistryState>((set, get) => {
 
     getCommands: () => Object.values(get().commands),
 
+    // ─── Bottom Panel Tab Registration ─────────────────────────────────────
+    
+    registerBottomPanelTab: (pluginId, options) => {
+      if (!validateId(options.id, 'bottom-panel-tab') || !validateId(pluginId, 'plugin')) {
+        return () => {};
+      }
+      
+      const existing = get().bottomPanelTabs[options.id];
+      if (existing) {
+        warn(`Bottom panel tab "${options.id}" already registered by plugin "${existing.pluginId}", overwriting with "${pluginId}"`);
+      }
+      
+      const definition: BottomPanelTabDefinition = {
+        id: options.id,
+        pluginId,
+        name: options.name,
+        icon: options.icon,
+        component: options.component,
+        priority: options.priority ?? 50,
+        enableClose: options.enableClose ?? true,
+      };
+
+      set((state) => ({
+        bottomPanelTabs: { ...state.bottomPanelTabs, [options.id]: definition }
+      }));
+      
+      log(`Bottom panel tab registered: "${options.id}" by plugin "${pluginId}"`);
+
+      return () => get().unregisterBottomPanelTab(options.id);
+    },
+
+    unregisterBottomPanelTab: (tabId) => set((state) => {
+      const { [tabId]: _, ...rest } = state.bottomPanelTabs;
+      return { bottomPanelTabs: rest };
+    }),
+
+    getBottomPanelTabs: () => Object.values(get().bottomPanelTabs).sort((a, b) => a.priority - b.priority),
+
     // ─── Overlay Management ───────────────────────────────────────────────
     
     showModal: <T = unknown>(options: ModalOptions<T>): Promise<T | undefined> => {
@@ -669,6 +717,7 @@ export const useSlotRegistry = create<SlotRegistryState>((set, get) => {
         messageDecorators: filterByPlugin(state.messageDecorators),
         settingsTabs: filterByPlugin(state.settingsTabs),
         commands: filterByPlugin(state.commands),
+        bottomPanelTabs: filterByPlugin(state.bottomPanelTabs),
       };
     }),
   };
@@ -762,6 +811,16 @@ export function usePluginPanels(): PanelDefinition[] {
 
 export function useCommands(): CommandDefinition[] {
   return useSlotRegistry((state) => Object.values(state.commands));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Hook for bottom panel tabs
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function useBottomPanelTabs(): BottomPanelTabDefinition[] {
+  return useSlotRegistry((state) =>
+    Object.values(state.bottomPanelTabs).sort((a, b) => a.priority - b.priority)
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -1,101 +1,106 @@
 import plugin from '../main/index';
 import { PluginContext } from '../../../client/src/shared/plugin-types';
 import * as child_process from 'child_process';
-import * as os from 'os';
 
 jest.mock('child_process', () => ({
-  spawn: jest.fn(),
-}));
-
-jest.mock('os', () => ({
-  platform: jest.fn(),
+  exec: jest.fn(),
 }));
 
 describe('Code Interpreter Plugin', () => {
   let mockContext: any;
-  let registeredTools: Record<string, Function> = {};
-  let mockChildProcess: any;
+  let registeredHandlers: Record<string, Function> = {};
 
   beforeEach(() => {
-    registeredTools = {};
+    registeredHandlers = {};
     mockContext = {
       ipc: {
-        handle: jest.fn()
+        handle: jest.fn((channel, handler) => {
+          registeredHandlers[channel] = handler;
+        }),
+        invoke: jest.fn()
       },
       services: {
         tools: {
-          register: jest.fn((def) => {
-            registeredTools[def.name] = def.handler;
-          })
+          register: jest.fn()
         }
       },
       on: jest.fn()
     };
 
-    mockChildProcess = {
-      stdout: { on: jest.fn() },
-      stderr: { on: jest.fn() },
-      on: jest.fn(),
-      kill: jest.fn(),
-      killed: false
-    };
-
-    (child_process.spawn as jest.Mock).mockReturnValue(mockChildProcess);
-    (os.platform as jest.Mock).mockReturnValue('linux');
-
     jest.clearAllMocks();
   });
 
-  it('should activate and register tool', () => {
-    plugin.activate(mockContext);
+  it('should activate and register handlers', async () => {
+    // Mock docker check
+    (child_process.exec as unknown as jest.Mock).mockImplementation((cmd, opts, cb) => {
+        if (typeof opts === 'function') cb = opts;
+        if (cmd.includes('docker --version')) cb(null, 'Docker version 20.10.0', '');
+    });
 
-    expect(mockContext.ipc.handle).toHaveBeenCalledWith('exec', expect.any(Function));
-    expect(mockContext.ipc.handle).toHaveBeenCalledWith('spawn', expect.any(Function));
-    expect(mockContext.ipc.handle).toHaveBeenCalledWith('kill', expect.any(Function));
-    expect(mockContext.services.tools.register).toHaveBeenCalled();
-    expect(registeredTools['exec']).toBeDefined();
+    await plugin.activate(mockContext);
+
+    expect(mockContext.ipc.handle).toHaveBeenCalledWith('create-session', expect.any(Function));
+    expect(mockContext.ipc.handle).toHaveBeenCalledWith('execute', expect.any(Function));
+    expect(mockContext.ipc.handle).toHaveBeenCalledWith('end-session', expect.any(Function));
   });
 
-  it('should execute command successfully', async () => {
-    plugin.activate(mockContext);
-    
-    const handler = registeredTools['exec'];
-    const promise = handler({ command: 'echo hello' });
+  it('should create a secure session', async () => {
+    // Mock docker check
+    (child_process.exec as unknown as jest.Mock).mockImplementation((cmd, opts, cb) => {
+        if (typeof opts === 'function') cb = opts;
+        if (cmd.includes('docker --version')) cb(null, 'Docker version 20.10.0', '');
+        if (cmd.includes('docker run')) {
+            // Verify security flags
+            if (!cmd.includes('--network none')) cb(new Error('Insecure network'));
+            else if (!cmd.includes('--cpus 1')) cb(new Error('No CPU limit'));
+            else if (!cmd.includes('--memory 512m')) cb(new Error('No memory limit'));
+            else cb(null, 'container-123\n', '');
+        }
+    });
 
-    // Simulate process execution
-    const closeHandler = (mockChildProcess.on as jest.Mock).mock.calls.find(call => call[0] === 'close')[1];
-    const stdoutHandler = (mockChildProcess.stdout.on as jest.Mock).mock.calls.find(call => call[0] === 'data')[1];
+    await plugin.activate(mockContext);
     
-    stdoutHandler(Buffer.from('hello world'));
-    closeHandler(0);
+    const createSession = registeredHandlers['create-session'];
+    const result = await createSession({ language: 'python' });
 
-    const result = await promise;
+    expect(result.sessionId).toBeDefined();
+    expect(result.error).toBeUndefined();
+  });
+
+  it('should execute code in container', async () => {
+    // Mock docker check
+    (child_process.exec as unknown as jest.Mock).mockImplementation((cmd, opts, cb) => {
+        if (typeof opts === 'function') cb = opts;
+        if (cmd.includes('docker --version')) cb(null, 'Docker version 20.10.0', '');
+        if (cmd.includes('docker run')) cb(null, 'container-123\n', '');
+        if (cmd.includes('docker exec')) cb(null, 'Hello World\n', '');
+    });
+
+    await plugin.activate(mockContext);
+    
+    const createSession = registeredHandlers['create-session'];
+    const { sessionId } = await createSession({ language: 'python' });
+
+    const execute = registeredHandlers['execute'];
+    const result = await execute({ sessionId, code: 'print("Hello World")' });
+
+    expect(result.output).toBe('Hello World\n');
     expect(result.code).toBe(0);
-    expect(result.output).toBe('hello world');
   });
 
-  it('should handle execution error', async () => {
-    plugin.activate(mockContext);
-    
-    const handler = registeredTools['exec'];
-    const promise = handler({ command: 'bad command' });
+  it('should fail if Docker is not available', async () => {
+    // Mock docker check failure
+    (child_process.exec as unknown as jest.Mock).mockImplementation((cmd, opts, cb) => {
+        if (typeof opts === 'function') cb = opts;
+        if (cmd.includes('docker --version')) cb(new Error('Command not found'), '', 'command not found');
+    });
 
-    // Simulate process execution
-    const closeHandler = (mockChildProcess.on as jest.Mock).mock.calls.find(call => call[0] === 'close')[1];
-    const stderrHandler = (mockChildProcess.stderr.on as jest.Mock).mock.calls.find(call => call[0] === 'data')[1];
+    await plugin.activate(mockContext);
     
-    stderrHandler(Buffer.from('command not found'));
-    closeHandler(1);
+    const createSession = registeredHandlers['create-session'];
+    const result = await createSession({ language: 'python' });
 
-    const result = await promise;
-    expect(result.code).toBe(1);
-    expect(result.error).toBe('command not found');
-  });
-
-  it('should block forbidden commands', async () => {
-    plugin.activate(mockContext);
-    
-    const handler = registeredTools['exec'];
-    await expect(handler({ command: 'rm -rf /' })).rejects.toThrow('Command blocked');
+    expect(result.sessionId).toBe('');
+    expect(result.error).toContain('Docker is not available');
   });
 });

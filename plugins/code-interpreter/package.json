@@ -14,11 +14,14 @@
   "author": "AlephNet",
   "license": "MIT",
   "dependencies": {
-    "react": "^18.2.0"
+    "prismjs": "^1.29.0",
+    "react": "^18.2.0",
+    "react-simple-code-editor": "^0.14.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
     "@types/jest": "^29.5.12",
+    "@types/node": "^20.0.0",
+    "@types/prismjs": "^1.26.6",
     "typescript": "^5.0.0"
   }
 }

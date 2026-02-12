@@ -15,8 +15,13 @@
     "alephnet-plugin"
   ],
   "devDependencies": {
-    "@types/node": "^20.0.0",
     "@types/jest": "^29.5.12",
+    "@types/node": "^20.0.0",
+    "@types/prismjs": "^1.26.6",
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "prismjs": "^1.30.0",
+    "react-simple-code-editor": "^0.14.1"
   }
 }
