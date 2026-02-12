@@ -1,4 +1,4 @@
-# AlephNet-Integrated Durable Agent Mesh (notaclaw)
+# AlephNet-Integrated Durable Agent Mesh
 
 **A paradigm shift in distributed intelligence.**
 
