@@ -9,6 +9,7 @@
  */
 
 import { AIMessage } from './types';
+import { UIContextSnapshot } from '../../../shared/ui-context-types';
 
 /** The agentic mode instructions appended to every personality prompt */
 const AGENTIC_INSTRUCTIONS = `
@@ -128,4 +129,61 @@ export function appendUserResponse(
   response: string
 ): AIMessage[] {
   return [...messages, { role: 'user', content: response }];
+}
+
+/**
+ * Build a human-readable section describing the current UI state
+ * for injection into the agent's context.
+ */
+export function buildUIContextSection(snapshot: UIContextSnapshot): string {
+  const parts: string[] = ['## Current Application State'];
+
+  // Active view
+  if (snapshot.activeView.tabType) {
+    parts.push(
+      `The user is viewing a **${snapshot.activeView.tabType}** tab: "${snapshot.activeView.tabTitle}".`
+    );
+  }
+
+  // Conversation context
+  if (snapshot.conversation) {
+    parts.push(
+      `Active conversation: "${snapshot.conversation.title}" with ${snapshot.conversation.messageCount} messages.`
+    );
+    if (snapshot.conversation.personalityId) {
+      parts.push(`Personality: ${snapshot.conversation.personalityId}`);
+    }
+  }
+
+  // Editor context
+  if (snapshot.editor) {
+    parts.push(`\nThe text editor is open with file: \`${snapshot.editor.filePath}\``);
+    parts.push(
+      `Language: ${snapshot.editor.language}, ${snapshot.editor.lineCount} lines` +
+        (snapshot.editor.isDirty ? ', **UNSAVED CHANGES**' : '')
+    );
+    parts.push(
+      `Cursor at line ${snapshot.editor.cursorPosition.line}, col ${snapshot.editor.cursorPosition.col}`
+    );
+    if (snapshot.editor.selection) {
+      parts.push(`Selected text:\n\`\`\`\n${snapshot.editor.selection}\n\`\`\``);
+    }
+    if (snapshot.editor.contentPreview) {
+      parts.push(
+        `\nEditor content preview:\n\`\`\`${snapshot.editor.language}\n${snapshot.editor.contentPreview}\n\`\`\``
+      );
+    }
+  }
+
+  // Sidebar
+  parts.push(`\nSidebar panel: ${snapshot.sidebar.activeView}`);
+
+  // Prompt templates
+  if (snapshot.promptTemplates.length > 0) {
+    parts.push(
+      `\nAvailable prompt templates: ${snapshot.promptTemplates.join(', ')}`
+    );
+  }
+
+  return parts.join('\n');
 }

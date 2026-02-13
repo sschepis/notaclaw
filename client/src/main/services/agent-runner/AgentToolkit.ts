@@ -97,8 +97,9 @@ export function buildControlTools(): ToolDefinition[] {
  */
 export function buildFullToolkit(
   personalityTools: ToolDefinition[],
-  memoryTools: ToolDefinition[] = []
+  memoryTools: ToolDefinition[] = [],
+  uiTools: ToolDefinition[] = []
 ): ToolDefinition[] {
   const controlTools = buildControlTools();
-  return [...controlTools, ...memoryTools, ...personalityTools];
+  return [...controlTools, ...memoryTools, ...uiTools, ...personalityTools];
 }

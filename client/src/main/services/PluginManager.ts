@@ -233,8 +233,9 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       let trust: TrustAssessment | undefined;
       let capabilityDecisions: Map<Capability, CapabilityCheckResult> | undefined;
       let status: 'active' | 'error' | 'blocked' | 'pending-confirmation' | 'disabled' = 'active';
+      const isDisabled = this.isDisabled(manifest.id);
 
-      if (this.isDisabled(manifest.id)) {
+      if (isDisabled) {
           status = 'disabled';
       }
 
@@ -246,7 +247,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         if (!verification.valid) {
             console.error(`Plugin ${manifest.id} signature verification failed: ${verification.error}`);
             status = 'blocked';
-        } else {
+        } else if (!isDisabled) {
+            // Only apply trust decisions if the plugin is not explicitly disabled
             trust = await this.trustEvaluator.evaluate(envelope);
             capabilityDecisions = this.trustGate.checkAll(envelope, trust);
             
@@ -297,7 +299,13 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         const dynamicImport = new Function('specifier', 'return import(specifier)');
         const rawModule = await dynamicImport(pathToFileURL(entryPoint).href);
         // Support both ESM (named exports) and CommonJS (default export)
-        return rawModule.activate ? rawModule : (rawModule.default || rawModule);
+        // Handle double-wrapped default exports from CJS modules bundled with __esModule flag
+        // e.g. { default: { __esModule: true, default: { activate, deactivate } } }
+        let pluginModule = rawModule.activate ? rawModule : (rawModule.default || rawModule);
+        if (pluginModule && pluginModule.__esModule && pluginModule.default) {
+            pluginModule = pluginModule.default;
+        }
+        return pluginModule;
     }
     return null;
   }
@@ -561,11 +569,12 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         throw new Error(`Access denied: Cannot read files outside plugin directories (${resolvedPath})`);
       }
 
-      // Check if the file exists before reading to avoid noisy ENOENT errors
+      // Return null for missing files instead of throwing — avoids noisy
+      // Electron "Error occurred in handler" logs for optional files like bundle.css.
       try {
         await fs.access(resolvedPath);
       } catch {
-        throw new Error(`Plugin file not found: ${resolvedPath}`);
+        return null;
       }
       return await fs.readFile(resolvedPath, 'utf-8');
     });
@@ -667,7 +676,11 @@ export class PluginManager extends BasePluginManager<PluginContext> {
             // This ensures we use the native Node.js ESM loader for plugins
             const dynamicImport = new Function('specifier', 'return import(specifier)');
             const rawModule = await dynamicImport(pathToFileURL(entryPoint).href);
-            const pluginModule = rawModule.activate ? rawModule : (rawModule.default || rawModule);
+            // Handle double-wrapped default exports from CJS modules bundled with __esModule flag
+            let pluginModule = rawModule.activate ? rawModule : (rawModule.default || rawModule);
+            if (pluginModule && pluginModule.__esModule && pluginModule.default) {
+                pluginModule = pluginModule.default;
+            }
             
             if (typeof pluginModule.activate === 'function') {
                 plugin.instance = pluginModule.activate(plugin.context);

@@ -368,33 +368,59 @@ export class AlephNetClient extends EventEmitter {
     }
   }
 
-  async connect(): Promise<{ connected: boolean }> {
-    const identity = await this.identityManager.getPublicIdentity();
-    if (identity) {
-      this.nodeId = identity.fingerprint;
-      this.connected = true;
-      console.log(`AlephNetClient connected as ${this.nodeId}`);
-      
-      // Load persistent data
-      this.loadMemoryData();
-      this.initializeDefaultGroups();
-    } else {
-      console.warn('AlephNetClient: No identity found, generating temporary ID');
-      this.nodeId = generateId('node');
-      this.connected = true;
+  private connectionError: string | null = null;
+  private connectedAt: number = 0;
+
+  async connect(): Promise<{ connected: boolean; error?: string }> {
+    this.emit('aleph:connectionStatus', { status: 'CONNECTING' });
+    try {
+      const identity = await this.identityManager.getPublicIdentity();
+      if (identity) {
+        this.nodeId = identity.fingerprint;
+        this.connected = true;
+        this.connectionError = null;
+        this.connectedAt = now();
+        console.log(`AlephNetClient connected as ${this.nodeId}`);
+        
+        // Load persistent data
+        this.loadMemoryData();
+        this.initializeDefaultGroups();
+      } else {
+        console.warn('AlephNetClient: No identity found, generating temporary ID');
+        this.nodeId = generateId('node');
+        this.connected = true;
+        this.connectionError = null;
+        this.connectedAt = now();
+      }
+      this.emit('aleph:connectionStatus', {
+        status: 'ONLINE',
+        nodeId: this.nodeId,
+        connectedAt: this.connectedAt
+      });
+      return { connected: true };
+    } catch (err: any) {
+      this.connected = false;
+      this.connectionError = err.message ?? String(err);
+      console.error('AlephNetClient: Connection failed:', this.connectionError);
+      this.emit('aleph:connectionStatus', {
+        status: 'ERROR',
+        error: this.connectionError
+      });
+      return { connected: false, error: this.connectionError ?? undefined };
     }
-    return { connected: true };
   }
 
   async getStatus(): Promise<NodeStatus> {
     return {
       id: this.nodeId,
-      status: this.connected ? 'ONLINE' : 'OFFLINE',
+      status: this.connected ? 'ONLINE' : (this.connectionError ? 'ERROR' : 'OFFLINE'),
       tier: this.walletState.tier,
       peers: 3, // stub
-      uptime: now() - (now() - 3600000),
+      uptime: this.connectedAt ? now() - this.connectedAt : 0,
       version: '1.3.3',
       semanticDomain: 'cognitive',
+      error: this.connectionError ?? undefined,
+      connectedAt: this.connectedAt || undefined,
     };
   }
 

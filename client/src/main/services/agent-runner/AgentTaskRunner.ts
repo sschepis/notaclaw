@@ -17,19 +17,25 @@ import { AIProviderManager } from '../AIProviderManager';
 import { PersonalityManager } from '../PersonalityManager';
 import { ConversationManager } from '../ConversationManager';
 import { AlephNetClient } from '../AlephNetClient';
+import { AgentToolRegistry } from '../AgentToolRegistry';
 import { ToolDefinition } from '../prompt-engine/types';
 import { AgentLoopConfig, AgentLoopDeps, AgentStepResult, AIMessage, DEFAULT_LOOP_CONFIG } from './types';
 import { withRetry, withTimeout, DEFAULT_RETRY_CONFIG, TIMEOUT_DEFAULTS } from '../../../shared/utils/retry';
-import { buildAgenticSystemPrompt, buildInitialMessages } from './AgentContextBuilder';
+import { buildAgenticSystemPrompt, buildInitialMessages, buildUIContextSection } from './AgentContextBuilder';
 import { buildFullToolkit } from './AgentToolkit';
 import { buildMemoryTools } from './MemoryTools';
+import { buildUITools, buildPromptTemplateTools, listPromptTemplateFiles } from './UITools';
 import { runAgentLoop } from './AgentLoop';
+import { UIContextSnapshot } from '../../../shared/ui-context-types';
+import { loadPromptChain, buildChainSystemSection } from './PromptChainLoader';
+import { configManager } from '../ConfigManager';
 
 export class AgentTaskRunner extends EventEmitter {
   private aiManager: AIProviderManager;
   private personalityManager: PersonalityManager;
   private conversationManager: ConversationManager;
   private alephNetClient: AlephNetClient;
+  private toolRegistry: AgentToolRegistry | null = null;
 
   /** Active tasks indexed by task ID */
   private activeTasks: Map<string, AgentTask> = new Map();
@@ -43,6 +49,9 @@ export class AgentTaskRunner extends EventEmitter {
   /** Loop configuration */
   private config: AgentLoopConfig = DEFAULT_LOOP_CONFIG;
 
+  /** IPC bridge for querying the renderer process */
+  private invokeRenderer: ((channel: string, data?: any) => Promise<any>) | null = null;
+
   constructor(
     aiManager: AIProviderManager,
     personalityManager: PersonalityManager,
@@ -54,6 +63,21 @@ export class AgentTaskRunner extends EventEmitter {
     this.personalityManager = personalityManager;
     this.conversationManager = conversationManager;
     this.alephNetClient = alephNetClient;
+  }
+
+  /**
+   * Set the AgentToolRegistry so tools come from the centralized registry.
+   */
+  setToolRegistry(registry: AgentToolRegistry): void {
+    this.toolRegistry = registry;
+  }
+
+  /**
+   * Set the IPC bridge for querying the renderer process.
+   * Called from ipc-setup.ts after the main window is ready.
+   */
+  setInvokeRenderer(fn: (channel: string, data?: any) => Promise<any>): void {
+    this.invokeRenderer = fn;
   }
 
   /**
@@ -222,6 +246,23 @@ Do NOT execute tools yet. Just state what you are going to do.
     try {
       // 1. Build personality system prompt
       const systemPrompt = await this.getSystemPrompt(task, metadata);
+
+      // 1.1. Load default prompt chain (if configured)
+      let chainContext = '';
+      const defaultChainName = configManager.getDefaultPromptChain();
+      if (defaultChainName) {
+        try {
+          const chain = loadPromptChain(defaultChainName);
+          if (chain) {
+            chainContext = buildChainSystemSection(chain);
+            console.log(`[AgentTaskRunner] Loaded default chain: ${chain.meta._name || defaultChainName}`);
+          } else {
+            console.warn(`[AgentTaskRunner] Default chain "${defaultChainName}" not found — proceeding without it`);
+          }
+        } catch (err) {
+          console.warn('[AgentTaskRunner] Failed to load default chain (non-fatal):', err);
+        }
+      }
       
       // 1.5. Planning Phase (Immediate Response) — with retry for timeout resilience
       let plan = '';
@@ -253,11 +294,36 @@ Do NOT execute tools yet. Just state what you are going to do.
         task.originalPrompt
       );
 
-      // 3. Build initial messages
+      // 2.5. Gather UI context snapshot (non-fatal)
+      let uiContextSection = '';
+      if (this.invokeRenderer) {
+        try {
+          const uiSnapshot: UIContextSnapshot = await this.invokeRenderer('ui:getContext');
+          if (uiSnapshot) {
+            // Enrich with prompt template filenames from main-process filesystem
+            // (renderer can't access fs, so this field arrives empty from gatherUIContext)
+            if (!uiSnapshot.promptTemplates || uiSnapshot.promptTemplates.length === 0) {
+              try {
+                uiSnapshot.promptTemplates = listPromptTemplateFiles();
+              } catch {
+                // Non-fatal: template listing may fail in some environments
+              }
+            }
+            uiContextSection = buildUIContextSection(uiSnapshot);
+          }
+        } catch (err) {
+          console.warn('[AgentTaskRunner] Failed to gather UI context (non-fatal):', err);
+        }
+      }
+
+      // 3. Build initial messages (with chain context, UI context appended to situational context)
+      const fullContext = [situationalContext, chainContext, uiContextSection]
+        .filter(Boolean)
+        .join('\n\n');
       const initialMessages = buildInitialMessages(
         agenticPrompt,
         task.originalPrompt,
-        situationalContext
+        fullContext || undefined
       );
       
       // Inject the plan into the history so the agent knows what it promised
@@ -265,10 +331,11 @@ Do NOT execute tools yet. Just state what you are going to do.
          initialMessages.push({ role: 'assistant', content: plan });
       }
 
-      // 4. Build tools (control + personality tools + memory tools)
+      // 4. Build tools (control + personality tools + memory tools + UI tools)
       const personalityTools = this.getPersonalityTools(task.conversationId, metadata);
       const memoryTools = buildMemoryTools(this.alephNetClient, task.conversationId);
-      const allTools = buildFullToolkit(personalityTools, memoryTools);
+      const uiTools = this.buildUIAndPromptTools();
+      const allTools = buildFullToolkit(personalityTools, memoryTools, uiTools);
 
       // 5. Build loop dependencies
       const deps: AgentLoopDeps = {
@@ -356,24 +423,66 @@ Do NOT execute tools yet. Just state what you are going to do.
   }
 
   /**
-   * Build personality tools (same tools PersonalityManager provides).
-   * We import them from PersonalityManager's public method if available,
-   * or replicate the essential ones.
+   * Build personality tools for the agent.
+   *
+   * If an AgentToolRegistry is wired, it resolves tools from the centralized
+   * registry (using the agent's declared capabilities from metadata if present).
+   * Otherwise, falls back to building the core tools inline (backward compat).
    */
-  private getPersonalityTools(_conversationId: string, _metadata: any): ToolDefinition[] {
-    // PersonalityManager doesn't currently expose tools as a public method,
-    // but its handleInteraction builds them inline. We'll delegate tool
-    // building to a future refactor. For now, we build a minimal set
-    // that the agent can use. The full set is in PersonalityManager.handleInteraction.
-    // 
-    // In phase 2, PersonalityManager.getTools(conversationId, metadata) 
-    // will be extracted as a public method.
-    //
-    // For now, we include the shell tool and basic tools:
+  private getPersonalityTools(_conversationId: string, metadata: any): ToolDefinition[] {
+    // When the tool registry is available and metadata carries a ResonantAgent
+    // personality config, resolve tools from the registry based on agent caps.
+    if (this.toolRegistry && metadata.agentId) {
+      // Import the ResonantAgent type to construct a minimal agent for filtering
+      const agentPersonality = metadata.agentPersonality;
+      const agentCaps = agentPersonality?.capabilities || metadata.capabilities;
+      if (agentCaps) {
+        // Build a minimal ResonantAgent-like object for getToolsForAgent
+        const agentLike = {
+          id: metadata.agentId,
+          name: metadata.agentName || 'agent',
+          capabilities: {
+            tools: agentCaps.tools || ['shell', 'read_file', 'write_file', 'list_directory'],
+            permissions: agentCaps.permissions || ['fs:read', 'fs:write', 'shell'],
+            maxSteps: agentCaps.maxSteps || 50,
+            maxDurationMs: agentCaps.maxDurationMs || 30 * 60 * 1000,
+          },
+        };
+        return this.toolRegistry.getToolsForAgent(agentLike as any);
+      }
+    }
+
+    // Fallback: If no registry is wired or no agent metadata is present,
+    // delegate to the registry for all core tools (if available).
+    if (this.toolRegistry) {
+      // Return all core tools (they require no specific agent filtering)
+      const allRegs = this.toolRegistry.listAll();
+      return allRegs.map(reg => ({
+        type: 'function' as const,
+        function: {
+          name: reg.name,
+          description: reg.description,
+          parameters: reg.parameters as { type: string; properties: Record<string, any>; required: string[] },
+          script: this.toolRegistry!.getByName(reg.name)?.handler,
+        },
+      }));
+    }
+
+    // Last resort: build inline tools (no registry available)
+    return this.buildInlineCoreTools();
+  }
+
+  /**
+   * Build core tools inline as a final fallback when no AgentToolRegistry
+   * is wired. Identical to the tools registered in AgentToolRegistry.registerCoreTools().
+   */
+  private buildInlineCoreTools(): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
-    
-    // Shell tool
     const { exec } = require('child_process');
+    const fs = require('fs');
+    const pathModule = require('path');
+
+    // Shell tool
     tools.push({
       type: 'function',
       function: {
@@ -402,7 +511,6 @@ Do NOT execute tools yet. Just state what you are going to do.
     });
 
     // File read tool
-    const fs = require('fs');
     tools.push({
       type: 'function',
       function: {
@@ -442,7 +550,6 @@ Do NOT execute tools yet. Just state what you are going to do.
         },
         script: async ({ path: filePath, content }: { path: string; content: string }) => {
           try {
-            const pathModule = require('path');
             const dir = pathModule.dirname(filePath);
             fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(filePath, content, 'utf-8');
@@ -482,6 +589,27 @@ Do NOT execute tools yet. Just state what you are going to do.
         },
       },
     });
+
+    return tools;
+  }
+
+  /**
+   * Build UI context tools and prompt template tools.
+   * Requires invokeRenderer for the UI tools; prompt template tools work on FS.
+   */
+  private buildUIAndPromptTools(): ToolDefinition[] {
+    const tools: ToolDefinition[] = [];
+
+    // UI interaction tools (need renderer bridge)
+    if (this.invokeRenderer) {
+      tools.push(...buildUITools(this.invokeRenderer));
+    }
+
+    // Prompt template tools (filesystem-only, always available)
+    const commandInterface = this.personalityManager
+      ? (this.personalityManager as any).commandInterface ?? null
+      : null;
+    tools.push(...buildPromptTemplateTools(commandInterface));
 
     return tools;
   }

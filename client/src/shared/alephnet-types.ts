@@ -853,12 +853,14 @@ export interface FileSystemItem {
 
 export interface NodeStatus {
   id: string;
-  status: 'ONLINE' | 'DRAINING' | 'OFFLINE';
+  status: 'ONLINE' | 'DRAINING' | 'OFFLINE' | 'ERROR' | 'CONNECTING' | 'RECONNECTING' | 'DISCONNECTED';
   tier: StakingTier;
   peers: number;
   uptime: number;
   version: string;
   semanticDomain: string;
+  error?: string;
+  connectedAt?: number;
 }
 
 // ─── IPC Channel Map (for type safety across main/preload/renderer) ─────

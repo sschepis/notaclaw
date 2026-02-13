@@ -40,7 +40,11 @@ export abstract class BasePluginManager<TContext extends PluginContext = PluginC
 
     try {
         const context = this.createContext(manifest);
-        const instance = await this.executePlugin(manifest, path, context);
+        const effectiveStatus = manifest.status || 'active';
+        // Only execute and activate plugin code if the plugin is active
+        const instance = effectiveStatus === 'active'
+            ? await this.executePlugin(manifest, path, context)
+            : null;
 
         if (instance && typeof instance.activate === 'function') {
             await instance.activate(context);
@@ -51,7 +55,7 @@ export abstract class BasePluginManager<TContext extends PluginContext = PluginC
             path,
             context,
             instance,
-            status: 'active',
+            status: manifest.status || 'active',
             loadedAt: new Date()
         };
 

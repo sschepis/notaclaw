@@ -31,6 +31,8 @@ import { getOpenClawGateway } from './services/OpenClawGatewayService';
 import { DesktopAccessibilityLearner } from './services/desktop-learner';
 import { AgentTaskRunner } from './services/agent-runner';
 import { TeamManager } from './services/TeamManager';
+import { AgentToolRegistry } from './services/AgentToolRegistry';
+import { ResonantAgentService } from './services/ResonantAgentService';
 
 // Instantiate core services
 export const aiManager = new AIProviderManager();
@@ -90,6 +92,12 @@ export const agentTaskRunner = new AgentTaskRunner(
 
 // Inject AgentTaskRunner into DSNNode
 dsnNode.setAgentTaskRunner(agentTaskRunner);
+
+// Resonant Agents (consolidated agent system)
+export const agentToolRegistry = new AgentToolRegistry();
+agentToolRegistry.registerCoreTools();
+agentTaskRunner.setToolRegistry(agentToolRegistry);
+export const resonantAgentService = new ResonantAgentService(agentTaskRunner, agentToolRegistry);
 
 // Wire up Personality Manager
 personalityManager.setAlephNetClient(alephNetClient);
@@ -256,7 +264,45 @@ export async function initializeServices(getMainWindow: () => Electron.BrowserWi
     // Register AlephNet IPC handlers
     logManager.info('AlephNet', 'Registering IPC', 'Wiring AlephNet IPC channels...');
     registerAlephNetIPC(alephNetClient, getMainWindow);
-    await alephNetClient.connect();
+
+    // Forward AlephNet connection status events to renderer
+    alephNetClient.on('aleph:connectionStatus', (statusData: any) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('alephnet-status', statusData);
+        }
+        logManager.info('AlephNet', 'Connection Status', `AlephNet status: ${statusData.status}${statusData.error ? ` - ${statusData.error}` : ''}`);
+    });
+
+    // Connect to AlephNet and push full status to renderer
+    const connectResult = await alephNetClient.connect();
+    if (connectResult.connected) {
+        const fullStatus = await alephNetClient.getStatus();
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('network-update', {
+                status: fullStatus.status,
+                nodeId: fullStatus.id,
+                peers: fullStatus.peers,
+                alephnetConnected: true,
+                tier: fullStatus.tier,
+                version: fullStatus.version,
+                connectedAt: fullStatus.connectedAt,
+                uptime: fullStatus.uptime,
+            });
+        }
+        logManager.info('AlephNet', 'Connected', `Connected as ${fullStatus.id}, tier: ${fullStatus.tier}`);
+    } else {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('network-update', {
+                status: 'ERROR',
+                alephnetConnected: false,
+                error: connectResult.error || 'Unknown connection error',
+            });
+        }
+        logManager.error('AlephNet', 'Connection Failed', connectResult.error || 'Unknown error');
+    }
     if (logger) logger.info('AlephNet', 'IPC Ready', 'All AlephNet IPC channels registered.');
     logManager.info('AlephNet', 'IPC Ready', 'All AlephNet IPC channels registered.');
 
@@ -281,4 +327,53 @@ export async function initializeServices(getMainWindow: () => Electron.BrowserWi
         }
     });
     logManager.info('TaskScheduler', 'Ready', 'Task scheduler initialized.');
+
+    // Initialize Resonant Agent Service
+    logManager.info('ResonantAgents', 'Initializing', 'Loading agent definitions...');
+    await resonantAgentService.initialize();
+    logManager.info('ResonantAgents', 'Ready', `Loaded ${(await resonantAgentService.listAgents()).length} agents.`);
+
+    // Forward ResonantAgentService events to renderer
+    resonantAgentService.on('agentCreated', (agent) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('resonant:agentChanged', { type: 'created', agent });
+        }
+    });
+    resonantAgentService.on('agentUpdated', (agent) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('resonant:agentChanged', { type: 'updated', agent });
+        }
+    });
+    resonantAgentService.on('agentDeleted', (agentId) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('resonant:agentChanged', { type: 'deleted', agentId });
+        }
+    });
+    resonantAgentService.on('agentSummoned', (agent) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('resonant:agentChanged', { type: 'summoned', agent });
+        }
+    });
+    resonantAgentService.on('agentDismissed', (agentId) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('resonant:agentChanged', { type: 'dismissed', agentId });
+        }
+    });
+    resonantAgentService.on('agentBusy', (agent) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('resonant:agentChanged', { type: 'busy', agent });
+        }
+    });
+    resonantAgentService.on('agentTaskCompleted', (data) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('resonant:agentChanged', { type: 'taskCompleted', ...data });
+        }
+    });
 }

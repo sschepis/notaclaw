@@ -206,10 +206,11 @@ export const ChainListSidebar: React.FC<ChainListSidebarProps> = ({ context }) =
                 <div style={{ fontWeight: 600, fontSize: 11, color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Drag to Add</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                     {[
-                        { type: 'prompt', icon: '▢', label: 'Prompt' },
-                        { type: 'tool', icon: '⚙', label: 'Tool' },
-                        { type: 'loop', icon: '↻', label: 'Loop' },
-                        { type: 'condition', icon: '⑂', label: 'Condition' },
+                        { type: 'prompt', icon: '💬', label: 'Prompt' },
+                        { type: 'tool', icon: '🔧', label: 'Tool' },
+                        { type: 'loop', icon: '🔁', label: 'Loop' },
+                        { type: 'condition', icon: '🔀', label: 'Condition' },
+                        { type: 'subchain', icon: '📦', label: 'Sub-Chain' },
                     ].map(item => (
                         <div
                             key={item.type}

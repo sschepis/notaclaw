@@ -9,7 +9,7 @@ import { GroupsPanel } from '../groups/GroupsPanel';
 import { ConnectionsPanel } from '../connections/ConnectionsPanel';
 import { FileTree } from '../files/FileTree';
 import { MemoryFieldPanel } from '../memory/MemoryFieldPanel';
-import { ResonantAgentsPanel } from '../agents/ResonantAgentsPanel';
+import { ResonantAgentsView } from '../agents/ResonantAgentsView';
 import { ServicesPanel } from '../services/ServicesPanel';
 import { SecretsPanel } from '../secrets/SecretsPanel';
 import { MarketplaceSidebar } from '../marketplace/MarketplaceSidebar';
@@ -48,7 +48,7 @@ export const Sidebar: React.FC = () => {
         ) : activeSidebarView === 'coherence' ? (
             <MemoryFieldPanel />
         ) : activeSidebarView === 'agents' ? (
-            <ResonantAgentsPanel />
+            <ResonantAgentsView />
         ) : activeSidebarView === 'secrets' ? (
             <SecretsPanel />
         ) : activeSidebarView === 'marketplace' ? (

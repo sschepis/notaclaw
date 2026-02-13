@@ -1,8 +1,13 @@
 import React from 'react';
-import { Workflow } from 'lucide-react';
+import { Workflow, Wrench, BookTemplate, Bug, TestTube2, Coins } from 'lucide-react';
 import { ChainEditor } from './ChainEditor';
 import { ChainListSidebar } from './ChainListSidebar';
 import { usePromptEditorStore } from './store';
+import ToolLibraryPanel from './panels/ToolLibraryPanel';
+import TemplateLibraryPanel from './panels/TemplateLibraryPanel';
+import DebuggerPanel from './panels/DebuggerPanel';
+import TestCasesPanel from './panels/TestCasesPanel';
+import TokenEstimationPanel from './panels/TokenEstimationPanel';
 
 export function activate(context: any) {
     const { ui, useAppStore } = context;
@@ -49,10 +54,59 @@ export function activate(context: any) {
         }));
     }
 
+    // Register Bottom Panel Tabs
+    if (ui.registerBottomPanelTab) {
+        cleanups.push(ui.registerBottomPanelTab({
+            id: 'prompt-editor-tools',
+            name: 'Tools',
+            icon: Wrench,
+            component: ToolLibraryPanel,
+            priority: 10,
+            enableClose: true,
+        }));
+
+        cleanups.push(ui.registerBottomPanelTab({
+            id: 'prompt-editor-templates',
+            name: 'Templates',
+            icon: BookTemplate,
+            component: TemplateLibraryPanel,
+            priority: 20,
+            enableClose: true,
+        }));
+
+        cleanups.push(ui.registerBottomPanelTab({
+            id: 'prompt-editor-debugger',
+            name: 'Debugger',
+            icon: Bug,
+            component: DebuggerPanel,
+            priority: 30,
+            enableClose: true,
+        }));
+
+        cleanups.push(ui.registerBottomPanelTab({
+            id: 'prompt-editor-tests',
+            name: 'Test Cases',
+            icon: TestTube2,
+            component: TestCasesPanel,
+            priority: 40,
+            enableClose: true,
+        }));
+
+        cleanups.push(ui.registerBottomPanelTab({
+            id: 'prompt-editor-tokens',
+            name: 'Tokens & Cost',
+            icon: Coins,
+            component: TokenEstimationPanel,
+            priority: 50,
+            enableClose: true,
+        }));
+    }
+
     // Ensure default chain exists
     if (context.ipc) {
         const store = usePromptEditorStore.getState();
         store.initListeners(context.ipc);
+        store.loadTools(context.ipc);
         
         // We check if default chain exists, if not create it
         context.ipc.invoke('get-chain', 'default-agent-chain').catch(async () => {

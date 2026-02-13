@@ -10,6 +10,14 @@ export interface ChainMeta {
     toolCount?: number;
 }
 
+// V5: Undo/Redo history entry
+interface HistoryEntry {
+    nodes: Node[];
+    edges: Edge[];
+}
+
+const MAX_HISTORY = 50;
+
 interface PromptEditorState {
     chains: ChainMeta[];
     selectedChain: string | null;
@@ -39,9 +47,20 @@ interface PromptEditorState {
     // Delete confirm
     deleteConfirmId: string | null;
 
+    // V5: Undo/redo
+    undoStack: HistoryEntry[];
+    redoStack: HistoryEntry[];
+
+    // V6: Snap to grid
+    snapToGrid: boolean;
+
+    // V3: Clipboard for copy/paste
+    clipboard: { nodes: Node[]; edges: Edge[] } | null;
+
     // Actions
     setChains: (chains: ChainMeta[]) => void;
     loadChains: (ipc: any) => Promise<void>;
+    loadTools: (ipc: any) => Promise<void>;
     initListeners: (ipc: any) => void;
     loadChain: (id: string, ipc: any) => Promise<void>;
     saveChain: (ipc: any) => Promise<void>;
@@ -65,6 +84,21 @@ interface PromptEditorState {
     updateNodeData: (id: string, data: any) => void;
     updateEdgeData: (id: string, data: any) => void;
     addNode: (node: Node) => void;
+    deleteSelectedNodes: () => void;
+    duplicateNode: (nodeId: string) => void;
+    disconnectNode: (nodeId: string) => void;
+
+    // V5: Undo/Redo
+    pushHistory: () => void;
+    undo: () => void;
+    redo: () => void;
+
+    // V6: Snap to grid
+    toggleSnapToGrid: () => void;
+
+    // V3: Copy/Paste
+    copySelected: () => void;
+    paste: (position?: { x: number; y: number }) => void;
 
     // UI actions
     setShowRunModal: (show: boolean) => void;
@@ -99,6 +133,16 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
     showNewChainModal: false,
     newChainId: '',
     deleteConfirmId: null,
+
+    // V5: Undo/Redo
+    undoStack: [],
+    redoStack: [],
+
+    // V6: Snap to grid
+    snapToGrid: false,
+
+    // V3: Clipboard
+    clipboard: null,
 
     setChains: (chains) => set({ chains }),
     
@@ -168,6 +212,17 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
         } catch (e) {
             console.error('[PromptEditor] Failed to load chains:', e);
             set({ chains: [] });
+        }
+    },
+
+    loadTools: async (ipc) => {
+        if (!ipc) return;
+        try {
+            const tools: any[] = await ipc.invoke('list-tools');
+            set({ availableTools: tools || [] });
+        } catch (e) {
+            console.error('[PromptEditor] Failed to load tools:', e);
+            set({ availableTools: [] });
         }
     },
 
@@ -338,6 +393,140 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
     })),
 
     addNode: (node) => set(state => ({ nodes: [...state.nodes, node] })),
+
+    // V4: Delete selected nodes/edges
+    deleteSelectedNodes: () => {
+        const { nodes, edges, selectedNodeId, selectedEdgeId, pushHistory } = get();
+        pushHistory();
+        if (selectedNodeId) {
+            const newNodes = nodes.filter(n => n.id !== selectedNodeId);
+            const newEdges = edges.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId);
+            set({ nodes: newNodes, edges: newEdges, selectedNodeId: null });
+        } else if (selectedEdgeId) {
+            const newEdges = edges.filter(e => e.id !== selectedEdgeId);
+            set({ edges: newEdges, selectedEdgeId: null });
+        }
+    },
+
+    // V3: Duplicate a node
+    duplicateNode: (nodeId: string) => {
+        const { nodes, pushHistory } = get();
+        pushHistory();
+        const original = nodes.find(n => n.id === nodeId);
+        if (!original) return;
+        const newNode: Node = {
+            ...original,
+            id: `${original.type || 'node'}-${Date.now()}`,
+            position: {
+                x: original.position.x + 30,
+                y: original.position.y + 30,
+            },
+            data: { ...original.data, label: `${original.data.label || ''} (copy)` },
+            selected: false,
+        };
+        set(state => ({ nodes: [...state.nodes, newNode], selectedNodeId: newNode.id }));
+    },
+
+    // V3: Disconnect all edges from a node
+    disconnectNode: (nodeId: string) => {
+        const { edges, pushHistory } = get();
+        pushHistory();
+        set({ edges: edges.filter(e => e.source !== nodeId && e.target !== nodeId) });
+    },
+
+    // V5: Undo/Redo
+    pushHistory: () => {
+        const { nodes, edges, undoStack } = get();
+        const entry: HistoryEntry = {
+            nodes: nodes.map(n => ({ ...n, data: { ...n.data } })),
+            edges: edges.map(e => ({ ...e })),
+        };
+        const newStack = [...undoStack, entry];
+        if (newStack.length > MAX_HISTORY) newStack.shift();
+        set({ undoStack: newStack, redoStack: [] });
+    },
+
+    undo: () => {
+        const { undoStack, nodes, edges } = get();
+        if (undoStack.length === 0) return;
+        const newUndo = [...undoStack];
+        const prev = newUndo.pop()!;
+        const currentEntry: HistoryEntry = {
+            nodes: nodes.map(n => ({ ...n, data: { ...n.data } })),
+            edges: edges.map(e => ({ ...e })),
+        };
+        set(state => ({
+            undoStack: newUndo,
+            redoStack: [...state.redoStack, currentEntry],
+            nodes: prev.nodes,
+            edges: prev.edges,
+        }));
+    },
+
+    redo: () => {
+        const { redoStack, nodes, edges } = get();
+        if (redoStack.length === 0) return;
+        const newRedo = [...redoStack];
+        const next = newRedo.pop()!;
+        const currentEntry: HistoryEntry = {
+            nodes: nodes.map(n => ({ ...n, data: { ...n.data } })),
+            edges: edges.map(e => ({ ...e })),
+        };
+        set(state => ({
+            redoStack: newRedo,
+            undoStack: [...state.undoStack, currentEntry],
+            nodes: next.nodes,
+            edges: next.edges,
+        }));
+    },
+
+    // V6: Snap to grid
+    toggleSnapToGrid: () => set(state => ({ snapToGrid: !state.snapToGrid })),
+
+    // V3: Copy/Paste
+    copySelected: () => {
+        const { nodes, edges, selectedNodeId } = get();
+        if (!selectedNodeId) return;
+        // Find all selected nodes (for now, single selection)
+        const selectedNodes = nodes.filter(n => n.id === selectedNodeId || n.selected);
+        const selectedIds = new Set(selectedNodes.map(n => n.id));
+        const relatedEdges = edges.filter(e => selectedIds.has(e.source) && selectedIds.has(e.target));
+        set({ clipboard: { nodes: selectedNodes, edges: relatedEdges } });
+    },
+
+    paste: (position) => {
+        const { clipboard, pushHistory } = get();
+        if (!clipboard || clipboard.nodes.length === 0) return;
+        pushHistory();
+        const ts = Date.now();
+        const idMap = new Map<string, string>();
+        const newNodes = clipboard.nodes.map((n, idx) => {
+            const newId = `${n.type || 'node'}-${ts}-${idx}`;
+            idMap.set(n.id, newId);
+            return {
+                ...n,
+                id: newId,
+                position: {
+                    x: (position?.x ?? n.position.x) + 40,
+                    y: (position?.y ?? n.position.y) + 40,
+                },
+                data: { ...n.data, label: `${n.data.label || ''} (copy)` },
+                selected: false,
+            };
+        });
+        const newEdges = clipboard.edges
+            .map((e, idx) => ({
+                ...e,
+                id: `edge-${ts}-${idx}`,
+                source: idMap.get(e.source) || e.source,
+                target: idMap.get(e.target) || e.target,
+            }))
+            .filter(e => idMap.has(e.source) || newNodes.find(n => n.id === e.source));
+        set(state => ({
+            nodes: [...state.nodes, ...newNodes],
+            edges: [...state.edges, ...newEdges],
+        }));
+    },
 
     setShowRunModal: (show) => set({ showRunModal: show }),
     setRunInput: (input) => set({ runInput: input }),

@@ -1,0 +1,10 @@
+{
+  "prompts": [
+    {
+      "name": "start",
+      "system": "You are a helpful assistant.",
+      "user": "{{query}}"
+    }
+  ],
+  "tools": []
+}

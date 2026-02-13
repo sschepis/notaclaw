@@ -35,6 +35,17 @@ import {
   VaultStatus 
 } from './secrets-types';
 import { IAlephNetAPI } from './alephnet-api';
+import type { 
+  ResonantAgent, 
+  ResonantAgentTeam, 
+  ResonantAgentTemplate,
+  CreateResonantAgentOptions,
+  UpdateResonantAgentOptions,
+  AgentStartTaskParams,
+  OrchestrateTeamParams,
+  OrchestrateResult,
+  ToolRegistration,
+} from './resonant-agent-types';
 
 // Re-export common types for backward compatibility
 export type { 
@@ -98,6 +109,7 @@ export interface IElectronAPI {
   onAgentStateUpdate: (callback: (event: any, state: any) => void) => () => void;
   onSMFUpdate: (callback: (event: any, smf: any) => void) => () => void;
   onNetworkUpdate: (callback: (event: any, network: any) => void) => () => void;
+  onAlephNetStatus?: (callback: (event: any, status: { status: string; error?: string; nodeId?: string; connectedAt?: number }) => void) => () => void;
 
   // Configuration
   configGet: () => Promise<any>;
@@ -128,7 +140,7 @@ export interface IElectronAPI {
   // Plugin Management
   getPlugins: () => Promise<PluginManifest[]>;
   getOpenClawSkills: () => Promise<SkillManifest[]>;
-  readPluginFile: (path: string) => Promise<string>;
+  readPluginFile: (path: string) => Promise<string | null>;
   pluginDisable: (id: string) => Promise<boolean>;
   pluginEnable: (id: string) => Promise<boolean>;
   pluginUninstall: (id: string) => Promise<boolean>;
@@ -169,6 +181,29 @@ export interface IElectronAPI {
   // App-level Command Invocation
   onAppInvoke: (callback: (event: any, payload: { requestId: string, channel: string, data: any }) => void) => () => void;
   sendAppResponse: (requestId: string, response: any) => Promise<void>;
+
+  // ─── Resonant Agents ──────────────────────────────────────────────
+  resonantAgentList: (params?: any) => Promise<ResonantAgent[]>;
+  resonantAgentGet: (params: { id: string }) => Promise<ResonantAgent | null>;
+  resonantAgentCreate: (options: CreateResonantAgentOptions) => Promise<ResonantAgent>;
+  resonantAgentUpdate: (params: { id: string; updates: UpdateResonantAgentOptions }) => Promise<ResonantAgent>;
+  resonantAgentDelete: (params: { id: string }) => Promise<{ deleted: boolean }>;
+  resonantAgentDuplicate: (params: { id: string; newName: string }) => Promise<ResonantAgent>;
+  resonantAgentExport: (params: { id: string }) => Promise<string>;
+  resonantAgentImport: (params: { json: string }) => Promise<ResonantAgent>;
+  resonantAgentSummon: (params: { id: string; context?: any }) => Promise<ResonantAgent>;
+  resonantAgentDismiss: (params: { id: string }) => Promise<{ dismissed: boolean }>;
+  resonantAgentStartTask: (params: AgentStartTaskParams) => Promise<string>;
+  resonantAgentStopTask: (params: { taskId: string }) => Promise<void>;
+  resonantAgentRespondToTask: (params: { taskId: string; response: string }) => Promise<void>;
+  resonantTemplatesList: () => Promise<ResonantAgentTemplate[]>;
+  resonantTeamList: () => Promise<ResonantAgentTeam[]>;
+  resonantTeamCreate: (params: { name: string; agentIds: string[]; description?: string }) => Promise<ResonantAgentTeam>;
+  resonantTeamUpdate: (params: { id: string; updates: Partial<ResonantAgentTeam> }) => Promise<ResonantAgentTeam>;
+  resonantTeamDelete: (params: { id: string }) => Promise<{ deleted: boolean }>;
+  resonantTeamOrchestrate: (params: OrchestrateTeamParams) => Promise<OrchestrateResult>;
+  resonantToolList: () => Promise<Array<Omit<ToolRegistration, 'handler'>>>;
+  onResonantAgentChanged?: (callback: (event: any, data: any) => void) => () => void;
 }
 
 declare global {

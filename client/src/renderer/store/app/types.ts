@@ -33,9 +33,16 @@ export interface AgentState {
 
 export interface NetworkState {
   nodeId: string;
-  status: 'ONLINE' | 'OFFLINE' | 'CONNECTING';
+  status: 'ONLINE' | 'OFFLINE' | 'CONNECTING' | 'ERROR' | 'RECONNECTING' | 'DISCONNECTED';
   peers: number;
   latency: number;
+  error?: string | null;
+  alephnetConnected?: boolean;
+  dsnStatus?: string;
+  tier?: string;
+  version?: string;
+  connectedAt?: number;
+  uptime?: number;
 }
 
 export interface Agent {

@@ -20,10 +20,16 @@ export interface LoggingConfig {
   outputFile?: string;
 }
 
+export interface AgentConfig {
+  /** Name of the default prompt chain file (without .json extension) */
+  defaultPromptChain: string | null;
+}
+
 export interface AppConfig {
   network: NetworkConfig;
   logging: LoggingConfig;
   workspace?: WorkspaceConfig;
+  agent?: AgentConfig;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -82,6 +88,22 @@ export class ConfigManager {
 
   getLoggingConfig(): LoggingConfig {
     return this.config.logging;
+  }
+
+  getAgentConfig(): AgentConfig {
+    return this.config.agent || { defaultPromptChain: null };
+  }
+
+  getDefaultPromptChain(): string | null {
+    return this.config.agent?.defaultPromptChain || null;
+  }
+
+  async setDefaultPromptChain(chainName: string | null): Promise<void> {
+    if (!this.config.agent) {
+      this.config.agent = { defaultPromptChain: null };
+    }
+    this.config.agent.defaultPromptChain = chainName;
+    await this.save();
   }
 
   getWorkspacePath(): string | null {

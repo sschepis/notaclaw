@@ -132,9 +132,11 @@ async function buildRendererEntry(pluginPath, pkg) {
 
     // Renderer code runs in a sandboxed browser-like environment.
     // React, ReactDOM, framer-motion, lucide-react are provided by the host via require().
+    // zustand must also be external so plugins share the host's single zustand instance.
     const rendererExternals = [
         'react', 'react-dom', 'react/jsx-runtime',
-        'framer-motion', 'lucide-react', 'alephnet'
+        'framer-motion', 'lucide-react', 'alephnet',
+        'zustand', 'zustand/shallow', 'zustand/traditional'
     ];
 
     try {

@@ -277,8 +277,9 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       let trust: TrustAssessment | undefined;
       let capabilityDecisions: Map<Capability, CapabilityCheckResult> | undefined;
       let status: 'active' | 'error' | 'blocked' | 'pending-confirmation' | 'disabled' = 'active';
+      const isDisabled = this.isDisabled(manifest.id);
 
-      if (this.isDisabled(manifest.id)) {
+      if (isDisabled) {
           status = 'disabled';
       }
 
@@ -290,7 +291,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         if (!verification.valid) {
             console.error(`Plugin ${manifest.id} signature verification failed: ${verification.error}`);
             status = 'blocked';
-        } else {
+        } else if (!isDisabled) {
+            // Only apply trust decisions if the plugin is not explicitly disabled
             trust = await this.trustEvaluator.evaluate(envelope);
             capabilityDecisions = this.trustGate.checkAll(envelope, trust);
             
@@ -353,7 +355,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         path: pluginPath,
         context,
         instance,
-        status: 'active' as const,
+        status: (manifest.status || 'active') as 'active' | 'error' | 'blocked' | 'pending-confirmation' | 'disabled',
         loadedAt: new Date()
       };
 
@@ -371,7 +373,13 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         // Use new Function to bypass webpack/vite transpilation of dynamic import
         const dynamicImport = new Function('specifier', 'return import(specifier)');
         const rawModule = await dynamicImport(pathToFileURL(entryPoint).href);
-        return rawModule.activate ? rawModule : (rawModule.default || rawModule);
+        // Handle double-wrapped default exports from CJS modules bundled with __esModule flag
+        // e.g. { default: { __esModule: true, default: { activate, deactivate } } }
+        let pluginModule = rawModule.activate ? rawModule : (rawModule.default || rawModule);
+        if (pluginModule && pluginModule.__esModule && pluginModule.default) {
+            pluginModule = pluginModule.default;
+        }
+        return pluginModule;
     }
     return null;
   }
@@ -594,5 +602,63 @@ export class PluginManager extends BasePluginManager<PluginContext> {
 
   private isDisabled(id: string): boolean {
       return !!this.storageCache?._system?.disabledPlugins?.includes(id);
+  }
+
+  private async setDisabledState(id: string, disabled: boolean) {
+      if (!this.storageCache) this.storageCache = {};
+      if (!this.storageCache._system) this.storageCache._system = {};
+      if (!this.storageCache._system.disabledPlugins) this.storageCache._system.disabledPlugins = [];
+
+      const list = this.storageCache._system.disabledPlugins;
+      if (disabled) {
+          if (!list.includes(id)) list.push(id);
+      } else {
+          const index = list.indexOf(id);
+          if (index !== -1) list.splice(index, 1);
+      }
+
+      await this.saveStorage();
+  }
+
+  public async disablePlugin(id: string): Promise<boolean> {
+      const plugin = this.plugins.get(id);
+      if (!plugin) return false;
+
+      await this.setDisabledState(id, true);
+      plugin.status = 'disabled';
+      this.emit('plugin-state-changed', { id, status: 'disabled' });
+      return true;
+  }
+
+  public async enablePlugin(id: string): Promise<boolean> {
+      const plugin = this.plugins.get(id);
+      if (!plugin) return false;
+
+      await this.setDisabledState(id, false);
+      plugin.status = 'active';
+
+      if (plugin.manifest.main && !plugin.instance) {
+          try {
+            const entryPoint = path.join(plugin.path, plugin.manifest.main);
+            const dynamicImport = new Function('specifier', 'return import(specifier)');
+            const rawModule = await dynamicImport(pathToFileURL(entryPoint).href);
+            let pluginModule = rawModule.activate ? rawModule : (rawModule.default || rawModule);
+            if (pluginModule && pluginModule.__esModule && pluginModule.default) {
+                pluginModule = pluginModule.default;
+            }
+
+            if (typeof pluginModule.activate === 'function') {
+                plugin.instance = pluginModule.activate(plugin.context);
+                console.log(`Plugin ${id} activated.`);
+            }
+          } catch (e) {
+              console.error(`Failed to activate plugin ${id}:`, e);
+              plugin.status = 'error';
+              return false;
+          }
+      }
+
+      this.emit('plugin-state-changed', { id, status: 'active' });
+      return true;
   }
 }

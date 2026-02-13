@@ -4,6 +4,9 @@ import * as ReactDOMClient from 'react-dom/client';
 import * as FramerMotion from 'framer-motion';
 import * as LucideReact from 'lucide-react';
 import * as JSXRuntime from 'react/jsx-runtime';
+import * as Zustand from 'zustand';
+import * as ZustandShallow from 'zustand/shallow';
+import * as ZustandTraditional from 'zustand/traditional';
 import { RendererPluginContext, PluginManifest } from '../../shared/plugin-types';
 import { UIExtensionAPI } from '../../shared/slot-types';
 import { usePluginStore } from '../store/usePluginStore';
@@ -60,7 +63,7 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
       log(`Found ${plugins.length} plugin(s)`);
 
       for (const plugin of plugins) {
-        if (plugin.renderer) {
+        if (plugin.renderer && plugin.status !== 'disabled') {
           await this.loadPlugin(plugin);
         }
       }
@@ -99,19 +102,21 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
       const lastSlash = rendererFile.lastIndexOf('/');
       const rendererDir = lastSlash !== -1 ? rendererFile.substring(0, lastSlash) : '';
       const bundlePath = `${manifest.path}/${rendererDir ? rendererDir + '/' : ''}bundle.js`;
+      const cssBundlePath = `${manifest.path}/${rendererDir ? rendererDir + '/' : ''}bundle.css`;
       const indexPath = `${manifest.path}/${manifest.renderer}`;
       
-      let code: string | undefined;
+      let code: string | null | undefined;
       
-      try {
-        code = await window.electronAPI.readPluginFile(bundlePath);
+      // readPluginFile returns null for missing files (no throw).
+      code = await window.electronAPI.readPluginFile(bundlePath);
+      if (code) {
         log(`Loaded bundle for "${manifest.id}"`);
-      } catch {
-        try {
-          code = await window.electronAPI.readPluginFile(indexPath);
+      } else {
+        code = await window.electronAPI.readPluginFile(indexPath);
+        if (code) {
           log(`Loaded index.js for "${manifest.id}" (no bundle found)`);
-        } catch (e) {
-          warn(`Could not load plugin "${manifest.id}": file not found`, e);
+        } else {
+          warn(`Could not load plugin "${manifest.id}": no bundle.js or index.js found`);
           return null;
         }
       }
@@ -119,6 +124,20 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
       if (!code) {
         warn(`Plugin "${manifest.id}" code is empty or invalid`);
         return null;
+      }
+
+      // Load companion CSS bundle if it exists (e.g., reactflow/dist/style.css gets extracted here)
+      // readPluginFile returns null for missing files, so no try/catch needed.
+      const cssCode = await window.electronAPI.readPluginFile(cssBundlePath);
+      if (cssCode) {
+        const styleId = `plugin-css-${manifest.id}`;
+        if (!document.getElementById(styleId)) {
+          const style = document.createElement('style');
+          style.id = styleId;
+          style.textContent = cssCode;
+          document.head.appendChild(style);
+          log(`Loaded CSS bundle for "${manifest.id}"`);
+        }
       }
 
       let sandboxType: SandboxType = 'local';
@@ -296,6 +315,10 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
       },
       services: {
         tools: {
+          list: async () => {
+             // Return tools registered by this plugin (empty by default)
+             return [];
+          },
           register: (tool: any) => {
              window.electronAPI.pluginRegisterTool(plugin.id, tool.name);
              window.electronAPI.onPluginMessage(plugin.id, 'tool-request', async (data: any) => {
@@ -396,6 +419,9 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
               case 'react-dom/client': return ReactDOMClient;
               case 'framer-motion': return FramerMotion;
               case 'lucide-react': return LucideReact;
+              case 'zustand': return Zustand;
+              case 'zustand/shallow': return ZustandShallow;
+              case 'zustand/traditional': return ZustandTraditional;
               case 'alephnet': return { useAlephStore, useAppStore, useFenceStore, useSlotRegistry };
               default: throw new Error(`Module ${id} not found in plugin context`);
           }

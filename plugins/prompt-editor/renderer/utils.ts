@@ -56,6 +56,18 @@ export const jsonToGraph = (json: any): { nodes: Node[], edges: Edge[] } => {
         });
     }
 
+    // Create Sub-Chain Nodes
+    if (json.subchains) {
+        json.subchains.forEach((sc: any, index: number) => {
+            nodes.push({
+                id: sc.id || `subchain-${index}`,
+                type: 'subchain',
+                data: { ...sc, label: sc.label || 'Sub-Chain', nodeType: 'subchain' },
+                position: { x: 100, y: index * 200 }
+            });
+        });
+    }
+
     // Create Edges
     // ... existing logic needs to be expanded to handle edges from/to loops and conditions
     // This is complex because the current JSON structure nests transitions in 'prompts'.
@@ -108,13 +120,14 @@ export const jsonToGraph = (json: any): { nodes: Node[], edges: Edge[] } => {
 };
 
 export const graphToJson = (nodes: Node[], edges: Edge[], originalJson: any): any => {
-    const newJson = { ...originalJson, prompts: [], tools: [], loops: [], conditions: [], edges: [] };
+    const newJson = { ...originalJson, prompts: [], tools: [], loops: [], conditions: [], subchains: [], edges: [] };
     
     // Filter nodes by type
     const promptNodes = nodes.filter(n => n.data.nodeType === 'prompt' || n.type === 'prompt' || !n.data.nodeType);
     const toolNodes = nodes.filter(n => n.data.nodeType === 'tool' || n.type === 'tool');
     const loopNodes = nodes.filter(n => n.data.nodeType === 'loop' || n.type === 'loop');
     const conditionNodes = nodes.filter(n => n.data.nodeType === 'condition' || n.type === 'condition');
+    const subchainNodes = nodes.filter(n => n.data.nodeType === 'subchain' || n.type === 'subchain');
 
     // Reconstruct Prompts
     newJson.prompts = promptNodes.map(node => {
@@ -163,6 +176,13 @@ export const graphToJson = (nodes: Node[], edges: Edge[], originalJson: any): an
         const cond = { ...node.data };
         delete cond.nodeType;
         return { ...cond, id: node.id };
+    });
+
+    // Save Sub-Chains
+    newJson.subchains = subchainNodes.map(node => {
+        const sc = { ...node.data };
+        delete sc.nodeType;
+        return { ...sc, id: node.id };
     });
 
     // Save Edges explicitly to support new node types

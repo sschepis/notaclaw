@@ -46,6 +46,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('network-update', callback);
     return () => { ipcRenderer.removeListener('network-update', callback); };
   },
+  onAlephNetStatus: (callback: (event: any, status: any) => void) => {
+    ipcRenderer.on('alephnet-status', callback);
+    return () => { ipcRenderer.removeListener('alephnet-status', callback); };
+  },
 
   // AI Provider Management
   getAISettings: () => ipcRenderer.invoke('getAISettings'),
@@ -147,6 +151,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('agent:getTask', params),
   agentGetActiveTask: (params: { conversationId: string }) =>
     ipcRenderer.invoke('agent:getActiveTask', params),
+  agentGetDefaultChain: () =>
+    ipcRenderer.invoke('agent:getDefaultChain'),
+  agentSetDefaultChain: (params: { chainName: string | null }) =>
+    ipcRenderer.invoke('agent:setDefaultChain', params),
   onAgentTaskUpdate: (callback: (event: any, data: any) => void) => {
     ipcRenderer.on('agent:taskUpdate', callback);
     return () => { ipcRenderer.removeListener('agent:taskUpdate', callback); };
@@ -181,4 +189,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('openclaw:getTaskStatus', options),
   openclawCancelTask: (options: { taskId: string }) =>
     ipcRenderer.invoke('openclaw:cancelTask', options),
+
+  // ─── Resonant Agents ─────────────────────────────────────────────
+  resonantAgentList: (params?: any) => ipcRenderer.invoke('resonant:agent:list', params),
+  resonantAgentGet: (params: { id: string }) => ipcRenderer.invoke('resonant:agent:get', params),
+  resonantAgentCreate: (options: any) => ipcRenderer.invoke('resonant:agent:create', options),
+  resonantAgentUpdate: (params: { id: string; updates: any }) => ipcRenderer.invoke('resonant:agent:update', params),
+  resonantAgentDelete: (params: { id: string }) => ipcRenderer.invoke('resonant:agent:delete', params),
+  resonantAgentDuplicate: (params: { id: string; newName: string }) => ipcRenderer.invoke('resonant:agent:duplicate', params),
+  resonantAgentExport: (params: { id: string }) => ipcRenderer.invoke('resonant:agent:export', params),
+  resonantAgentImport: (params: { json: string }) => ipcRenderer.invoke('resonant:agent:import', params),
+  resonantAgentSummon: (params: { id: string; context?: any }) => ipcRenderer.invoke('resonant:agent:summon', params),
+  resonantAgentDismiss: (params: { id: string }) => ipcRenderer.invoke('resonant:agent:dismiss', params),
+  resonantAgentStartTask: (params: any) => ipcRenderer.invoke('resonant:agent:startTask', params),
+  resonantAgentStopTask: (params: { taskId: string }) => ipcRenderer.invoke('resonant:agent:stopTask', params),
+  resonantAgentRespondToTask: (params: { taskId: string; response: string }) => ipcRenderer.invoke('resonant:agent:respondToTask', params),
+  resonantTemplatesList: () => ipcRenderer.invoke('resonant:templates:list'),
+  resonantTeamList: () => ipcRenderer.invoke('resonant:team:list'),
+  resonantTeamCreate: (params: { name: string; agentIds: string[]; description?: string }) => ipcRenderer.invoke('resonant:team:create', params),
+  resonantTeamUpdate: (params: { id: string; updates: any }) => ipcRenderer.invoke('resonant:team:update', params),
+  resonantTeamDelete: (params: { id: string }) => ipcRenderer.invoke('resonant:team:delete', params),
+  resonantTeamOrchestrate: (params: any) => ipcRenderer.invoke('resonant:team:orchestrate', params),
+  resonantToolList: () => ipcRenderer.invoke('resonant:tool:list'),
+  onResonantAgentChanged: (callback: (event: any, data: any) => void) => {
+    ipcRenderer.on('resonant:agentChanged', callback);
+    return () => { ipcRenderer.removeListener('resonant:agentChanged', callback); };
+  },
 });

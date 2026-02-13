@@ -4,6 +4,7 @@ import { LayoutManager } from './components/layout/LayoutManager';
 import { AppMenuBar } from './components/layout/AppMenuBar';
 import { useAppStore } from './store/useAppStore';
 import { useAlephStore } from './store/useAlephStore';
+import { useResonantAgentStore } from './store/useResonantAgentStore';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { OnboardingScreen } from './components/onboarding/OnboardingScreen';
 import { PluginLoader } from './services/PluginLoader';
@@ -13,6 +14,7 @@ import { StatusBar } from './components/layout/StatusBar';
 import { PluginOverlays } from './components/ui/PluginOverlays';
 import { PanelRight } from 'lucide-react';
 import { useSlotRegistry } from './services/SlotRegistry';
+import { gatherUIContext, getEditorContent, setEditorContent, handleNavigate } from './services/UIContextProvider';
 
 type OnboardingStep = 'welcome' | 'identity' | 'ai-setup';
 
@@ -66,6 +68,7 @@ function App() {
         // 3. restoreSessionState internally loads messages for active conversation
         // 4. Subscribe to real-time sync for cross-device updates
         // 5. Load persisted model selection
+        // 6. Fetch current AlephNet status (services init before window creation)
         try {
             await loadConversations();
             await restoreSessionState();
@@ -74,6 +77,27 @@ function App() {
             window.electronAPI.aiConversationSubscribe?.();
         } catch (startupErr) {
             console.error('Conversation startup sequence error:', startupErr);
+        }
+
+        // Fetch current AlephNet status — services initialise before the window
+        // exists, so push-based events from connect() are missed. Poll once here.
+        try {
+            const status = await window.electronAPI.alephStatus?.();
+            if (status) {
+                setNetwork({
+                    status: status.status,
+                    nodeId: status.id || '',
+                    peers: status.peers ?? 0,
+                    alephnetConnected: status.status === 'ONLINE',
+                    tier: status.tier,
+                    version: status.version,
+                    connectedAt: status.connectedAt,
+                    uptime: status.uptime,
+                    error: status.error || null,
+                } as any);
+            }
+        } catch (statusErr) {
+            console.error('Failed to fetch AlephNet status:', statusErr);
         }
         
         loadSelectedModelFromSettings(); // Load persisted model selection
@@ -100,6 +124,7 @@ function App() {
     let cleanupAgent: (() => void) | undefined;
     let cleanupSMF: (() => void) | undefined;
     let cleanupNetwork: (() => void) | undefined;
+    let cleanupAlephNetStatus: (() => void) | undefined;
     let cleanupDM: (() => void) | undefined;
     let cleanupRoom: (() => void) | undefined;
     let cleanupFriend: (() => void) | undefined;
@@ -111,6 +136,7 @@ function App() {
     let cleanupAgentTaskUpdate: (() => void) | undefined;
     let cleanupAgentTaskMessage: (() => void) | undefined;
     let cleanupConversationChanged: (() => void) | undefined;
+    let cleanupResonantAgentChanged: (() => void) | undefined;
 
     try {
         cleanupMessage = window.electronAPI.onMessage((_event, msg) => {
@@ -122,6 +148,17 @@ function App() {
         cleanupAgent = window.electronAPI.onAgentStateUpdate((_event, data) => setAgentState(data));
         cleanupSMF = window.electronAPI.onSMFUpdate((_event, data) => setSMF(data));
         cleanupNetwork = window.electronAPI.onNetworkUpdate((_event, data) => setNetwork(data));
+
+        // AlephNet Connection Status
+        cleanupAlephNetStatus = window.electronAPI.onAlephNetStatus?.((_event: any, data: any) => {
+            setNetwork({
+                status: data.status,
+                alephnetConnected: data.status === 'ONLINE',
+                error: data.error || null,
+                ...(data.nodeId ? { nodeId: data.nodeId } : {}),
+                ...(data.connectedAt ? { connectedAt: data.connectedAt } : {}),
+            } as any);
+        });
 
         // Agent Task Events
         cleanupAgentTaskUpdate = window.electronAPI.onAgentTaskUpdate((_event, { task }) => {
@@ -216,6 +253,15 @@ function App() {
                     } catch (err: any) {
                         throw new Error(`Failed to open file: ${err.message}`);
                     }
+                // ── UI Context channels (used by AgentTaskRunner) ────────
+                } else if (channel === 'ui:getContext') {
+                    result = gatherUIContext();
+                } else if (channel === 'ui:navigate') {
+                    result = handleNavigate(data);
+                } else if (channel === 'ui:getEditorContent') {
+                    result = getEditorContent();
+                } else if (channel === 'ui:setEditorContent') {
+                    result = setEditorContent(data);
                 } else {
                     throw new Error(`Unknown channel: ${channel}`);
                 }
@@ -224,6 +270,19 @@ function App() {
             } catch (err: any) {
                 window.electronAPI.sendAppResponse(requestId, { error: err.message });
             }
+        });
+
+        // Resonant Agents real-time event subscription
+        cleanupResonantAgentChanged = window.electronAPI.onResonantAgentChanged?.((_event: any, event: any) => {
+            useResonantAgentStore.getState().handleAgentChanged(event);
+        });
+
+        // Bootstrap Resonant Agent store after identity is confirmed
+        useResonantAgentStore.getState().loadAgents().catch(err => {
+            console.error('[App] Failed to load resonant agents:', err);
+        });
+        useResonantAgentStore.getState().loadTemplates().catch(err => {
+            console.error('[App] Failed to load resonant templates:', err);
         });
 
         // Cross-device conversation sync listener
@@ -252,6 +311,7 @@ function App() {
       cleanupAgent?.();
       cleanupSMF?.();
       cleanupNetwork?.();
+      cleanupAlephNetStatus?.();
       cleanupDM?.();
       cleanupRoom?.();
       cleanupFriend?.();
@@ -263,6 +323,7 @@ function App() {
       cleanupAgentTaskUpdate?.();
       cleanupAgentTaskMessage?.();
       cleanupConversationChanged?.();
+      cleanupResonantAgentChanged?.();
     };
 
   }, []);

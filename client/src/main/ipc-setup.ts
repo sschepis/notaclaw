@@ -19,7 +19,9 @@ import {
     marketplaceService,
     openClawGateway,
     agentTaskRunner,
-    teamManager
+    teamManager,
+    resonantAgentService,
+    agentToolRegistry
 } from './services-setup';
 
 export function registerIPC(getMainWindow: () => BrowserWindow | null) {
@@ -58,6 +60,9 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
         help: (id) => invokeRenderer('commands:help', { id }),
         openFile: (path) => invokeRenderer('file:open', { path })
     });
+
+    // Provide the renderer bridge to AgentTaskRunner for UI context awareness
+    agentTaskRunner.setInvokeRenderer(invokeRenderer);
 
     // AI & Tools
     ipcMain.handle('approveTool', async (_event, toolId) => {
@@ -337,6 +342,13 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
         return result.filePaths[0];
     });
 
+    // Default Prompt Chain IPC
+    ipcMain.handle('agent:getDefaultChain', async () => configManager.getDefaultPromptChain());
+    ipcMain.handle('agent:setDefaultChain', async (_, { chainName }) => {
+        await configManager.setDefaultPromptChain(chainName);
+        return { success: true, defaultChain: chainName };
+    });
+
     // Config IPC
     ipcMain.handle('config:get', async () => configManager.getConfig());
     ipcMain.handle('config:getNetwork', async () => configManager.getNetworkConfig());
@@ -365,4 +377,40 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     ipcMain.handle('logger:get', async (_, limit) => logger.getLogs(limit));
     ipcMain.handle('logger:getByCategory', async (_, { category, limit }) => logger.getLogsByCategory(category, limit));
     ipcMain.handle('logger:clear', async () => logger.clear());
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Resonant Agents — Unified Agent IPC
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // Agent CRUD
+    ipcMain.handle('resonant:agent:list', async (_, params) => resonantAgentService.listAgents(params?.filter));
+    ipcMain.handle('resonant:agent:get', async (_, { id }) => resonantAgentService.getAgent(id));
+    ipcMain.handle('resonant:agent:create', async (_, options) => resonantAgentService.createAgent(options));
+    ipcMain.handle('resonant:agent:update', async (_, { id, updates }) => resonantAgentService.updateAgent(id, updates));
+    ipcMain.handle('resonant:agent:delete', async (_, { id }) => resonantAgentService.deleteAgent(id));
+    ipcMain.handle('resonant:agent:duplicate', async (_, { id, newName }) => resonantAgentService.duplicateAgent(id, newName));
+    ipcMain.handle('resonant:agent:export', async (_, { id }) => resonantAgentService.exportAgent(id));
+    ipcMain.handle('resonant:agent:import', async (_, { json }) => resonantAgentService.importAgent(json));
+
+    // Agent Lifecycle
+    ipcMain.handle('resonant:agent:summon', async (_, { id, context }) => resonantAgentService.summon(id, context));
+    ipcMain.handle('resonant:agent:dismiss', async (_, { id }) => resonantAgentService.dismiss(id));
+
+    // Agent Task Execution
+    ipcMain.handle('resonant:agent:startTask', async (_, params) => resonantAgentService.startTask(params));
+    ipcMain.handle('resonant:agent:stopTask', async (_, { taskId }) => resonantAgentService.stopTask(taskId));
+    ipcMain.handle('resonant:agent:respondToTask', async (_, { taskId, response }) => resonantAgentService.respondToTask(taskId, response));
+
+    // Templates
+    ipcMain.handle('resonant:templates:list', async () => resonantAgentService.getTemplates());
+
+    // Teams
+    ipcMain.handle('resonant:team:list', async () => resonantAgentService.listTeams());
+    ipcMain.handle('resonant:team:create', async (_, { name, agentIds, description }) => resonantAgentService.createTeam(name, agentIds, description));
+    ipcMain.handle('resonant:team:update', async (_, { id, updates }) => resonantAgentService.updateTeam(id, updates));
+    ipcMain.handle('resonant:team:delete', async (_, { id }) => resonantAgentService.deleteTeam(id));
+    ipcMain.handle('resonant:team:orchestrate', async (_, params) => resonantAgentService.orchestrateTeam(params));
+
+    // Tool Registry
+    ipcMain.handle('resonant:tool:list', async () => agentToolRegistry.listAll());
 }

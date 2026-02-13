@@ -43,7 +43,7 @@ export const ExtensionDetailView: React.FC = () => {
                     for (const candidate of readmeCandidates) {
                         try {
                             const candidatePath = `${plugin.path}/${candidate}`;
-                            content = await window.electronAPI.readPluginFile(candidatePath);
+                            content = await window.electronAPI.readPluginFile(candidatePath) || '';
                             if (content) {
                                 console.log(`[ExtensionDetailView] Found README at ${candidatePath}`);
                                 break;
