@@ -1,4 +1,4 @@
-import {
+export {
   PluginContext,
   BackupState,
   BackupMetadata,
@@ -18,6 +18,30 @@ import {
 } from '../types';
 import { CryptoEngine } from './crypto';
 import { BackupScheduler } from './scheduler';
+
+export interface PluginContext {
+  storage: {
+    get: (key: string) => Promise<any>;
+    set: (key: string, value: any) => Promise<void>;
+    delete: (key: string) => Promise<void>;
+  };
+  secrets: {
+    get: (key: string) => Promise<string | null>;
+    set: (key: string, value: string, label?: string) => Promise<void>;
+  };
+  ipc: {
+    handle: (channel: string, handler: (args: any) => Promise<any>) => void;
+    invoke: (channel: string, ...args: any[]) => Promise<any>;
+    send: (channel: string, ...args: any[]) => void;
+  };
+  dsn: {
+    registerTool: (metadata: any, handler: (args: any) => Promise<any>) => void;
+  };
+  traits?: {
+    register: (trait: any) => void;
+  };
+  on: (event: string, handler: () => void) => void;
+}
 
 const HOOK_TIMEOUT_MS = 10_000;
 const ALL_CATEGORIES: BackupCategory[] = ['graph', 'conversations', 'identity', 'plugin-settings'];
@@ -645,6 +669,17 @@ export class BackupManager {
       });
       return { success: true };
     });
+
+    if (this.context.traits) {
+      this.context.traits.register({
+        id: 'secure-backup',
+        name: 'Secure Backup',
+        description: 'Create and restore encrypted backups.',
+        instruction: 'You can create and restore encrypted backups of system data using `backup_data` and `restore_backup`. Always ensure a passphrase is provided for security.',
+        activationMode: 'dynamic',
+        triggerKeywords: ['backup', 'restore', 'save data', 'recover', 'snapshot', 'encrypted', 'archive']
+      });
+    }
   }
 }
 

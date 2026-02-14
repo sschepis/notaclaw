@@ -145,16 +145,6 @@ export const alephNetBridge = {
   agentDismiss: invoke('agent:dismiss'),
   agentRun: invoke('agent:run'),
 
-  // ─── Agent Teams ───────────────────────────────────────────────
-  teamCreate: invoke('team:create'),
-  teamList: invoke('team:list'),
-  teamGet: invoke('team:get'),
-  teamAddAgent: invoke('team:addAgent'),
-  teamRemoveAgent: invoke('team:removeAgent'),
-  teamSummon: invoke('team:summon'),
-  teamStep: invoke('team:step'),
-  teamDismiss: invoke('team:dismiss'),
-
   // ─── Wallet & Economics ────────────────────────────────────────
   walletBalance: invoke('wallet:balance'),
   walletSend: invoke('wallet:send'),

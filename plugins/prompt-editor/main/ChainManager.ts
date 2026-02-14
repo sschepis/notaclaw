@@ -1,4 +1,4 @@
-import { PluginContext } from '../../../src/shared/plugin-types';
+import { PluginContext } from './types';
 import path from 'path';
 import fs from 'fs/promises';
 

@@ -31,6 +31,17 @@ export default {
     context.on('stop', () => {
       if (interval) clearInterval(interval);
     });
+
+    if (context.traits) {
+      context.traits.register({
+        id: 'coherence-monitoring',
+        name: 'Coherence Monitoring',
+        description: 'Monitor system coherence and entropy.',
+        instruction: 'You can monitor the coherence and entropy levels of the system. This data helps in understanding the stability and organization of the agent network.',
+        activationMode: 'dynamic',
+        triggerKeywords: ['coherence', 'entropy', 'stability', 'monitor', 'system health']
+      });
+    }
   },
   
   deactivate: () => {

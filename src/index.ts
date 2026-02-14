@@ -82,7 +82,8 @@ async function main() {
         signedEnvelopeService,
         trustEvaluator,
         trustGate,
-        serviceRegistry
+        serviceRegistry,
+        personalityManager
     );
 
     await pluginManager.initialize();

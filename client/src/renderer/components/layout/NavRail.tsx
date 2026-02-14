@@ -79,6 +79,10 @@ const NAV_ITEMS: Record<string, { label: string; icon: React.ReactNode; color?: 
     label: "SRIA Agents",
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
   },
+  secrets: {
+    label: "Secrets Vault",
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+  },
   marketplace: {
     label: "Marketplace",
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
@@ -145,7 +149,7 @@ const PluginNavButton: React.FC<{
   );
 };
 
-export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode, onOpenSettings }) => {
+export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode: _setMode, onOpenSettings }) => {
   const { activeSidebarView, setActiveSidebarView, navOrder, setNavOrder, setLayoutAction, activeConversationId, startDraftConversation } = useAppStore();
   
   // Get plugin-registered navigation items
@@ -213,9 +217,7 @@ export const NavRail: React.FC<NavRailProps> = ({ currentMode, setMode, onOpenSe
                 if (id === 'messages') {
                     onClick = () => {
                         setActiveSidebarView('messages');
-                        setMode('chat');
-                        // Always open chat stage when clicking messages
-                        setLayoutAction({ type: 'open', component: 'stage', name: 'CHAT', icon: 'stage' });
+                        // Chat is now consolidated in the sidebar — no need to open a separate stage panel
                         if (!activeConversationId) {
                             startDraftConversation();
                         }

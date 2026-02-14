@@ -1,4 +1,4 @@
-import type { StakingTier } from '../shared/alephnet-types';
+import type { StakingTier } from '@notaclaw/core/alephnet-types';
 import type { ISocialGraphProvider, IReputationProvider } from './TrustEvaluator';
 import type { AlephGunBridge } from '@sschepis/alephnet-node';
 import type { IdentityManager } from './IdentityManager';

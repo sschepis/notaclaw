@@ -6,6 +6,9 @@ export interface PluginContext {
     on(channel: string, callback: (data: any) => void): void;
     send(channel: string, data: any): void;
   };
+  traits?: {
+    register: (trait: any) => void;
+  };
   [key: string]: any;
 }
 
@@ -17,6 +20,12 @@ export const activate = (context: PluginContext) => {
 
   context.on('ready', () => {
     console.log('[Secure Comms] Ready');
+  });
+
+  // Example IPC handler
+  context.ipc.on('ping', (data: any) => {
+    console.log('[Secure Comms] Received ping:', data);
+    context.ipc.send('pong', { message: 'Hello from main process!' });
   });
 
   context.ipc.on('configure', (data: { p1: number, p2: number }) => {
@@ -65,6 +74,17 @@ export const activate = (context: PluginContext) => {
       context.ipc.send('secure-error', { error: (e as Error).message });
     }
   });
+
+  if (context.traits) {
+    context.traits.register({
+      id: 'secure-communication',
+      name: 'Secure Communication',
+      description: 'Encode/decode secure messages using quaternion-based prime resonance.',
+      instruction: 'You can use the secure communication channel to encode and decode sensitive messages using a specialized prime resonance algorithm.',
+      activationMode: 'dynamic',
+      triggerKeywords: ['secure', 'encode', 'decode', 'message', 'prime', 'resonance', 'channel', 'encrypt', 'decrypt']
+    });
+  }
 };
 
 export const deactivate = () => {

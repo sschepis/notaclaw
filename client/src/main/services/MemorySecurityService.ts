@@ -217,6 +217,10 @@ export class MemorySecurityService implements IMemorySecurityService {
     this.envelopeService = envelopeService;
     // this._trustEvaluator = trustEvaluator;
     this.trustGate = trustGate;
+    
+    // Start nonce cleanup interval immediately so nonces are cleaned
+    // even when no Gun.js bridge is configured
+    this.startNonceCleanup();
   }
   
   /**
@@ -230,9 +234,6 @@ export class MemorySecurityService implements IMemorySecurityService {
     
     this.bridge = bridge;
     logger.info(LOG_CATEGORY, 'BridgeConfigured', 'Gun.js bridge configured for persistent storage');
-    
-    // Start nonce cleanup interval
-    this.startNonceCleanup();
     
     // Load persisted epochs
     this.loadPersistedState();

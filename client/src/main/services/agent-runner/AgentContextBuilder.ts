@@ -10,6 +10,8 @@
 
 import { AIMessage } from './types';
 import { UIContextSnapshot } from '../../../shared/ui-context-types';
+import { workspaceService } from '../WorkspaceService';
+import { configManager } from '../ConfigManager';
 
 /** The agentic mode instructions appended to every personality prompt */
 const AGENTIC_INSTRUCTIONS = `
@@ -57,9 +59,12 @@ You do NOT have the prior conversation history in your context by default. You M
 
 /**
  * Build the system prompt combining personality and agentic instructions.
+ * Includes the current workspace directory so the agent knows its home.
  */
 export function buildAgenticSystemPrompt(personalityPrompt: string): string {
-  return personalityPrompt + AGENTIC_INSTRUCTIONS;
+  const sandboxed = configManager.isSandboxed();
+  const wsBlock = workspaceService.getWorkspaceInfoBlock(sandboxed);
+  return personalityPrompt + AGENTIC_INSTRUCTIONS + '\n\n' + wsBlock;
 }
 
 /**
@@ -93,16 +98,19 @@ export function buildInitialMessages(
 
 /**
  * Append an assistant message (agent's response) to the history.
+ * Mutates in-place to avoid O(n²) array copies in long agent loops.
  */
 export function appendAssistantMessage(
   messages: AIMessage[],
   content: string
 ): AIMessage[] {
-  return [...messages, { role: 'assistant', content }];
+  messages.push({ role: 'assistant', content });
+  return messages;
 }
 
 /**
  * Append a tool result message to the history.
+ * Mutates in-place to avoid O(n²) array copies in long agent loops.
  */
 export function appendToolResult(
   messages: AIMessage[],
@@ -110,25 +118,25 @@ export function appendToolResult(
   toolName: string,
   result: any
 ): AIMessage[] {
-  return [
-    ...messages,
-    {
-      role: 'tool',
-      content: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
-      toolCallId,
-      toolName,
-    },
-  ];
+  messages.push({
+    role: 'tool',
+    content: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
+    toolCallId,
+    toolName,
+  });
+  return messages;
 }
 
 /**
  * Append a user response (to an ask_user question) to the history.
+ * Mutates in-place to avoid O(n²) array copies in long agent loops.
  */
 export function appendUserResponse(
   messages: AIMessage[],
   response: string
 ): AIMessage[] {
-  return [...messages, { role: 'user', content: response }];
+  messages.push({ role: 'user', content: response });
+  return messages;
 }
 
 /**

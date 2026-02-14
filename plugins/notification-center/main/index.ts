@@ -1,4 +1,21 @@
-import { PluginContext } from '../../../src/shared/plugin-types';
+export interface PluginContext {
+  storage: {
+    get: (key: string) => Promise<any>;
+    set: (key: string, value: any) => Promise<void>;
+  };
+  ipc: {
+    handle: (channel: string, handler: (args: any) => Promise<any>) => void;
+    on: (channel: string, handler: (args: any) => Promise<void>) => void;
+    send: (channel: string, ...args: any[]) => void;
+  };
+  dsn: {
+    registerTool: (metadata: any, handler: (args: any) => Promise<any>) => void;
+  };
+  traits?: {
+    register: (trait: any) => void;
+  };
+  on: (event: string, handler: () => void) => void;
+}
 
 interface NotificationAction {
   id: string;
@@ -223,6 +240,17 @@ export const activate = async (context: PluginContext) => {
             context.ipc.send('notification:new', notification);
             return { success: true, id: notification.id };
         });
+    }
+
+    if (context.traits) {
+      context.traits.register({
+        id: 'notification-center',
+        name: 'Notifications',
+        description: 'Send alerts and notifications.',
+        instruction: 'You can send notifications to the user using `send_notification`. Use this for alerts, important updates, or when a task is completed.',
+        activationMode: 'dynamic',
+        triggerKeywords: ['notify', 'alert', 'message', 'inform', 'warn', 'notification']
+      });
     }
 
   context.on('ready', () => {

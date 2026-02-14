@@ -1,4 +1,21 @@
-import { PluginContext, ReputationData, EntityReputation, Feedback, ReputationSettings } from '../types';
+export interface PluginContext {
+  storage: {
+    get: (key: string) => Promise<any>;
+    set: (key: string, value: any) => Promise<void>;
+  };
+  ipc: {
+    handle: (channel: string, handler: (args: any) => Promise<any>) => void;
+    send: (channel: string, ...args: any[]) => void;
+  };
+  dsn: {
+    registerTool: (metadata: any, handler: (args: any) => Promise<any>) => void;
+  };
+  traits?: {
+    register: (trait: any) => void;
+  };
+}
+
+import { ReputationData, EntityReputation, Feedback, ReputationSettings } from '../types';
 
 const DEFAULT_SETTINGS: ReputationSettings = {
   initialScore: 500,
@@ -261,6 +278,18 @@ class ReputationManager {
       this.updateScore(args.entityId, feedback);
       return { success: true, newScore: entity.score };
     });
+
+    // Register Trait
+    if (this.context.traits) {
+      this.context.traits.register({
+        id: 'reputation-management',
+        name: 'Reputation System',
+        description: 'Check and update reputation scores for entities.',
+        instruction: 'You can check the reputation of entities using `reputation_get_score`. If you have an interaction with an entity, you can submit feedback using `reputation_submit_feedback`. Use this to gauge trust and build the network\'s reputation graph.',
+        activationMode: 'dynamic',
+        triggerKeywords: ['reputation', 'trust', 'score', 'rank', 'feedback', 'review', 'vouch']
+      });
+    }
   }
 }
 

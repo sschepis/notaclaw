@@ -1,5 +1,5 @@
 import { AlephGunBridge } from '@sschepis/alephnet-node';
-import { ServiceDefinition, ServiceInstance, GatewayDefinition } from '../shared/service-types';
+import { ServiceDefinition, ServiceInstance, GatewayDefinition } from '@notaclaw/core/service-types';
 
 export interface ToolMetadata {
     description?: string;

@@ -23,6 +23,14 @@ const DEFAULT_SETTINGS: AISettings = {
 // Cache TTL: 24 hours in milliseconds
 const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+// Vertex access token cache: tokens valid for 1 hour, refresh 5 min early
+const VERTEX_TOKEN_MARGIN_MS = 5 * 60 * 1000;
+
+// Retry settings
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1000;
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+
 interface ModelCacheEntry {
   models: string[];
   fetchedAt: number;
@@ -32,11 +40,17 @@ interface ModelCache {
   [cacheKey: string]: ModelCacheEntry;
 }
 
+interface CachedToken {
+  accessToken: string;
+  expiresAt: number;
+}
+
 export class AIProviderManager {
   private settings: AISettings = DEFAULT_SETTINGS;
   private configPath: string | null = null;
   private modelCachePath: string | null = null;
   private modelCache: ModelCache = {};
+  private vertexTokenCache: Map<string, CachedToken> = new Map();
 
   constructor() {
     // Don't access app.getPath() in constructor - Electron may not be ready yet
@@ -96,8 +110,8 @@ export class AIProviderManager {
         
         return { ...provider, models };
       });
-    } catch {
-      console.log('No existing model cache found');
+    } catch (e) {
+      console.debug('No existing model cache found or parse error:', e);
       this.modelCache = {};
     }
   }
@@ -160,7 +174,7 @@ export class AIProviderManager {
           const modelsUrl = `https://${host}/v1beta1/projects/${project}/locations/${location}/publishers/google/models`;
           
           console.log(`Fetching Vertex models from: ${modelsUrl}`);
-          const response = await fetchWithTimeout(modelsUrl, {
+          const response = await this.fetchWithRetry(modelsUrl, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
             timeoutMs: TIMEOUT_DEFAULTS.token,
           });
@@ -243,17 +257,18 @@ export class AIProviderManager {
       // For now, we'll keep the manual fetch checks as they are lightweight
       if (config.type === 'openai') {
         const endpoint = config.endpoint || 'https://api.openai.com/v1';
-        const response = await fetch(`${endpoint}/models`, {
+        const response = await fetchWithTimeout(`${endpoint}/models`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${config.apiKey}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeoutMs: 15000
         });
         return response.ok;
       } else if (config.type === 'anthropic') {
         const endpoint = config.endpoint || 'https://api.anthropic.com/v1';
-        const response = await fetch(`${endpoint}/messages`, {
+        const response = await fetchWithTimeout(`${endpoint}/messages`, {
           method: 'POST',
           headers: {
             'x-api-key': config.apiKey || '',
@@ -264,12 +279,13 @@ export class AIProviderManager {
             model: 'claude-3-haiku-20240307',
             max_tokens: 1,
             messages: [{ role: 'user', content: 'test' }]
-          })
+          }),
+          timeoutMs: 15000
         });
         return response.ok || response.status === 400;
       } else if (config.type === 'local') {
         const endpoint = config.endpoint || 'http://localhost:11434';
-        const response = await fetch(`${endpoint}/api/tags`);
+        const response = await fetchWithTimeout(`${endpoint}/api/tags`, { timeoutMs: 5000 });
         return response.ok;
       } else if (config.type === 'vertex' || config.type === 'vertex-anthropic') {
         const token = await this.getVertexAccessToken(config);
@@ -285,30 +301,32 @@ export class AIProviderManager {
         // Use v1beta1 to list models
         const testUrl = `https://${host}/v1beta1/projects/${project}/locations/${location}/publishers/google/models`;
         console.log(`[Vertex AI] Testing URL: ${testUrl}`);
-        const response = await fetch(testUrl, {
-          headers: { 'Authorization': `Bearer ${token}` }
+        const response = await fetchWithTimeout(testUrl, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          timeoutMs: 15000
         });
         console.log(`[Vertex AI] Test response: ${response.status} ${response.statusText}`);
         return response.ok;
       } else if (config.type === 'openrouter') {
         const endpoint = config.endpoint || 'https://openrouter.ai/api/v1';
-        const response = await fetch(`${endpoint}/models`, {
+        const response = await fetchWithTimeout(`${endpoint}/models`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${config.apiKey}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeoutMs: 15000
         });
         return response.ok;
       } else if (config.type === 'lmstudio') {
         const endpoint = config.endpoint || 'http://localhost:1234/v1';
-        const response = await fetch(`${endpoint}/models`);
+        const response = await fetchWithTimeout(`${endpoint}/models`, { timeoutMs: 5000 });
         return response.ok;
       } else if (config.type === 'webllm') {
         return true;
       } else if (config.type === 'google') {
         const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models';
-        const response = await fetch(`${endpoint}?key=${config.apiKey}`);
+        const response = await fetchWithTimeout(`${endpoint}?key=${config.apiKey}`, { timeoutMs: 15000 });
         return response.ok;
       }
       return true;
@@ -354,7 +372,7 @@ export class AIProviderManager {
 
       if (config.type === 'openai') {
         const endpoint = config.endpoint || 'https://api.openai.com/v1';
-        const response = await fetch(`${endpoint}/models`, {
+        const response = await this.fetchWithRetry(`${endpoint}/models`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${config.apiKey}`,
@@ -377,13 +395,13 @@ export class AIProviderManager {
         ];
       } else if (config.type === 'local') {
         const endpoint = config.endpoint || 'http://localhost:11434';
-        const response = await fetch(`${endpoint}/api/tags`);
+        const response = await fetchWithTimeout(`${endpoint}/api/tags`, { timeoutMs: 5000 });
         if (!response.ok) throw new Error(`Ollama API error: ${response.status}`);
         const data = await response.json();
         models = (data.models || []).map((m: any) => m.name);
       } else if (config.type === 'openrouter') {
         const endpoint = config.endpoint || 'https://openrouter.ai/api/v1';
-        const response = await fetch(`${endpoint}/models`, {
+        const response = await this.fetchWithRetry(`${endpoint}/models`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${config.apiKey}`,
@@ -395,7 +413,7 @@ export class AIProviderManager {
         models = (data.data || []).map((m: any) => m.id).sort();
       } else if (config.type === 'lmstudio') {
         const endpoint = config.endpoint || 'http://localhost:1234/v1';
-        const response = await fetch(`${endpoint}/models`);
+        const response = await fetchWithTimeout(`${endpoint}/models`, { timeoutMs: 5000 });
         if (!response.ok) throw new Error(`LM Studio API error: ${response.status}`);
         const data = await response.json();
         models = (data.data || []).map((m: any) => m.id);
@@ -413,7 +431,7 @@ export class AIProviderManager {
         ];
       } else if (config.type === 'google') {
         const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models';
-        const response = await fetch(`${endpoint}?key=${config.apiKey}`);
+        const response = await fetchWithTimeout(`${endpoint}?key=${config.apiKey}`, { timeoutMs: 15000 });
         if (!response.ok) throw new Error(`Google API error: ${response.status}`);
         const data = await response.json();
         models = (data.models || [])
@@ -457,10 +475,11 @@ export class AIProviderManager {
   async getEmbeddings(text: string, providerId?: string): Promise<number[]> {
     const resolution = this.getResolvedProvider('embedding', providerId);
     
-    // If no provider configured, return mock (or maybe fail?)
     if (!resolution) {
-      console.warn('No embedding provider configured, using random mock vector');
-      return Array.from({ length: 768 }, () => Math.random());
+      throw new Error(
+        'No embedding provider configured. Add an embedding-capable provider ' +
+        '(OpenAI, Vertex AI) and configure an embedding routing rule.'
+      );
     }
 
     const { config: provider } = resolution;
@@ -470,7 +489,7 @@ export class AIProviderManager {
         return await this.getVertexEmbeddings(provider, text);
       } else if (provider.type === 'openai') {
         const endpoint = provider.endpoint || 'https://api.openai.com/v1';
-        const response = await fetchWithTimeout(`${endpoint}/embeddings`, {
+        const response = await this.fetchWithRetry(`${endpoint}/embeddings`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${provider.apiKey}`,
@@ -491,13 +510,13 @@ export class AIProviderManager {
         return data.data[0].embedding;
       }
       
-      // Fallback for others
-      console.warn(`Provider ${provider.type} not supported for embeddings yet, using mock`);
-      return Array.from({ length: 768 }, () => Math.random());
+      throw new Error(
+        `Provider type '${provider.type}' does not support embeddings. ` +
+        'Use OpenAI or Vertex AI for embedding generation.'
+      );
     } catch (error) {
       console.error('Failed to generate embeddings:', error);
-      // Fallback to mock on error to keep system running
-      return Array.from({ length: 768 }, () => Math.random());
+      throw error; // Propagate instead of silently returning random vectors
     }
   }
 
@@ -512,7 +531,7 @@ export class AIProviderManager {
     const model = 'text-embedding-004';
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:predict`;
 
-    const response = await fetchWithTimeout(endpoint, {
+    const response = await this.fetchWithRetry(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -645,13 +664,25 @@ export class AIProviderManager {
       throw new Error(`Unsupported provider type: ${provider.type}`);
     } catch (error) {
       console.error('AI request failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Extract multimodal image attachments from a message content object.
+   * Returns { text, images } where images is an array of { mimeType, data } objects.
+   */
+  private extractMultimodalContent(content: any): { text: string; images: Array<{ mimeType: string; data: string }> } {
+    if (typeof content === 'string') {
+      return { text: content, images: [] };
+    }
+    if (content && typeof content === 'object' && content.text !== undefined) {
       return {
-        content: `[Error] Request failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        model: modelToUse,
-        providerId: provider.id,
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        text: content.text || '',
+        images: content.imageAttachments || []
       };
     }
+    return { text: JSON.stringify(content), images: [] };
   }
 
   async processChatRequest(messages: any[], tools: any[], options: AIRequestOptions): Promise<AIResponse> {
@@ -686,16 +717,36 @@ export class AIProviderManager {
                 return acc;
             }, {});
 
+            // Convert messages for SDK — handle multimodal content
+            const sdkMessages = messages.map((msg: any) => {
+                const { text, images } = this.extractMultimodalContent(msg.content);
+                if (images.length > 0 && msg.role === 'user') {
+                    // Vercel AI SDK multimodal format
+                    const parts: any[] = [{ type: 'text', text }];
+                    for (const img of images) {
+                        parts.push({
+                            type: 'image',
+                            image: `data:${img.mimeType};base64,${img.data}`
+                        });
+                    }
+                    return { role: msg.role, content: parts };
+                }
+                return { role: msg.role, content: text };
+            });
+
             const { text, usage, toolCalls } = await generateText({
                 model: sdkModel,
-                messages: messages,
+                messages: sdkMessages,
                 tools: toolsMap,
                 temperature: options.temperature ?? 0.7,
                 maxTokens: options.maxTokens ?? 2048,
             } as any);
 
             // Handle tool calls in response
-            // We might need to return them in AIResponse
+            // Log empty text from SDK providers
+            if (!text || text.trim() === '') {
+                console.warn(`[AIProviderManager] SDK provider '${provider.type}' returned empty text. Tool calls: ${toolCalls?.length || 0}`);
+            }
             
             return {
                 content: text,
@@ -714,6 +765,46 @@ export class AIProviderManager {
         console.error('AI chat request failed:', error);
         throw error;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Retry Helper
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetch with exponential backoff retry for transient errors.
+   */
+  private async fetchWithRetry(url: string, init?: RequestInit & { timeoutMs?: number }, retries = MAX_RETRIES): Promise<Response> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetchWithTimeout(url, init);
+
+        // If not retryable or successful, return immediately
+        if (response.ok || !RETRYABLE_STATUS_CODES.has(response.status) || attempt === retries) {
+          return response;
+        }
+
+        // Retryable error — compute delay
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500;
+        console.warn(`[AIProvider] Request to ${url} returned ${response.status}, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${retries})`);
+        await this.sleep(delay);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt === retries) break;
+
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500;
+        console.warn(`[AIProvider] Network error for ${url}, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${retries}): ${lastError.message}`);
+        await this.sleep(delay);
+      }
+    }
+
+    throw lastError || new Error(`Request to ${url} failed after ${retries} retries`);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   // ---------------------------------------------------------------------------
@@ -762,6 +853,15 @@ export class AIProviderManager {
 
   private async getVertexAccessToken(provider: AIProviderConfig): Promise<string> {
     if (!provider.authJsonPath) throw new Error('Vertex AI provider requires authJsonPath');
+
+    // Cache key based on auth file and project
+    const cacheKey = `${provider.authJsonPath}:${provider.projectId || ''}`;
+    const cached = this.vertexTokenCache.get(cacheKey);
+
+    if (cached && cached.expiresAt > Date.now() + VERTEX_TOKEN_MARGIN_MS) {
+      return cached.accessToken;
+    }
+
     const raw = await fs.readFile(provider.authJsonPath, 'utf-8');
     const serviceAccount = JSON.parse(raw);
     const now = Math.floor(Date.now() / 1000);
@@ -790,6 +890,13 @@ export class AIProviderManager {
 
     if (!tokenResponse.ok) throw new Error(`Vertex Token Error: ${tokenResponse.status}`);
     const tokenData = await tokenResponse.json();
+
+    // Cache the token (expires in ~1 hour)
+    this.vertexTokenCache.set(cacheKey, {
+      accessToken: tokenData.access_token,
+      expiresAt: Date.now() + (tokenData.expires_in ? tokenData.expires_in * 1000 : 3600 * 1000),
+    });
+
     return tokenData.access_token;
   }
 
@@ -813,7 +920,7 @@ export class AIProviderManager {
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
 
     const timeoutMs = options.timeoutMs || TIMEOUT_DEFAULTS[options.contentType] || TIMEOUT_DEFAULTS.chat;
-    const response = await fetchWithTimeout(endpoint, {
+    const response = await this.fetchWithRetry(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -866,7 +973,7 @@ export class AIProviderManager {
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/anthropic/models/${model}:rawPredict`;
 
     const timeoutMs = options.timeoutMs || TIMEOUT_DEFAULTS[options.contentType] || TIMEOUT_DEFAULTS.chat;
-    const response = await fetchWithTimeout(endpoint, {
+    const response = await this.fetchWithRetry(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -928,11 +1035,29 @@ export class AIProviderManager {
     const systemMessage = messages.find((m: any) => m.role === 'system');
     const nonSystemMessages = messages.filter((m: any) => m.role !== 'system');
 
-    // Convert messages to Vertex AI format
-    const contents = nonSystemMessages.map((msg: any) => ({
-      role: msg.role === 'assistant' ? 'model' : msg.role,
-      parts: [{ text: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) }]
-    }));
+    // Convert messages to Vertex AI format, supporting multimodal content (images)
+    const contents = nonSystemMessages.map((msg: any) => {
+      const { text, images } = this.extractMultimodalContent(msg.content);
+      const parts: any[] = [{ text }];
+
+      // For user messages with image attachments, add inlineData parts
+      if (msg.role === 'user' && images.length > 0) {
+        for (const img of images) {
+          parts.push({
+            inlineData: {
+              mimeType: img.mimeType,
+              data: img.data
+            }
+          });
+        }
+        console.log(`[Vertex AI Chat] Added ${images.length} image(s) to user message`);
+      }
+
+      return {
+        role: msg.role === 'assistant' ? 'model' : msg.role,
+        parts
+      };
+    });
 
     const requestBody: any = {
         contents,
@@ -992,11 +1117,13 @@ export class AIProviderManager {
         console.log('[Vertex AI Chat] Tools:', functionDeclarations.map((f: any) => f.name).join(', '));
     }
 
-    console.log('[Vertex AI Chat] Request to:', endpoint);
-    console.log('[Vertex AI Chat] Request body:', JSON.stringify(requestBody, null, 2).substring(0, 2000));
+    if (process.env.VERTEX_DEBUG) {
+      console.log('[Vertex AI Chat] Request to:', endpoint);
+      console.log('[Vertex AI Chat] Request body:', JSON.stringify(requestBody, null, 2).substring(0, 2000));
+    }
     
     const timeoutMs = options.timeoutMs || TIMEOUT_DEFAULTS[options.contentType] || TIMEOUT_DEFAULTS.chat;
-    const response = await fetchWithTimeout(endpoint, {
+    const response = await this.fetchWithRetry(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -1007,8 +1134,10 @@ export class AIProviderManager {
     });
 
     const responseText = await response.text();
-    console.log('[Vertex AI Chat] Response status:', response.status);
-    console.log('[Vertex AI Chat] Response body:', responseText.substring(0, 2000));
+    if (process.env.VERTEX_DEBUG) {
+      console.log('[Vertex AI Chat] Response status:', response.status);
+      console.log('[Vertex AI Chat] Response body:', responseText.substring(0, 2000));
+    }
 
     if (!response.ok) {
       throw new Error(`Vertex AI error: ${response.status} - ${responseText}`);
@@ -1039,9 +1168,20 @@ export class AIProviderManager {
         }
     }
     
-    console.log('[Vertex AI Chat] Extracted text:', text?.substring(0, 200) || '(empty)');
-    console.log('[Vertex AI Chat] Tool calls:', toolCalls.length > 0 ? JSON.stringify(toolCalls) : 'none');
-    console.log('[Vertex AI Chat] Finish reason:', candidate?.finishReason);
+    // Always log when text is empty (common cause of blank chat responses)
+    if (!text || text.trim() === '') {
+      console.warn('[Vertex AI Chat] WARNING: Extracted text is EMPTY.');
+      console.warn('[Vertex AI Chat] Finish reason:', candidate?.finishReason || 'unknown');
+      console.warn('[Vertex AI Chat] Parts count:', parts.length, 'Tool calls:', toolCalls.length);
+      if (candidate?.finishReason === 'SAFETY') {
+        console.warn('[Vertex AI Chat] Response was blocked by safety filters.');
+      }
+    }
+    if (process.env.VERTEX_DEBUG) {
+      console.log('[Vertex AI Chat] Extracted text:', text?.substring(0, 200) || '(empty)');
+      console.log('[Vertex AI Chat] Tool calls:', toolCalls.length > 0 ? JSON.stringify(toolCalls) : 'none');
+      console.log('[Vertex AI Chat] Finish reason:', candidate?.finishReason);
+    }
 
     return {
       content: text,
@@ -1074,11 +1214,33 @@ export class AIProviderManager {
     // Anthropic on Vertex uses rawPredict or streamRawPredict
     const endpoint = `https://${host}/v1/projects/${project}/locations/${location}/publishers/anthropic/models/${model}:rawPredict`;
 
-    // Convert messages to Anthropic format
-    const anthropicMessages = messages.map((msg: any) => ({
-      role: msg.role === 'system' ? 'user' : msg.role,
-      content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-    }));
+    // Convert messages to Anthropic format, supporting multimodal content (images)
+    const anthropicMessages = messages.map((msg: any) => {
+      const { text, images } = this.extractMultimodalContent(msg.content);
+      
+      // For user messages with images, use Anthropic's multimodal content blocks
+      if (msg.role === 'user' && images.length > 0) {
+        const contentBlocks: any[] = [];
+        for (const img of images) {
+          contentBlocks.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: img.mimeType,
+              data: img.data
+            }
+          });
+        }
+        contentBlocks.push({ type: 'text', text });
+        console.log(`[Vertex Anthropic Chat] Added ${images.length} image(s) to user message`);
+        return { role: msg.role, content: contentBlocks };
+      }
+      
+      return {
+        role: msg.role === 'system' ? 'user' : msg.role,
+        content: text
+      };
+    });
 
     // Extract system message if present
     const systemMessage = messages.find((m: any) => m.role === 'system');
@@ -1098,7 +1260,7 @@ export class AIProviderManager {
     }
 
     const timeoutMs = options.timeoutMs || TIMEOUT_DEFAULTS[options.contentType] || TIMEOUT_DEFAULTS.chat;
-    const response = await fetchWithTimeout(endpoint, {
+    const response = await this.fetchWithRetry(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,

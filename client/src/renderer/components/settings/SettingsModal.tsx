@@ -119,17 +119,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
     setSettings(prev => ({ ...prev, rules: newRules }));
   };
 
-  // Get plugin-registered settings tabs
+  // Get plugin-registered settings tabs (explicitly registered via registerSettingsTab)
   const pluginSettingsTabs = useSettingsTabs();
 
-  // Filter plugins that have configuration but NO registered settings tab
+  // Filter plugins that have configuration fields but NO explicitly registered settings tab.
+  // These get auto-generated settings UI via PluginSettingsRenderer.
   const configurablePlugins = useMemo(() => {
-    return plugins.filter(p => 
-      p.alephConfig?.configuration && 
-      p.alephConfig.configuration.length > 0 &&
-      !pluginSettingsTabs.find(t => t.pluginId === p.id)
-    );
+    return plugins.filter(p => {
+      const configFields = p.alephConfig?.configuration || p.alephConfig?.settings;
+      return (
+        Array.isArray(configFields) &&
+        configFields.length > 0 &&
+        !pluginSettingsTabs.find(t => t.pluginId === p.id)
+      );
+    });
   }, [plugins, pluginSettingsTabs]);
+
+  // Determine whether to show the EXTENSIONS section heading
+  const hasExtensionTabs = pluginSettingsTabs.length > 0 || configurablePlugins.length > 0;
 
   const NAV_ITEMS = useMemo(() => [
     { id: 'general', label: 'General', icon: Settings },
@@ -176,13 +183,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
                       </button>
                     ))}
                     
-                    {/* Plugin-registered settings tabs */}
-                    {pluginSettingsTabs.length > 0 && (
+                    {/* Extensions section: explicitly registered tabs + auto-generated plugin tabs */}
+                    {hasExtensionTabs && (
                       <>
                         <div className="my-2 border-t border-border" />
                         <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                           Extensions
                         </div>
+
+                        {/* Explicitly registered settings tabs (e.g. Voice Suite) */}
                         {pluginSettingsTabs.map(tab => {
                           const Icon = tab.icon;
                           return (
@@ -201,16 +210,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
                             </button>
                           );
                         })}
-                      </>
-                    )}
 
-                    {/* Configurable Plugins (Auto-generated) */}
-                    {configurablePlugins.length > 0 && (
-                      <>
-                        <div className="my-2 border-t border-border" />
-                        <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                          Plugins
-                        </div>
+                        {/* Auto-generated plugin settings tabs (plugins with configuration fields) */}
                         {configurablePlugins.map(plugin => (
                           <button
                             key={plugin.id}
@@ -218,11 +219,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ show, onClose }) =
                             className={cn(
                               "w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-3",
                               activeCategory === `plugin:${plugin.id}`
-                                ? "bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/5"
+                                ? "bg-purple-600/10 text-purple-400 border border-purple-500/20 shadow-lg shadow-purple-500/5"
                                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
                             )}
                           >
-                            <Puzzle className={cn("w-4 h-4", activeCategory === `plugin:${plugin.id}` ? "text-emerald-400" : "text-muted-foreground")} />
+                            <Puzzle className={cn("w-4 h-4", activeCategory === `plugin:${plugin.id}` ? "text-purple-400" : "text-muted-foreground")} />
                             {plugin.name}
                           </button>
                         ))}

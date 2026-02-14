@@ -125,6 +125,17 @@ export default {
       }
     });
 
+    if (context.traits) {
+      context.traits.register({
+        id: 'canvas-visualization',
+        name: 'Canvas Generation',
+        description: 'Generate generative art/visualizations on HTML Canvas.',
+        instruction: 'You can generate interactive canvas visualizations using `generate_canvas_viz`. Use this when the user asks for a diagram, animation, or visual representation of data that is best rendered programmatically.',
+        activationMode: 'dynamic',
+        triggerKeywords: ['visualize', 'canvas', 'draw', 'animate', 'render', 'plot', 'chart', 'diagram']
+      });
+    }
+
     console.log('[Canvas Viz] Ready');
   },
   

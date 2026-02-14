@@ -1,15 +1,14 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
-import { 
-    aiManager, 
-    dsnNode, 
-    identityManager, 
-    sessionManager, 
-    services, 
-    risaService, 
-    logManager, 
-    secretsManager, 
-    trustEvaluator, 
-    trustGate, 
+import {
+    aiManager,
+    dsnNode,
+    identityManager,
+    sessionManager,
+    services,
+    risaService,
+    secretsManager,
+    trustEvaluator,
+    trustGate,
     conversationManager,
     memoryPromotionService,
     personalityManager,
@@ -19,9 +18,10 @@ import {
     marketplaceService,
     openClawGateway,
     agentTaskRunner,
-    teamManager,
     resonantAgentService,
-    agentToolRegistry
+    agentToolRegistry,
+    whisperService,
+    workspaceService
 } from './services-setup';
 
 export function registerIPC(getMainWindow: () => BrowserWindow | null) {
@@ -65,19 +65,16 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     agentTaskRunner.setInvokeRenderer(invokeRenderer);
 
     // AI & Tools
-    ipcMain.handle('approveTool', async (_event, toolId) => {
-        console.log(`Tool approval requested for: ${toolId}`);
-        return true; 
+    ipcMain.handle('approveTool', async (_event, _toolId) => {
+        throw new Error('Tool approval not yet implemented');
     });
 
-    ipcMain.handle('summonAgent', async (_event, agentId) => {
-        console.log(`Agent summoned: ${agentId}`);
+    ipcMain.handle('summonAgent', async (_event, _agentId) => {
+        throw new Error('Use resonant:agent:create to create agents');
     });
 
     ipcMain.handle('stakeTokens', async (_event, _amount) => {
-        // TODO: Implement staking in DSNNode
-        // return await dsnNode.stakeTokens(amount);
-        return true;
+        throw new Error('Token staking not yet implemented');
     });
 
     ipcMain.handle('getAISettings', async () => aiManager.getSettings());
@@ -125,9 +122,9 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     ipcMain.handle('risa:getTasks', async () => risaService.getTasks());
 
     // Logging IPC
-    ipcMain.handle('logs:get', async (_, limit) => logManager.getLogs(limit));
-    ipcMain.handle('logs:getByCategory', async (_, { category, limit }) => logManager.getLogsByCategory(category, limit));
-    ipcMain.handle('logs:clear', async () => logManager.clear());
+    ipcMain.handle('logs:get', async (_, limit) => logger.getLogs(limit));
+    ipcMain.handle('logs:getByCategory', async (_, { category, limit }) => logger.getLogsByCategory(category, limit));
+    ipcMain.handle('logs:clear', async () => logger.clear());
 
     // Secrets IPC
     ipcMain.handle('secrets:set', async (_, options) => secretsManager.setSecret(options));
@@ -227,40 +224,6 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     ipcMain.handle('agent:getTask', async (_, { taskId }) => agentTaskRunner.getTask(taskId));
     ipcMain.handle('agent:getActiveTask', async (_, { conversationId }) => agentTaskRunner.getActiveTaskForConversation(conversationId));
 
-    // Team IPC
-    ipcMain.handle('team:create', async (_, { name, agentIds }) => teamManager.createTeam(name, agentIds));
-    ipcMain.handle('team:list', async () => teamManager.getTeams());
-    ipcMain.handle('team:get', async (_, { teamId }) => teamManager.getTeam(teamId));
-    ipcMain.handle('team:update', async (_, { teamId, updates }) => teamManager.updateTeam(teamId, updates));
-    ipcMain.handle('team:addAgent', async (_, { teamId, agentId }) => {
-        const team = await teamManager.getTeam(teamId);
-        if (!team) throw new Error("Team not found");
-        if (!team.agentIds.includes(agentId)) {
-            return teamManager.updateTeam(teamId, { agentIds: [...team.agentIds, agentId] });
-        }
-        return team;
-    });
-    ipcMain.handle('team:removeAgent', async (_, { teamId, agentId }) => {
-        const team = await teamManager.getTeam(teamId);
-        if (!team) throw new Error("Team not found");
-        return teamManager.updateTeam(teamId, { agentIds: team.agentIds.filter(id => id !== agentId) });
-    });
-    ipcMain.handle('team:delete', async (_, { teamId }) => teamManager.deleteTeam(teamId));
-    ipcMain.handle('team:summon', async (_, { teamId }) => {
-        // Placeholder for summoning logic
-        console.log(`Team summoned: ${teamId}`);
-        return true;
-    });
-    ipcMain.handle('team:step', async (_, { teamId, observation }) => {
-        // Placeholder for team stepping logic
-        console.log(`Team step: ${teamId}`, observation);
-        return { agentResults: [] };
-    });
-    ipcMain.handle('team:dismiss', async (_, { teamId }) => {
-        console.log(`Team dismissed: ${teamId}`);
-        return true;
-    });
-
     // OpenClaw Gateway IPC
     ipcMain.handle('openclaw:connect', async (_, { url }) => {
         try {
@@ -358,9 +321,52 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
     ipcMain.handle('config:getLogging', async () => configManager.getLoggingConfig());
     ipcMain.handle('config:updateLogging', async (_, updates) => configManager.updateLoggingConfig(updates));
 
+    // Agent Sandbox IPC
+    ipcMain.handle('config:isSandboxed', async () => configManager.isSandboxed());
+    ipcMain.handle('config:setSandboxed', async (_, sandboxed: boolean) => {
+        await configManager.setSandboxed(sandboxed);
+        return { success: true, sandboxed };
+    });
+
     // Workspace IPC
-    ipcMain.handle('config:getWorkspace', async () => configManager.getWorkspacePath());
-    ipcMain.handle('config:setWorkspace', async (_, path) => configManager.setWorkspacePath(path));
+    ipcMain.handle('config:getWorkspace', async () => workspaceService.workspacePath);
+    ipcMain.handle('config:setWorkspace', async (_, folderPath) => {
+        try {
+            await workspaceService.openFolder(folderPath);
+            return { success: true, path: workspaceService.workspacePath };
+        } catch (err: any) {
+            console.error('[IPC] config:setWorkspace error:', err.message);
+            return { success: false, error: err.message };
+        }
+    });
+    ipcMain.handle('workspace:openFolder', async () => {
+        const mainWindow = getMainWindow();
+        if (!mainWindow) return { success: false, error: 'No window available' };
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openDirectory', 'createDirectory'],
+            title: 'Open Folder as Workspace',
+            buttonLabel: 'Open',
+        });
+        if (result.canceled || result.filePaths.length === 0) return null; // User cancelled
+        const selectedPath = result.filePaths[0];
+        try {
+            await workspaceService.openFolder(selectedPath);
+            return { success: true, path: selectedPath, name: workspaceService.workspaceName };
+        } catch (err: any) {
+            console.error('[IPC] workspace:openFolder error:', err.message);
+            return { success: false, error: err.message };
+        }
+    });
+    ipcMain.handle('workspace:getInfo', async () => ({
+        open: workspaceService.isOpen,
+        path: workspaceService.workspacePath,
+        name: workspaceService.workspaceName,
+    }));
+    ipcMain.handle('workspace:close', async () => {
+        await workspaceService.closeWorkspace();
+        return { success: true };
+    });
+    // Keep legacy dialog for onboarding compatibility
     ipcMain.handle('dialog:selectWorkspace', async () => {
         const mainWindow = getMainWindow();
         if (!mainWindow) return null;
@@ -413,4 +419,94 @@ export function registerIPC(getMainWindow: () => BrowserWindow | null) {
 
     // Tool Registry
     ipcMain.handle('resonant:tool:list', async () => agentToolRegistry.listAll());
+
+    // Decentralized Web IPC
+    ipcMain.handle('dweb:resolve', async (_, { domain }) => dsnNode.getDecentralizedWebManager().resolve(domain));
+    ipcMain.handle('dweb:fetch', async (_, { cid }) => {
+        const buffer = await dsnNode.getDecentralizedWebManager().fetch(cid);
+        return buffer ? buffer.toString('base64') : null;
+    });
+    ipcMain.handle('dweb:fetchFile', async (_, { domain, path }) => {
+        const result = await dsnNode.getDecentralizedWebManager().fetchFile(domain, path);
+        if (!result) return null;
+        return {
+            content: result.content.toString('base64'),
+            mimeType: result.mimeType
+        };
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Whisper Speech-to-Text IPC
+    // ═══════════════════════════════════════════════════════════════════════
+
+    ipcMain.handle('whisper:isReady', async () => whisperService.isReady());
+
+    ipcMain.handle('whisper:transcribe', async (_, args) => {
+        // Input validation
+        if (!args || typeof args !== 'object') {
+            return { error: 'Invalid arguments', text: '' };
+        }
+        const { wavBase64 } = args;
+        if (typeof wavBase64 !== 'string' || wavBase64.length === 0) {
+            return { error: 'Missing or invalid wavBase64 string', text: '' };
+        }
+        // Sanity check: base64 of 1MB WAV ≈ 1.37MB chars. Reject obviously oversized payloads.
+        if (wavBase64.length > 2 * 1024 * 1024) {
+            return { error: 'WAV payload too large', text: '' };
+        }
+
+        if (!whisperService.isReady()) {
+            return { error: 'Whisper not available — binary or model missing', text: '' };
+        }
+        try {
+            const wavBuffer = Buffer.from(wavBase64, 'base64');
+            const text = await whisperService.transcribe(wavBuffer);
+            return { text, error: null };
+        } catch (err: any) {
+            console.error('[WhisperIPC] Transcription error:', err.message);
+            return { error: err.message || 'Transcription failed', text: '' };
+        }
+    });
+
+    // ─── Whisper LLM Refinement ─────────────────────────────────────────
+    ipcMain.handle('whisper:refine', async (_, args) => {
+        if (!args || typeof args !== 'object') {
+            return { text: '', error: 'Invalid arguments' };
+        }
+        const { rawText } = args;
+        if (typeof rawText !== 'string' || rawText.trim().length === 0) {
+            return { text: rawText || '', error: 'Empty text' };
+        }
+        // Cap input length
+        if (rawText.length > 10000) {
+            return { text: rawText, error: 'Text too long for refinement' };
+        }
+        try {
+            const result = await aiManager.processRequest(
+                `You are a speech-to-text post-processor. The following is raw text from an automatic speech recognition system. Clean it up by:
+1. Fixing capitalization and punctuation
+2. Correcting obvious transcription errors
+3. Making it read as natural, well-formed text
+4. Do NOT add any content that wasn't in the original
+5. Do NOT remove meaningful content
+6. Output ONLY the corrected text, nothing else — no preamble, no quotes, no explanation
+
+Raw transcription:
+${rawText}`,
+                {
+                    contentType: 'chat' as any,
+                    temperature: 0.1,
+                    maxTokens: Math.max(256, rawText.length * 2),
+                }
+            );
+            const refined = result.content?.trim();
+            if (!refined) {
+                return { text: rawText, error: null };
+            }
+            return { text: refined, error: null };
+        } catch (err: any) {
+            console.error('[WhisperRefine] LLM refinement error:', err.message);
+            return { text: rawText, error: err.message };
+        }
+    });
 }

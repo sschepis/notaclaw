@@ -1,10 +1,9 @@
 import React, { useState, useCallback } from 'react';
-import { ChatView } from './ChatView';
 import { ExtensionDetailView } from './ExtensionDetailView';
 import { TextEditorPanel } from './TextEditorPanel';
+import { WelcomePage } from './WelcomePage';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ConversationTabs } from './ConversationTabs';
-import { ConversationSidebar, TaskDetailDialog } from '../conversation';
+import { TaskDetailDialog } from '../conversation';
 import { ScheduledTask } from '../../../shared/alephnet-types';
 import { useAppStore } from '../../store/useAppStore';
 
@@ -37,35 +36,45 @@ export const Stage: React.FC<StageProps> = ({ mode }) => {
     }
   }, [activeTabId, activeTab, setActiveSidebarView]);
 
-  // Sidebar state
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  
   // Task detail dialog state
   const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   
-  // Handlers
-  const handleToggleSidebar = useCallback(() => {
-    setIsSidebarOpen(prev => !prev);
-  }, []);
-  
-  const handleTaskClick = useCallback((task: ScheduledTask) => {
+  // Exposed for future use when workspace panels trigger task views
+  const _handleTaskClick = useCallback((task: ScheduledTask) => {
     setSelectedTask(task);
     setIsTaskDialogOpen(true);
   }, []);
+  void _handleTaskClick; // suppress unused warning
   
   const handleCloseTaskDialog = useCallback(() => {
     setIsTaskDialogOpen(false);
-    // Delay clearing selectedTask to allow exit animation
     setTimeout(() => setSelectedTask(null), 200);
   }, []);
+
+  // Determine what to render in the workspace area
+  const renderContent = () => {
+    // If there's an active tab that's an extension or file, show that
+    if (activeTab?.type === 'extension') {
+      return <ExtensionDetailView />;
+    }
+    if (activeTab?.type === 'file') {
+      return (
+        <TextEditorPanel 
+          content={activeTab.data?.content || ''} 
+          filePath={activeTab.data?.path || ''} 
+        />
+      );
+    }
+    // Default: show the Welcome Page
+    return <WelcomePage />;
+  };
 
   return (
     <div className="flex-1 min-w-0 min-h-0 bg-background flex flex-col relative overflow-hidden">
       
       {/* Background Layer */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
-          {/* Grid Pattern */}
           <div 
             className="absolute inset-0 opacity-[0.04]" 
             style={{ 
@@ -76,8 +85,6 @@ export const Stage: React.FC<StageProps> = ({ mode }) => {
                 backgroundSize: '40px 40px' 
             }}
           />
-          
-          {/* Glow Orbs */}
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px]" />
           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-accent/10 rounded-full blur-[120px]" />
       </div>
@@ -91,32 +98,11 @@ export const Stage: React.FC<StageProps> = ({ mode }) => {
                 exit={{ opacity: 0 }}
                 className="flex-1 min-h-0 flex flex-col relative"
             >
-                <ConversationTabs />
-                
-                {/* Main content area with sidebar */}
+                {/* Main content area - Welcome page or contextual content */}
                 <div className="flex-1 min-h-0 flex relative">
-                    {/* Content area */}
                     <div className="flex-1 min-w-0 min-h-0 relative">
-                        {activeTab?.type === 'extension' ? (
-                            <ExtensionDetailView />
-                        ) : activeTab?.type === 'file' ? (
-                            <TextEditorPanel 
-                                content={activeTab.data?.content || ''} 
-                                filePath={activeTab.data?.path || ''} 
-                            />
-                        ) : (
-                            <ChatView onTaskClick={handleTaskClick} />
-                        )}
+                        {renderContent()}
                     </div>
-                    
-                    {/* Collapsible Sidebar - Only show for chat views */}
-                    {activeTab?.type !== 'extension' && activeTab?.type !== 'file' && (
-                        <ConversationSidebar
-                            isOpen={isSidebarOpen}
-                            onToggle={handleToggleSidebar}
-                            onTaskClick={handleTaskClick}
-                        />
-                    )}
                 </div>
             </motion.div>
         ) : (
@@ -147,4 +133,3 @@ export const Stage: React.FC<StageProps> = ({ mode }) => {
     </div>
   );
 };
-

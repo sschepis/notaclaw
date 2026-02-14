@@ -28,9 +28,20 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onOpenSettings,
   setMode,
 }) => {
-  const { setActiveSidebarView, setLayoutAction, startDraftConversation } = useAppStore();
+  const { setActiveSidebarView, setLayoutAction, startDraftConversation, setWorkspacePath, workspacePath } = useAppStore();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleOpenFolder = async () => {
+    try {
+      const result = await window.electronAPI.workspaceOpenFolder();
+      if (result?.success && result.path) {
+        setWorkspacePath(result.path);
+      }
+    } catch (err) {
+      console.error('Failed to open folder:', err);
+    }
+  };
 
   const menus: Menu[] = [
     {
@@ -46,6 +57,33 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                 startDraftConversation();
             } 
         },
+        { separator: true, label: '' },
+        {
+            label: 'Open Folder...',
+            shortcut: '⌘O',
+            onClick: handleOpenFolder,
+        },
+        ...(workspacePath ? [
+          {
+            label: `📁 ${workspacePath.split('/').pop() || workspacePath}`,
+            shortcut: '',
+            onClick: () => {
+              // Copy workspace path to clipboard for convenience
+              navigator.clipboard.writeText(workspacePath).catch(() => {});
+            },
+          },
+          {
+            label: 'Close Workspace',
+            onClick: async () => {
+              try {
+                await window.electronAPI.workspaceClose();
+                setWorkspacePath(null);
+              } catch (err) {
+                console.error('Failed to close workspace:', err);
+              }
+            },
+          },
+        ] : []),
         { separator: true, label: '' },
         { label: 'Settings...', shortcut: '⌘,', onClick: onOpenSettings },
       ],
@@ -99,6 +137,11 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
       if (event.metaKey && event.key === 'i') {
         event.preventDefault();
         setInspectorOpen(!inspectorOpen);
+      }
+      // Keyboard shortcut: ⌘O to open folder
+      if (event.metaKey && event.key === 'o') {
+        event.preventDefault();
+        handleOpenFolder();
       }
     };
 

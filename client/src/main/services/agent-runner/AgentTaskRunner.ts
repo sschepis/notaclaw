@@ -24,7 +24,9 @@ import { withRetry, withTimeout, DEFAULT_RETRY_CONFIG, TIMEOUT_DEFAULTS } from '
 import { buildAgenticSystemPrompt, buildInitialMessages, buildUIContextSection } from './AgentContextBuilder';
 import { buildFullToolkit } from './AgentToolkit';
 import { buildMemoryTools } from './MemoryTools';
-import { buildUITools, buildPromptTemplateTools, listPromptTemplateFiles } from './UITools';
+import { buildUITools } from './UIContextTools';
+import { buildPromptTemplateTools, listPromptTemplateFiles } from './PromptTemplateTools';
+import { buildConversationHistoryTools } from './ConversationHistoryTools';
 import { runAgentLoop } from './AgentLoop';
 import { UIContextSnapshot } from '../../../shared/ui-context-types';
 import { loadPromptChain, buildChainSystemSection } from './PromptChainLoader';
@@ -35,7 +37,7 @@ export class AgentTaskRunner extends EventEmitter {
   private personalityManager: PersonalityManager;
   private conversationManager: ConversationManager;
   private alephNetClient: AlephNetClient;
-  private toolRegistry: AgentToolRegistry | null = null;
+  private toolRegistry: AgentToolRegistry;
 
   /** Active tasks indexed by task ID */
   private activeTasks: Map<string, AgentTask> = new Map();
@@ -56,20 +58,15 @@ export class AgentTaskRunner extends EventEmitter {
     aiManager: AIProviderManager,
     personalityManager: PersonalityManager,
     conversationManager: ConversationManager,
-    alephNetClient: AlephNetClient
+    alephNetClient: AlephNetClient,
+    toolRegistry: AgentToolRegistry
   ) {
     super();
     this.aiManager = aiManager;
     this.personalityManager = personalityManager;
     this.conversationManager = conversationManager;
     this.alephNetClient = alephNetClient;
-  }
-
-  /**
-   * Set the AgentToolRegistry so tools come from the centralized registry.
-   */
-  setToolRegistry(registry: AgentToolRegistry): void {
-    this.toolRegistry = registry;
+    this.toolRegistry = toolRegistry;
   }
 
   /**
@@ -247,6 +244,28 @@ Do NOT execute tools yet. Just state what you are going to do.
       // 1. Build personality system prompt
       const systemPrompt = await this.getSystemPrompt(task, metadata);
 
+      // 1.0.5. Process attachments from metadata into the user message
+      let enrichedUserMessage = task.originalPrompt;
+      if (metadata.attachments && Array.isArray(metadata.attachments) && metadata.attachments.length > 0) {
+        const attachmentParts: string[] = [];
+        for (const att of metadata.attachments) {
+          if (att.content) {
+            // Text/document/file attachments — inline their content
+            attachmentParts.push(
+              `--- Attached file: ${att.name} ---\n${att.content}\n--- End of ${att.name} ---`
+            );
+          } else if (att.type === 'image' && att.dataUrl) {
+            // For images, note their presence (the AI can't see raw base64 in text context,
+            // but the user should know the attachment was acknowledged)
+            attachmentParts.push(`[Image attached: ${att.name}]`);
+          }
+        }
+        if (attachmentParts.length > 0) {
+          enrichedUserMessage = enrichedUserMessage + '\n\n' + attachmentParts.join('\n\n');
+        }
+        console.log(`[AgentTaskRunner] Processed ${metadata.attachments.length} attachment(s) into user message`);
+      }
+
       // 1.1. Load default prompt chain (if configured)
       let chainContext = '';
       const defaultChainName = configManager.getDefaultPromptChain();
@@ -317,12 +336,13 @@ Do NOT execute tools yet. Just state what you are going to do.
       }
 
       // 3. Build initial messages (with chain context, UI context appended to situational context)
+      //    Use enrichedUserMessage which includes inlined attachment content
       const fullContext = [situationalContext, chainContext, uiContextSection]
         .filter(Boolean)
         .join('\n\n');
       const initialMessages = buildInitialMessages(
         agenticPrompt,
-        task.originalPrompt,
+        enrichedUserMessage,
         fullContext || undefined
       );
       
@@ -331,11 +351,12 @@ Do NOT execute tools yet. Just state what you are going to do.
          initialMessages.push({ role: 'assistant', content: plan });
       }
 
-      // 4. Build tools (control + personality tools + memory tools + UI tools)
+      // 4. Build tools (control + personality tools + memory tools + conversation history + UI tools)
       const personalityTools = this.getPersonalityTools(task.conversationId, metadata);
       const memoryTools = buildMemoryTools(this.alephNetClient, task.conversationId);
+      const conversationHistoryTools = buildConversationHistoryTools(this.conversationManager, task.conversationId);
       const uiTools = this.buildUIAndPromptTools();
-      const allTools = buildFullToolkit(personalityTools, memoryTools, uiTools);
+      const allTools = buildFullToolkit(personalityTools, [...memoryTools, ...conversationHistoryTools], uiTools);
 
       // 5. Build loop dependencies
       const deps: AgentLoopDeps = {
@@ -425,15 +446,13 @@ Do NOT execute tools yet. Just state what you are going to do.
   /**
    * Build personality tools for the agent.
    *
-   * If an AgentToolRegistry is wired, it resolves tools from the centralized
-   * registry (using the agent's declared capabilities from metadata if present).
-   * Otherwise, falls back to building the core tools inline (backward compat).
+   * Resolves tools from the centralized AgentToolRegistry, optionally
+   * filtering by the agent's declared capabilities when metadata is present.
    */
   private getPersonalityTools(_conversationId: string, metadata: any): ToolDefinition[] {
-    // When the tool registry is available and metadata carries a ResonantAgent
-    // personality config, resolve tools from the registry based on agent caps.
-    if (this.toolRegistry && metadata.agentId) {
-      // Import the ResonantAgent type to construct a minimal agent for filtering
+    // When metadata carries a ResonantAgent personality config,
+    // resolve tools from the registry based on agent capabilities.
+    if (metadata.agentId) {
       const agentPersonality = metadata.agentPersonality;
       const agentCaps = agentPersonality?.capabilities || metadata.capabilities;
       if (agentCaps) {
@@ -452,145 +471,17 @@ Do NOT execute tools yet. Just state what you are going to do.
       }
     }
 
-    // Fallback: If no registry is wired or no agent metadata is present,
-    // delegate to the registry for all core tools (if available).
-    if (this.toolRegistry) {
-      // Return all core tools (they require no specific agent filtering)
-      const allRegs = this.toolRegistry.listAll();
-      return allRegs.map(reg => ({
-        type: 'function' as const,
-        function: {
-          name: reg.name,
-          description: reg.description,
-          parameters: reg.parameters as { type: string; properties: Record<string, any>; required: string[] },
-          script: this.toolRegistry!.getByName(reg.name)?.handler,
-        },
-      }));
-    }
-
-    // Last resort: build inline tools (no registry available)
-    return this.buildInlineCoreTools();
-  }
-
-  /**
-   * Build core tools inline as a final fallback when no AgentToolRegistry
-   * is wired. Identical to the tools registered in AgentToolRegistry.registerCoreTools().
-   */
-  private buildInlineCoreTools(): ToolDefinition[] {
-    const tools: ToolDefinition[] = [];
-    const { exec } = require('child_process');
-    const fs = require('fs');
-    const pathModule = require('path');
-
-    // Shell tool
-    tools.push({
-      type: 'function',
+    // No agent-specific filtering — return all registered tools.
+    const allRegs = this.toolRegistry.listAll();
+    return allRegs.map(reg => ({
+      type: 'function' as const,
       function: {
-        name: 'shell',
-        description: 'Execute a shell command and return its output.',
-        parameters: {
-          type: 'object',
-          properties: {
-            command: { type: 'string', description: 'The shell command to execute' },
-          },
-          required: ['command'],
-        },
-        script: async ({ command }: { command: string }) => {
-          return new Promise((resolve) => {
-            exec(command, { cwd: process.cwd(), timeout: 30000 }, (error: any, stdout: string, stderr: string) => {
-              resolve({
-                stdout: stdout?.substring(0, 5000),
-                stderr: stderr?.substring(0, 2000),
-                exitCode: error ? error.code : 0,
-                error: error ? error.message : null,
-              });
-            });
-          });
-        },
+        name: reg.name,
+        description: reg.description,
+        parameters: reg.parameters as { type: string; properties: Record<string, any>; required: string[] },
+        script: this.toolRegistry.getByName(reg.name)?.handler,
       },
-    });
-
-    // File read tool
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'read_file',
-        description: 'Read the contents of a file.',
-        parameters: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'Path to the file to read' },
-          },
-          required: ['path'],
-        },
-        script: async ({ path: filePath }: { path: string }) => {
-          try {
-            const content = fs.readFileSync(filePath, 'utf-8');
-            return { content: content.substring(0, 10000) };
-          } catch (err: any) {
-            return { error: err.message };
-          }
-        },
-      },
-    });
-
-    // File write tool
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'write_file',
-        description: 'Write content to a file. Creates the file if it does not exist.',
-        parameters: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'Path to the file to write' },
-            content: { type: 'string', description: 'Content to write to the file' },
-          },
-          required: ['path', 'content'],
-        },
-        script: async ({ path: filePath, content }: { path: string; content: string }) => {
-          try {
-            const dir = pathModule.dirname(filePath);
-            fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(filePath, content, 'utf-8');
-            return { success: true, path: filePath };
-          } catch (err: any) {
-            return { error: err.message };
-          }
-        },
-      },
-    });
-
-    // List directory tool
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'list_directory',
-        description: 'List files and directories at a given path.',
-        parameters: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'Directory path to list' },
-          },
-          required: ['path'],
-        },
-        script: async ({ path: dirPath }: { path: string }) => {
-          try {
-            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-            return {
-              entries: entries.map((e: any) => ({
-                name: e.name,
-                type: e.isDirectory() ? 'directory' : 'file',
-              })),
-            };
-          } catch (err: any) {
-            return { error: err.message };
-          }
-        },
-      },
-    });
-
-    return tools;
+    }));
   }
 
   /**

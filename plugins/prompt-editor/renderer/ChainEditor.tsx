@@ -129,6 +129,7 @@ export const ChainEditor: React.FC<ChainEditorProps> = ({ context }) => {
 
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
     const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+    const [layoutDir, setLayoutDir] = useState<'LR' | 'TB' | 'RL' | 'BT'>('LR');
 
     // V3: Context menu state
     const [contextMenu, setContextMenu] = useState<{
@@ -309,7 +310,7 @@ export const ChainEditor: React.FC<ChainEditorProps> = ({ context }) => {
         } else if (contextMenu.type === 'pane') {
             items.push(
                 { label: 'Paste', icon: '📋', action: () => paste() },
-                { label: 'Auto-Layout', icon: '✨', action: () => layoutGraph() },
+                { label: 'Auto-Layout', icon: '✨', action: () => layoutGraph(layoutDir) },
                 { label: 'Toggle Grid Snap', icon: snapToGrid ? '🔲' : '⬜', action: () => toggleSnapToGrid() },
             );
         }
@@ -463,20 +464,46 @@ export const ChainEditor: React.FC<ChainEditorProps> = ({ context }) => {
                     >⊞ Grid</button>
 
                     {/* Auto-layout */}
-                    <button
-                        onClick={layoutGraph}
-                        style={{
-                            padding: '5px 12px',
-                            background: '#1e1e3a',
-                            color: '#aaa',
-                            border: '1px solid #2a2a4a',
-                            borderRadius: 4,
-                            cursor: 'pointer',
-                            fontSize: 12,
-                            fontWeight: 500,
-                        }}
-                        title="Auto-layout nodes"
-                    >✨ Clean Up</button>
+                    <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a4a', alignItems: 'center' }}>
+                        <button
+                            onClick={() => layoutGraph(layoutDir)}
+                            style={{
+                                padding: '5px 8px',
+                                background: '#1e1e3a',
+                                color: '#aaa',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                fontWeight: 500,
+                                height: 26,
+                            }}
+                            title="Auto-layout nodes"
+                        >✨ Clean Up</button>
+                        <select
+                            value={layoutDir}
+                            onChange={(e) => {
+                                const newDir = e.target.value as any;
+                                setLayoutDir(newDir);
+                                layoutGraph(newDir);
+                            }}
+                            style={{
+                                background: '#1e1e3a',
+                                color: '#aaa',
+                                border: 'none',
+                                borderLeft: '1px solid #2a2a4a',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                                outline: 'none',
+                                padding: '0 4px',
+                                height: 26,
+                            }}
+                        >
+                            <option value="LR">LR</option>
+                            <option value="TB">TB</option>
+                            <option value="RL">RL</option>
+                            <option value="BT">BT</option>
+                        </select>
+                    </div>
 
                     {/* View mode toggle */}
                     <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a4a' }}>

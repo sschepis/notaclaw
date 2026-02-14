@@ -1,0 +1,13 @@
+{
+  "name": "@notaclaw/planman",
+  "version": "0.1.0",
+  "description": "AI-driven project manager plugin for notaclaw",
+  "main": "main/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest --config ../../jest.config.js --roots '<rootDir>/tests'"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "license": "MIT"
+}

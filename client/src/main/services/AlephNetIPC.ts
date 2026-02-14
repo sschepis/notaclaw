@@ -122,19 +122,6 @@ export function registerAlephNetIPC(
   handle('agent:run', (p) => client.agentRun(p));
 
   // ═══════════════════════════════════════════════════════════════════
-  // Agent Teams (8 channels)
-  // ═══════════════════════════════════════════════════════════════════
-  // Handled by TeamManager in ipc-setup.ts to ensure persistence
-  // handle('team:create', (p) => client.teamCreate(p));
-  // handle('team:list', () => client.teamList());
-  // handle('team:get', (p) => client.teamGet(p));
-  // handle('team:addAgent', (p) => client.teamAddAgent(p));
-  // handle('team:removeAgent', (p) => client.teamRemoveAgent(p));
-  // handle('team:summon', (p) => client.teamSummon(p));
-  // handle('team:step', (p) => client.teamStep(p));
-  // handle('team:dismiss', (p) => client.teamDismiss(p));
-
-  // ═══════════════════════════════════════════════════════════════════
   // Wallet & Economics (5 channels)
   // ═══════════════════════════════════════════════════════════════════
   handle('wallet:balance', () => client.walletBalance());

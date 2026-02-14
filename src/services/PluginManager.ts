@@ -2,8 +2,12 @@ import path from 'path';
 import fs from 'fs/promises';
 import { pathToFileURL } from 'url';
 import { EventEmitter } from 'events';
-import { PluginManifest, PluginContext, SandboxProvider, SandboxSession, ExecutionResult } from '../shared/plugin-types';
-import { BasePluginManager } from '../shared/plugin-core/BasePluginManager';
+import { PluginManifest, PluginContext, SandboxProvider, SandboxSession, ExecutionResult } from '@notaclaw/core/plugin-types';
+import { BasePluginManager } from '@notaclaw/core/plugin-core/BasePluginManager';
+import { SignedEnvelope, Capability, TrustAssessment, CapabilityCheckResult } from '@notaclaw/core/trust-types';
+import { ServiceDefinition, GatewayDefinition } from '@notaclaw/core/service-types';
+import { TraitDefinition } from '@notaclaw/core/trait-types';
+import type { SkillDefinition } from '@notaclaw/core';
 import { DSNNode } from './DSNNode';
 import { AIProviderManager } from './AIProviderManager';
 import { SecretsManager } from './SecretsManager';
@@ -13,10 +17,8 @@ import { TrustEvaluator } from './TrustEvaluator';
 import { TrustGate } from './TrustGate';
 import { createLogger } from './Logger';
 import { WorkflowEngine } from './WorkflowEngine';
-import { SignedEnvelope, Capability, TrustAssessment, CapabilityCheckResult } from '../shared/trust-types';
-import { SkillDefinition } from '../shared/types';
-import { ServiceDefinition, GatewayDefinition } from '../shared/service-types';
 import { spawn } from 'child_process';
+import { PersonalityManager } from './PersonalityManager';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Headless IPC Bus — EventEmitter-based local IPC for plugins
@@ -131,7 +133,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
     private signedEnvelopeService: SignedEnvelopeService,
     private trustEvaluator: TrustEvaluator,
     private trustGate: TrustGate,
-    private serviceRegistry: ServiceRegistry
+    private serviceRegistry: ServiceRegistry,
+    private personalityManager: PersonalityManager // Injected PersonalityManager
   ) {
     super();
     const dataDir = path.join(process.cwd(), 'data');
@@ -510,6 +513,10 @@ export class PluginManager extends BasePluginManager<PluginContext> {
                     parameters: tool.parameters,
                     pluginId: manifest.id,
                 });
+            },
+            list: async () => {
+                check('dsn:invoke-tool'); // Listing tools usually implies intent to use or discover
+                return this.serviceRegistry.listTools();
             }
         },
         gateways: {
@@ -541,7 +548,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         },
         publishObservation: (_content: string, _smf: number[]) => {
             check('dsn:publish-observation');
-            console.log(`Plugin ${manifest.id} publishing observation`);
+            console.warn(`Plugin ${manifest.id}: publishObservation not yet implemented — observation discarded`);
         },
         getIdentity: async () => {
             check('dsn:identity');
@@ -574,7 +581,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
                     config,
                     {
                         aiManager: this.aiManager,
-                        dsnNode: this.dsnNode
+                        dsnNode: this.dsnNode,
+                        personalityManager: this.personalityManager
                     },
                     options,
                     createLogger(`plugin:${manifest.id}:workflow`)
@@ -582,14 +590,21 @@ export class PluginManager extends BasePluginManager<PluginContext> {
             }
         },
         traits: {
-
-        register: (_trait: any) => {
-            console.warn(`Plugin ${manifest.id} tried to register a trait (not supported in headless mode)`);
-        },
-        unregister: (_traitId: string) => {
-            // No-op
+            register: (trait: TraitDefinition) => {
+                // Ensure the source is set to this plugin
+                const enrichedTrait = { ...trait, source: manifest.id };
+                console.log(`Plugin ${manifest.id} registering trait: ${trait.name}`);
+                this.personalityManager.registerTrait(enrichedTrait);
+            },
+            unregister: (traitId: string) => {
+                const trait = this.personalityManager.getTrait(traitId);
+                if (trait && trait.source === manifest.id) {
+                    this.personalityManager.unregisterTrait(traitId);
+                } else {
+                    console.warn(`Plugin ${manifest.id} tried to unregister a trait it doesn't own: ${traitId}`);
+                }
+            }
         }
-      }
     };
   }
 
@@ -628,6 +643,18 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       plugin.status = 'disabled';
       this.emit('plugin-state-changed', { id, status: 'disabled' });
       return true;
+  }
+
+  /**
+   * Gracefully shutdown all loaded plugins.
+   * Calls deactivate on each plugin and clears the registry.
+   */
+  public async shutdown(): Promise<void> {
+    const ids = Array.from(this.plugins.keys());
+    for (const id of ids) {
+      await this.unloadPlugin(id);
+    }
+    globalIPCBus.removeAll();
   }
 
   public async enablePlugin(id: string): Promise<boolean> {

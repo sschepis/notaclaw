@@ -32,7 +32,7 @@ jest.mock('os', () => ({
 
 describe('FilesystemService', () => {
     let service: FilesystemService;
-    const sandboxRoot = '/home/user/alephnet/sandbox';
+    const homeDir = '/home/user';
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -40,16 +40,29 @@ describe('FilesystemService', () => {
         service = new FilesystemService();
     });
 
-    it('should resolve paths within sandbox', async () => {
+    it('should resolve relative paths under home directory by default', async () => {
         (fs.promises.readFile as jest.Mock).mockResolvedValue('content');
         
         await service.readFile('test.txt');
         
-        expect(fs.promises.readFile).toHaveBeenCalledWith(path.join(sandboxRoot, 'test.txt'), 'utf-8');
+        expect(fs.promises.readFile).toHaveBeenCalledWith(path.join(homeDir, 'test.txt'), 'utf-8');
     });
 
-    it('should throw error for paths outside sandbox', async () => {
-        await expect(service.readFile('../test.txt')).rejects.toThrow('Security Error');
+    it('should allow paths outside the base directory (no sandbox restriction)', async () => {
+        (fs.promises.readFile as jest.Mock).mockResolvedValue('content');
+        
+        // This should NOT throw — agent has full filesystem access
+        await service.readFile('/etc/hosts');
+        
+        expect(fs.promises.readFile).toHaveBeenCalledWith('/etc/hosts', 'utf-8');
+    });
+
+    it('should resolve tilde paths to home directory', async () => {
+        (fs.promises.readFile as jest.Mock).mockResolvedValue('content');
+        
+        await service.readFile('~/Documents/notes.txt');
+        
+        expect(fs.promises.readFile).toHaveBeenCalledWith(path.join(homeDir, 'Documents/notes.txt'), 'utf-8');
     });
 
     it('should list files', async () => {
@@ -58,19 +71,28 @@ describe('FilesystemService', () => {
         const files = await service.listFiles('.');
         
         expect(files).toEqual(['file1.txt', 'file2.txt']);
-        expect(fs.promises.readdir).toHaveBeenCalledWith(sandboxRoot);
+        expect(fs.promises.readdir).toHaveBeenCalledWith(homeDir);
     });
 
     it('should write file', async () => {
         await service.writeFile('new.txt', 'hello');
         
         expect(fs.promises.mkdir).toHaveBeenCalled(); // Ensures dir exists
-        expect(fs.promises.writeFile).toHaveBeenCalledWith(path.join(sandboxRoot, 'new.txt'), 'hello', 'utf-8');
+        expect(fs.promises.writeFile).toHaveBeenCalledWith(path.join(homeDir, 'new.txt'), 'hello', 'utf-8');
     });
 
     it('should delete file', async () => {
         await service.deleteFile('old.txt');
         
-        expect(fs.promises.rm).toHaveBeenCalledWith(path.join(sandboxRoot, 'old.txt'), { recursive: true, force: true });
+        expect(fs.promises.rm).toHaveBeenCalledWith(path.join(homeDir, 'old.txt'), { recursive: true, force: true });
+    });
+
+    it('should accept a custom base root', async () => {
+        const customService = new FilesystemService('/opt/myproject');
+        (fs.promises.readFile as jest.Mock).mockResolvedValue('data');
+        
+        await customService.readFile('config.json');
+        
+        expect(fs.promises.readFile).toHaveBeenCalledWith(path.join('/opt/myproject', 'config.json'), 'utf-8');
     });
 });

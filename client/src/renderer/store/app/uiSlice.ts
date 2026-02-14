@@ -22,33 +22,31 @@ export interface UISlice {
 }
 
 export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get) => ({
-  activeSidebarView: 'explorer',
+  activeSidebarView: 'messages',
   isTerminalOpen: false,
   navOrder: (() => {
     try {
       const saved = localStorage.getItem('navOrder');
-      const defaultOrder = ['explorer', 'extensions', 'messages', 'groups', 'memory', 'coherence', 'agents', 'connections', 'services'];
+      const defaultOrder = ['explorer', 'extensions', 'messages', 'groups', 'memory', 'coherence', 'agents', 'secrets', 'connections', 'services'];
       
       if (saved) {
         const parsed = JSON.parse(saved);
         // Filter out chat-mode if present
         const filtered = parsed.filter((id: string) => id !== 'chat-mode');
         
-        if (Array.isArray(filtered) && !filtered.includes('connections')) {
-            if (!filtered.includes('services')) {
-                return [...filtered, 'connections', 'services'];
+        // Ensure newly added nav items are present in saved orders
+        let result = Array.isArray(filtered) ? filtered : defaultOrder;
+        for (const item of ['secrets', 'connections', 'services']) {
+            if (!result.includes(item)) {
+                result = [...result, item];
             }
-            return [...filtered, 'connections'];
         }
-        if (Array.isArray(filtered) && !filtered.includes('services')) {
-            return [...filtered, 'services'];
-        }
-        return filtered;
+        return result;
       }
       
       return defaultOrder;
     } catch {
-      return ['explorer', 'extensions', 'messages', 'groups', 'memory', 'coherence', 'agents', 'connections', 'services'];
+      return ['explorer', 'extensions', 'messages', 'groups', 'memory', 'coherence', 'agents', 'secrets', 'connections', 'services'];
     }
   })(),
   

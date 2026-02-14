@@ -8,7 +8,8 @@ export const defaultLayout: IJsonModel = {
         // @ts-ignore
         tabSetTabStripHeight: 32,
         borderBarSize: 32,
-        splitterSize: 6, // Larger hit area, visual will be thinner
+        splitterSize: 4,
+        splitterExtra: 4, // Invisible extra hit area on each side of splitter
         tabSetMinHeight: 32,
         tabSetMinWidth: 200,
     },
@@ -19,10 +20,10 @@ export const defaultLayout: IJsonModel = {
         children: [
             {
                 type: "tabset",
-                weight: 15,
+                weight: 30,
                 enableClose: false,
                 id: "sidebar-panel",
-                minWidth: 200,
+                minWidth: 320,
                 children: [
                     {
                         type: "tab",
@@ -37,7 +38,7 @@ export const defaultLayout: IJsonModel = {
             },
             {
                 type: "row",
-                weight: 60,
+                weight: 45,
                 id: "content-column",
                 children: [
                     {
@@ -49,7 +50,7 @@ export const defaultLayout: IJsonModel = {
                         children: [
                             {
                                 type: "tab",
-                                name: "Chat",
+                                name: "Workspace",
                                 component: "stage",
                                 enableClose: true,
                                 id: "stage",
@@ -65,15 +66,6 @@ export const defaultLayout: IJsonModel = {
                         minHeight: 120,
                         enableClose: false,
                         children: [
-                            {
-                                type: "tab",
-                                name: "Chat Input",
-                                component: "bottom-panel-chat",
-                                enableClose: false,
-                                id: "bottom-panel-chat",
-                                // @ts-ignore
-                                icon: "message-square"
-                            },
                             {
                                 type: "tab",
                                 name: "Terminal",

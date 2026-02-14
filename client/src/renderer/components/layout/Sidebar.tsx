@@ -3,7 +3,6 @@ import { useAppStore } from '../../store/useAppStore';
 import { useMemoryStore } from '../../store/useMemoryStore';
 import { ExtensionsView } from './ExtensionsView';
 import { TasksPanel } from './TasksPanel';
-import { ConversationsPanel } from '../messaging/ConversationsPanel';
 import { SocialPanel } from '../social/SocialPanel';
 import { GroupsPanel } from '../groups/GroupsPanel';
 import { ConnectionsPanel } from '../connections/ConnectionsPanel';
@@ -13,6 +12,7 @@ import { ResonantAgentsView } from '../agents/ResonantAgentsView';
 import { ServicesPanel } from '../services/ServicesPanel';
 import { SecretsPanel } from '../secrets/SecretsPanel';
 import { MarketplaceSidebar } from '../marketplace/MarketplaceSidebar';
+import { ChatSidebar } from '../chat/ChatSidebar';
 
 export const Sidebar: React.FC = () => {
   const { activeSidebarView } = useAppStore();
@@ -24,6 +24,11 @@ export const Sidebar: React.FC = () => {
       setActiveView('graph');
     }
   }, [activeSidebarView, setActiveView]);
+
+  // Chat sidebar takes full control of its container (no padding/scroll wrapper)
+  if (activeSidebarView === 'messages') {
+    return <ChatSidebar />;
+  }
 
   return (
     <div className="w-full h-full bg-card/80 backdrop-blur-xl flex flex-col shadow-2xl z-40 relative overflow-hidden">
@@ -37,8 +42,6 @@ export const Sidebar: React.FC = () => {
             <div className="p-2"><SocialPanel /></div>
         ) : activeSidebarView === 'tasks' ? (
             <div className="p-2"><TasksPanel /></div>
-        ) : activeSidebarView === 'messages' ? (
-            <ConversationsPanel />
         ) : activeSidebarView === 'groups' ? (
             <div className="p-2"><GroupsPanel /></div>
         ) : activeSidebarView === 'connections' ? (

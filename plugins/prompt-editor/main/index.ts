@@ -1,4 +1,4 @@
-import { PluginContext } from '../../../src/shared/plugin-types';
+import { PluginContext } from './types';
 import { ChainManager } from './ChainManager';
 
 export async function activate(context: PluginContext) {
@@ -10,15 +10,15 @@ export async function activate(context: PluginContext) {
         return await chainManager.listChains();
     });
 
-    context.ipc.handle('get-chain', async (id) => {
+    context.ipc.handle('get-chain', async (id: string) => {
         return await chainManager.getChain(id);
     });
 
-    context.ipc.handle('save-chain', async ({ id, config }) => {
+    context.ipc.handle('save-chain', async ({ id, config }: { id: string; config: any }) => {
         await chainManager.saveChain(id, config);
     });
 
-    context.ipc.handle('delete-chain', async (id) => {
+    context.ipc.handle('delete-chain', async (id: string) => {
         await chainManager.deleteChain(id);
     });
 
@@ -30,7 +30,7 @@ export async function activate(context: PluginContext) {
         return await context.services.tools.list();
     });
 
-    context.ipc.handle('run-chain', async ({ id, input }) => {
+    context.ipc.handle('run-chain', async ({ id, input }: { id: string; input: any }) => {
         const config = await chainManager.getHydratedChain(id);
         if (!config) throw new Error('Chain not found');
         
@@ -146,4 +146,15 @@ export async function activate(context: PluginContext) {
         await chainManager.saveChain(id, config);
         return { success: true };
     });
+
+    if (context.traits) {
+      context.traits.register({
+        id: 'prompt-engineering',
+        name: 'Prompt Engineering',
+        description: 'Read, write, and manage prompt chains.',
+        instruction: 'You are an expert prompt engineer. You can read, write, and manage prompt chains using tools like `list_prompt_chains`, `read_prompt_chain`, and `write_prompt_chain`. Use this to create new workflows or modify existing agent behaviors.',
+        activationMode: 'dynamic',
+        triggerKeywords: ['prompt', 'chain', 'workflow', 'configure agent', 'behavior', 'prompt engineering']
+      });
+    }
 }

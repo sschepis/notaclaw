@@ -24,8 +24,14 @@ export default defineConfig({
                     // Externalize modules to avoid bundling issues
                     external: [
                         'gun', 'gun/sea', 'gun/lib/webrtc', 'gun/lib/radix', 'gun/lib/radisk', 'gun/lib/store', 'gun/lib/rindexed',
-                        '@ai-sdk/gateway', '@vercel/oidc'
+                        '@ai-sdk/gateway', '@vercel/oidc',
+                        'whisper-node-ts'
                     ]
+                }
+            },
+            resolve: {
+                alias: {
+                    '@notaclaw/core': path.resolve(__dirname, '..', 'packages', 'core', 'src'),
                 }
             },
             plugins: [
@@ -54,6 +60,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      '@notaclaw/core': path.resolve(__dirname, '..', 'packages', 'core', 'src'),
       'eventemitter3': path.resolve(__dirname, 'node_modules/eventemitter3/index.js'),
       'events': path.resolve(__dirname, 'node_modules/eventemitter3/index.js'),
     },

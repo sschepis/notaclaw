@@ -5,12 +5,14 @@ import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Separator } from '../ui/separator';
-import { Network, FileText, Plus, Trash2 } from 'lucide-react';
+import { Switch } from '../ui/switch';
+import { Network, FileText, Plus, Trash2, Shield } from 'lucide-react';
 
 export const GeneralSettings: React.FC = () => {
     const [networkConfig, setNetworkConfig] = useState<any>(null);
     const [loggingConfig, setLoggingConfig] = useState<any>(null);
     const [newPeer, setNewPeer] = useState('');
+    const [sandboxed, setSandboxed] = useState<boolean>(true);
 
     useEffect(() => {
         loadConfig();
@@ -20,10 +22,23 @@ export const GeneralSettings: React.FC = () => {
         try {
             const net = await window.electronAPI.configGetNetwork();
             const log = await window.electronAPI.configGetLogging();
+            const isSandboxed = await window.electronAPI.configIsSandboxed();
             setNetworkConfig(net);
             setLoggingConfig(log);
+            setSandboxed(isSandboxed);
         } catch (error) {
             console.error("Failed to load config:", error);
+        }
+    };
+
+    const handleToggleSandbox = async (checked: boolean) => {
+        // Switch shows "sandboxed" state: checked = sandboxed, unchecked = unrestricted
+        setSandboxed(checked);
+        try {
+            await window.electronAPI.configSetSandboxed(checked);
+        } catch (error) {
+            console.error("Failed to update sandbox setting:", error);
+            setSandboxed(!checked); // revert on error
         }
     };
 
@@ -55,6 +70,41 @@ export const GeneralSettings: React.FC = () => {
     return (
         <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-2xl font-bold text-foreground mb-6">General Settings</h2>
+
+            {/* Agent Sandbox */}
+            <Card className="bg-card/40 border-border">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Shield className="w-5 h-5 text-amber-400" />
+                        Agent Filesystem Access
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                            <Label className="text-sm font-medium">Sandbox agent to workspace</Label>
+                            <p className="text-xs text-muted-foreground max-w-md">
+                                When enabled, AI agents can only access files within the active workspace folder.
+                                Disable this to allow agents to read and write files anywhere on your system
+                                (e.g. your home folder).
+                            </p>
+                        </div>
+                        <Switch
+                            checked={sandboxed}
+                            onCheckedChange={handleToggleSandbox}
+                        />
+                    </div>
+                    {!sandboxed && (
+                        <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-md">
+                            <Shield className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                            <p className="text-xs text-amber-300">
+                                <strong>Unrestricted mode active.</strong> The agent can access any file your OS user can reach.
+                                Use with caution — the agent may read or modify files outside the workspace.
+                            </p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
 
             {/* Network Settings */}
             <Card className="bg-card/40 border-border">

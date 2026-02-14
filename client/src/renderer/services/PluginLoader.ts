@@ -8,6 +8,7 @@ import * as Zustand from 'zustand';
 import * as ZustandShallow from 'zustand/shallow';
 import * as ZustandTraditional from 'zustand/traditional';
 import { RendererPluginContext, PluginManifest } from '../../shared/plugin-types';
+import { Capability, CapabilityCheckResult } from '../../shared/trust-types';
 import { UIExtensionAPI } from '../../shared/slot-types';
 import { usePluginStore } from '../store/usePluginStore';
 import { useAppStore } from '../store/useAppStore';
@@ -222,7 +223,7 @@ export class PluginLoader extends BasePluginManager<RendererPluginContext> {
     };
   }
 
-  protected createContext(plugin: PluginManifest): RendererPluginContext & { require: (id: string) => any } {
+  protected createContext(plugin: PluginManifest, _capabilityDecisions?: Map<Capability, CapabilityCheckResult>): RendererPluginContext & { require: (id: string) => any } {
     const ui = this.createUIExtensionAPI(plugin.id);
 
     window.electronAPI.onPluginMessage(plugin.id, 'invoke-request', async (payload: any) => {

@@ -1,69 +1,27 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-// Extend Window interface for SpeechRecognition
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionResultList {
-  length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-  message?: string;
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  maxAlternatives: number;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  onstart: (() => void) | null;
-  onspeechend: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-
-interface SpeechRecognitionConstructor {
-  new (): SpeechRecognition;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
-
+// ─── Public interface ──────────────────────────────────────────────────
 export interface UseSpeechToTextOptions {
   /** Language for speech recognition (default: 'en-US') */
   lang?: string;
-  /** Callback when a transcript segment is finalized */
+  /** Callback when a transcript segment is finalized (raw, immediate) */
   onTranscript?: (text: string) => void;
   /** Callback for interim (in-progress) results */
   onInterimTranscript?: (text: string) => void;
   /** Callback when an error occurs */
   onError?: (error: string) => void;
+  /**
+   * Callback with LLM-refined full transcript.
+   * Fires after each new segment, with a debounce.
+   * The text replaces (not appends to) the input content.
+   */
+  onRefinedTranscript?: (text: string) => void;
+  /** Silence timeout in ms before auto-stop (default: 30000) */
+  silenceTimeoutMs?: number;
+  /** Duration of each recording chunk in ms (default: 3000) */
+  chunkDurationMs?: number;
+  /** Debounce delay before triggering LLM refinement (ms, default: 1500) */
+  refineDebounceMs?: number;
 }
 
 export interface UseSpeechToTextReturn {
@@ -77,274 +35,542 @@ export interface UseSpeechToTextReturn {
   stopListening: () => void;
   /** Toggle listening state */
   toggleListening: () => void;
-  /** Whether speech recognition is supported in the browser */
+  /** Whether speech recognition is supported */
   isSupported: boolean;
   /** Current error message, if any */
   error: string | null;
+  /** The accumulated raw transcript so far */
+  accumulatedText: string;
+}
+
+// ─── WAV Encoding Utilities ────────────────────────────────────────────
+
+/** Encode raw PCM Float32 samples into a 16-bit 16kHz mono WAV buffer. */
+function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
+  const targetRate = 16000;
+  let resampled: Float32Array;
+
+  if (Math.abs(sampleRate - targetRate) > 1) {
+    const ratio = sampleRate / targetRate;
+    const newLength = Math.round(samples.length / ratio);
+    resampled = new Float32Array(newLength);
+    for (let i = 0; i < newLength; i++) {
+      const srcIdx = Math.floor(i * ratio);
+      resampled[i] = samples[Math.min(srcIdx, samples.length - 1)];
+    }
+  } else {
+    resampled = samples;
+  }
+
+  const numSamples = resampled.length;
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);          // PCM chunk size
+  view.setUint16(20, 1, true);           // PCM format
+  view.setUint16(22, 1, true);           // mono
+  view.setUint32(24, targetRate, true);   // sample rate
+  view.setUint32(28, targetRate * 2, true); // byte rate
+  view.setUint16(32, 2, true);           // block align
+  view.setUint16(34, 16, true);          // bits per sample
+  writeString(36, 'data');
+  view.setUint32(40, numSamples * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const s = Math.max(-1, Math.min(1, resampled[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    offset += 2;
+  }
+
+  return buffer;
 }
 
 /**
- * Hook for continuous speech-to-text recognition.
- * 
- * Captures speech up to a pause, then automatically restarts listening.
- * This creates a progressive capture effect where speech is captured
- * in natural segments.
+ * Convert ArrayBuffer to base64 string.
+ * Uses chunked approach for large buffers to avoid call stack overflow.
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Hook for progressive speech-to-text using local Whisper (via Electron IPC)
+ * with LLM-powered refinement.
+ *
+ * Design:
+ *   - Captures microphone audio via MediaStream + AudioContext + ScriptProcessorNode.
+ *   - Records PCM in configurable chunks (default 3s).
+ *   - Encodes each chunk as 16kHz 16-bit mono WAV.
+ *   - Sends base64 WAV to main process where whisper.cpp transcribes it.
+ *   - Delivers raw transcribed text immediately via onTranscript callback.
+ *   - Accumulates all segments, then after a debounce sends the full text
+ *     through the LLM for refinement (punctuation, capitalization, error correction).
+ *   - Delivers refined text via onRefinedTranscript callback for input replacement.
+ *   - Shows "..." as interim indicator while a chunk is being transcribed.
+ *   - Auto-stops after silenceTimeoutMs of no speech results.
  */
 export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeechToTextReturn {
   const {
-    lang = 'en-US',
     onTranscript,
     onInterimTranscript,
     onError,
+    onRefinedTranscript,
+    silenceTimeoutMs = 30000,
+    chunkDurationMs = 3000,
+    refineDebounceMs = 1500,
   } = options;
 
   const [isListening, setIsListening] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [accumulatedText, setAccumulatedText] = useState('');
+  // Always true — mic button is always visible. Errors surface at click time.
+  const [isSupported] = useState(true);
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const shouldRestartRef = useRef(false);
-  const isStartingRef = useRef(false);
-  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // ─── Refs ───────────────────────────────────────────────────────────
+  const mountedRef = useRef(true);
+  const wantListeningRef = useRef(false);
+  const startingRef = useRef(false);  // prevents double-start race
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorNodeRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const recordedChunksRef = useRef<Float32Array[]>([]);
+  const sampleRateRef = useRef(16000);  // saved before cleanup for final flush
+  const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transcribingRef = useRef(false);
+  const lastSpeechTimeRef = useRef(Date.now());
+  const bufferedSamplesRef = useRef(0);  // track total buffered sample count
+  const accumulatedTextRef = useRef('');  // raw accumulated transcript
+  const refineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refiningRef = useRef(false);  // LLM refinement in progress
+  const lastRefinedVersionRef = useRef('');  // avoid redundant refinement calls
 
-  // Check for browser support
-  const SpeechRecognitionAPI = 
-    typeof window !== 'undefined' 
-      ? (window.SpeechRecognition || window.webkitSpeechRecognition)
-      : undefined;
-  
-  const isSupported = !!SpeechRecognitionAPI;
+  // Max buffered audio: ~30s of 16kHz = 480,000 samples ≈ 1.8MB
+  const maxBufferedSamples = 480000;
 
-  // Stop listening
-  const stopListening = useCallback(() => {
-    shouldRestartRef.current = false;
-    isStartingRef.current = false;
+  // Keep callbacks in refs to avoid stale closures
+  const onTranscriptRef = useRef(onTranscript);
+  const onInterimRef = useRef(onInterimTranscript);
+  const onErrorRef = useRef(onError);
+  const onRefinedRef = useRef(onRefinedTranscript);
+  useEffect(() => { onTranscriptRef.current = onTranscript; }, [onTranscript]);
+  useEffect(() => { onInterimRef.current = onInterimTranscript; }, [onInterimTranscript]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
+  useEffect(() => { onRefinedRef.current = onRefinedTranscript; }, [onRefinedTranscript]);
 
-    // Clear silence timeout
-    if (silenceTimeoutRef.current) {
-      clearTimeout(silenceTimeoutRef.current);
-      silenceTimeoutRef.current = null;
-    }
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {
-        // Ignore stop errors
-      }
-    }
-
-    setIsListening(false);
-    setInterimTranscript('');
+  // Track mounted state
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
   }, []);
 
-  // Reset silence timeout
-  const resetSilenceTimeout = useCallback(() => {
-    if (silenceTimeoutRef.current) {
-      clearTimeout(silenceTimeoutRef.current);
+  // ─── Helpers ──────────────────────────────────────────────────────
+
+  const clearTimers = useCallback(() => {
+    if (chunkTimerRef.current) {
+      clearInterval(chunkTimerRef.current);
+      chunkTimerRef.current = null;
     }
-    
-    silenceTimeoutRef.current = setTimeout(() => {
-      stopListening();
-    }, 5000);
-  }, [stopListening]);
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    if (refineTimerRef.current) {
+      clearTimeout(refineTimerRef.current);
+      refineTimerRef.current = null;
+    }
+  }, []);
 
-  // Create recognition instance
-  const createRecognition = useCallback(() => {
-    if (!SpeechRecognitionAPI) return null;
-
-    const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = lang;
-    recognition.maxAlternatives = 1;
-
-    return recognition;
-  }, [SpeechRecognitionAPI, lang]);
-
-  // Handle recognition results
-  const handleResult = useCallback((event: SpeechRecognitionEvent) => {
-    resetSilenceTimeout();
-
-    let finalTranscript = '';
-    let interim = '';
-
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const result = event.results[i];
-      const transcript = result[0].transcript;
-
-      if (result.isFinal) {
-        finalTranscript += transcript;
-      } else {
-        interim += transcript;
-      }
+  const cleanupAudio = useCallback(() => {
+    // Save sample rate before destroying context — needed by final flush
+    if (audioContextRef.current) {
+      sampleRateRef.current = audioContextRef.current.sampleRate;
     }
 
-    // Update interim display
-    setInterimTranscript(interim);
-    onInterimTranscript?.(interim);
-
-    // If we have a final result, send it and clear interim
-    if (finalTranscript) {
-      setInterimTranscript('');
-      onTranscript?.(finalTranscript);
+    if (processorNodeRef.current) {
+      processorNodeRef.current.onaudioprocess = null;
+      processorNodeRef.current.disconnect();
+      processorNodeRef.current = null;
     }
-  }, [onTranscript, onInterimTranscript, resetSilenceTimeout]);
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(t => t.stop());
+      mediaStreamRef.current = null;
+    }
+    recordedChunksRef.current = [];
+    bufferedSamplesRef.current = 0;
+  }, []);
 
-  // Handle recognition end - auto-restart if still listening
-  const handleEnd = useCallback(() => {
-    isStartingRef.current = false;
-    
-    if (shouldRestartRef.current && recognitionRef.current) {
-      // Small delay before restarting to avoid rapid start/stop cycles
-      setTimeout(() => {
-        if (shouldRestartRef.current && recognitionRef.current) {
-          try {
-            isStartingRef.current = true;
-            recognitionRef.current.start();
-          } catch (e) {
-            // Recognition might still be running, ignore
-            isStartingRef.current = false;
-          }
+  /**
+   * Trigger LLM refinement of the accumulated transcript.
+   * Debounced — only fires after refineDebounceMs of no new segments.
+   */
+  const triggerRefinement = useCallback(() => {
+    // Cancel any pending refinement timer
+    if (refineTimerRef.current) {
+      clearTimeout(refineTimerRef.current);
+      refineTimerRef.current = null;
+    }
+
+    refineTimerRef.current = setTimeout(async () => {
+      const rawText = accumulatedTextRef.current.trim();
+      if (!rawText || refiningRef.current) return;
+      // Don't refine if text hasn't changed since last refinement
+      if (rawText === lastRefinedVersionRef.current) return;
+      // Don't refine very short fragments (< 10 chars) — not enough context
+      if (rawText.length < 10) return;
+
+      refiningRef.current = true;
+      lastRefinedVersionRef.current = rawText;
+
+      try {
+        if (!window.electronAPI?.whisperRefine) {
+          console.warn('[useSpeechToText] whisperRefine not available');
+          return;
         }
-      }, 100);
-    } else {
+        const result = await window.electronAPI.whisperRefine(rawText);
+        if (!mountedRef.current) return;
+
+        if (result.text && result.text.trim()) {
+          console.log('[useSpeechToText] LLM refined:', result.text.trim().substring(0, 100));
+          onRefinedRef.current?.(result.text.trim());
+        }
+      } catch (err) {
+        console.error('[useSpeechToText] LLM refinement failed:', err);
+        // Silently fall back — raw text is already in the input
+      } finally {
+        refiningRef.current = false;
+      }
+    }, refineDebounceMs);
+  }, [refineDebounceMs]);
+
+  /** Flush accumulated audio, encode as WAV, send to Whisper via IPC. */
+  const flushAndTranscribe = useCallback(async () => {
+    if (transcribingRef.current) return;
+    if (recordedChunksRef.current.length === 0) return;
+
+    // Grab current chunks and reset buffer
+    const chunks = recordedChunksRef.current;
+    recordedChunksRef.current = [];
+    bufferedSamplesRef.current = 0;
+
+    // Merge chunks into single Float32Array
+    const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+    if (totalLength === 0) return;
+
+    const merged = new Float32Array(totalLength);
+    let mergeOffset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, mergeOffset);
+      mergeOffset += chunk.length;
+    }
+
+    // Simple RMS check — skip silent chunks
+    let sumSq = 0;
+    for (let i = 0; i < merged.length; i++) {
+      sumSq += merged[i] * merged[i];
+    }
+    const rms = Math.sqrt(sumSq / merged.length);
+    if (rms < 0.005) {
+      return; // Too quiet, skip transcription
+    }
+
+    // Show interim indicator while transcribing
+    if (mountedRef.current) {
+      setInterimTranscript('...');
+      onInterimRef.current?.('...');
+    }
+    transcribingRef.current = true;
+
+    try {
+      // Use saved sampleRate (survives audioContext cleanup)
+      const sampleRate = audioContextRef.current?.sampleRate || sampleRateRef.current;
+      const wavBuffer = encodeWav(merged, sampleRate);
+      const wavBase64 = arrayBufferToBase64(wavBuffer);
+
+      const result = await window.electronAPI!.whisperTranscribe(wavBase64);
+
+      if (!mountedRef.current) return; // Component unmounted during transcription
+
+      if (result.error) {
+        console.error('[useSpeechToText] Transcription error:', result.error);
+        // Surface persistent errors to user (not transient ones)
+        if (result.error.includes('not initialized') || result.error.includes('not available')) {
+          setError(result.error);
+          onErrorRef.current?.(result.error);
+        }
+      } else if (result.text && result.text.trim()) {
+        // Post-process: strip annotations, convert spoken punctuation
+        const processed = postProcessTranscript(result.text.trim());
+        // Filter out whisper hallucinations (common with silence/noise)
+        if (processed && !isHallucination(processed)) {
+          lastSpeechTimeRef.current = Date.now();
+          setInterimTranscript('');
+          onInterimRef.current?.('');
+
+          // Accumulate the raw segment
+          const prevAccum = accumulatedTextRef.current;
+          const newAccum = prevAccum
+            ? `${prevAccum.trimEnd()} ${processed}`
+            : processed;
+          accumulatedTextRef.current = newAccum;
+          if (mountedRef.current) {
+            setAccumulatedText(newAccum);
+          }
+
+          // Deliver raw segment immediately
+          onTranscriptRef.current?.(processed);
+
+          // Schedule LLM refinement
+          triggerRefinement();
+        } else {
+          setInterimTranscript('');
+          onInterimRef.current?.('');
+        }
+      } else {
+        setInterimTranscript('');
+        onInterimRef.current?.('');
+      }
+    } catch (err: any) {
+      console.error('[useSpeechToText] IPC error:', err);
+      if (mountedRef.current) {
+        setInterimTranscript('');
+        onInterimRef.current?.('');
+      }
+    } finally {
+      transcribingRef.current = false;
+    }
+  }, [triggerRefinement]);
+
+  // ─── Core: start/stop ─────────────────────────────────────────────
+
+  const stopListening = useCallback(() => {
+    wantListeningRef.current = false;
+    startingRef.current = false;
+    clearTimers();
+
+    // Save sample rate before cleanup so final flush can use it
+    if (audioContextRef.current) {
+      sampleRateRef.current = audioContextRef.current.sampleRate;
+    }
+
+    // Do one final flush of any remaining audio
+    flushAndTranscribe().catch(() => {});
+
+    cleanupAudio();
+
+    if (mountedRef.current) {
       setIsListening(false);
       setInterimTranscript('');
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
+    }
+
+    // Trigger one final refinement when stopping
+    triggerRefinement();
+  }, [clearTimers, cleanupAudio, flushAndTranscribe, triggerRefinement]);
+
+  const startListening = useCallback(async () => {
+    // Prevent double-start (rapid toggle protection)
+    if (wantListeningRef.current || startingRef.current) return;
+    startingRef.current = true;
+
+    // Reset accumulated text for new session
+    accumulatedTextRef.current = '';
+    lastRefinedVersionRef.current = '';
+    if (mountedRef.current) {
+      setAccumulatedText('');
+    }
+
+    // Check Whisper readiness via IPC
+    try {
+      if (window.electronAPI?.whisperIsReady) {
+        const ready = await window.electronAPI.whisperIsReady();
+        if (!ready) {
+          const msg = 'Speech recognition not available. Whisper binary or model may not be installed.';
+          if (mountedRef.current) {
+            setError(msg);
+            onErrorRef.current?.(msg);
+          }
+          startingRef.current = false;
+          return;
+        }
+      } else {
+        const msg = 'Speech recognition not available in this environment.';
+        if (mountedRef.current) {
+          setError(msg);
+          onErrorRef.current?.(msg);
+        }
+        startingRef.current = false;
+        return;
       }
-    }
-  }, []);
-
-  // Handle recognition errors
-  const handleError = useCallback((event: SpeechRecognitionErrorEvent) => {
-    isStartingRef.current = false;
-    
-    // Handle specific error types
-    switch (event.error) {
-      case 'no-speech':
-        // No speech detected - restart listening if still active
-        // But if we hit our own silence timeout, we should have stopped already.
-        // If the API stops for no-speech before our timeout, we might want to restart
-        // OR we might want to respect the API's decision.
-        // Given the 5s requirement, we probably want to keep listening until *our* timeout hits
-        // if the API's timeout is shorter.
-        if (shouldRestartRef.current) {
-          handleEnd();
-        }
-        break;
-      case 'audio-capture':
-        setError('Microphone not available. Please check your microphone settings.');
-        shouldRestartRef.current = false;
-        setIsListening(false);
-        onError?.('Microphone not available');
-        break;
-      case 'not-allowed':
-        setError('Microphone access denied. Please allow microphone access to use speech-to-text.');
-        shouldRestartRef.current = false;
-        setIsListening(false);
-        onError?.('Microphone access denied');
-        break;
-      case 'aborted':
-        // User or system aborted - don't restart
-        break;
-      case 'network':
-        setError('Network error. Speech recognition requires an internet connection.');
-        shouldRestartRef.current = false;
-        setIsListening(false);
-        onError?.('Network error');
-        break;
-      default:
-        console.warn('Speech recognition error:', event.error, event.message);
-        // For other errors, try to restart if still listening
-        if (shouldRestartRef.current) {
-          handleEnd();
-        }
-    }
-  }, [handleEnd, onError]);
-
-  // Initialize recognition with event handlers
-  const initRecognition = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.onresult = null;
-      recognitionRef.current.onerror = null;
-      recognitionRef.current.onend = null;
-      recognitionRef.current.onstart = null;
-    }
-
-    const recognition = createRecognition();
-    if (!recognition) return null;
-
-    recognition.onresult = handleResult;
-    recognition.onerror = handleError;
-    recognition.onend = handleEnd;
-    recognition.onstart = () => {
-      isStartingRef.current = false;
-      setError(null);
-    };
-
-    recognitionRef.current = recognition;
-    return recognition;
-  }, [createRecognition, handleResult, handleError, handleEnd]);
-
-  // Start listening
-  const startListening = useCallback(() => {
-    if (!isSupported) {
-      setError('Speech recognition is not supported in this browser.');
-      onError?.('Speech recognition not supported');
+    } catch {
+      const msg = 'Failed to check speech recognition availability.';
+      if (mountedRef.current) {
+        setError(msg);
+        onErrorRef.current?.(msg);
+      }
+      startingRef.current = false;
       return;
     }
 
-    if (isListening || isStartingRef.current) return;
+    // Abort if user toggled off while we were checking readiness
+    if (!startingRef.current) return;
 
-    setError(null);
-    shouldRestartRef.current = true;
-
-    const recognition = initRecognition();
-    if (!recognition) return;
+    if (mountedRef.current) {
+      setError(null);
+    }
+    wantListeningRef.current = true;
+    if (mountedRef.current) {
+      setIsListening(true);
+    }
+    lastSpeechTimeRef.current = Date.now();
 
     try {
-      isStartingRef.current = true;
-      recognition.start();
-      setIsListening(true);
-      resetSilenceTimeout(); // Start silence timer
-    } catch (e) {
-      isStartingRef.current = false;
-      console.error('Failed to start speech recognition:', e);
-      setError('Failed to start speech recognition.');
-      onError?.('Failed to start');
-    }
-  }, [isSupported, isListening, initRecognition, onError, resetSilenceTimeout]);
+      // Get microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
 
-  // Toggle listening
+      // Abort if user stopped while we were awaiting mic permission
+      if (!wantListeningRef.current) {
+        stream.getTracks().forEach(t => t.stop());
+        startingRef.current = false;
+        return;
+      }
+
+      mediaStreamRef.current = stream;
+
+      // Create AudioContext — request 16kHz but accept whatever the system gives
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
+      sampleRateRef.current = audioContext.sampleRate;
+
+      const source = audioContext.createMediaStreamSource(stream);
+      sourceNodeRef.current = source;
+
+      // ScriptProcessorNode captures raw PCM data in real-time
+      // (Deprecated but AudioWorklet requires a separate module file,
+      //  which is complex to set up in Electron+Vite. ScriptProcessor
+      //  works reliably for our 3-second chunk use case.)
+      const bufferSize = 4096;
+      const processor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+      processorNodeRef.current = processor;
+
+      processor.onaudioprocess = (e: AudioProcessingEvent) => {
+        if (!wantListeningRef.current) return;
+
+        // Memory cap: discard old chunks if we've buffered too much
+        if (bufferedSamplesRef.current > maxBufferedSamples) {
+          recordedChunksRef.current = [];
+          bufferedSamplesRef.current = 0;
+        }
+
+        const inputData = e.inputBuffer.getChannelData(0);
+        // Must copy — the underlying buffer is reused by the audio system
+        const copy = new Float32Array(inputData.length);
+        copy.set(inputData);
+        recordedChunksRef.current.push(copy);
+        bufferedSamplesRef.current += copy.length;
+      };
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      // Flush and transcribe every chunkDurationMs
+      chunkTimerRef.current = setInterval(() => {
+        if (wantListeningRef.current) {
+          flushAndTranscribe();
+        }
+      }, chunkDurationMs);
+
+      // Silence timeout — stop if no speech for silenceTimeoutMs
+      const checkSilence = () => {
+        if (!wantListeningRef.current || !mountedRef.current) return;
+        const elapsed = Date.now() - lastSpeechTimeRef.current;
+        if (elapsed > silenceTimeoutMs) {
+          console.log('[useSpeechToText] Silence timeout, stopping.');
+          stopListening();
+        } else {
+          silenceTimerRef.current = setTimeout(checkSilence, 2000);
+        }
+      };
+      silenceTimerRef.current = setTimeout(checkSilence, silenceTimeoutMs);
+
+      startingRef.current = false;
+    } catch (err: any) {
+      console.error('[useSpeechToText] Failed to start:', err);
+      let msg: string;
+      if (err.name === 'NotAllowedError') {
+        msg = 'Microphone access denied. Check System Preferences > Privacy > Microphone.';
+      } else if (err.name === 'NotFoundError') {
+        msg = 'No microphone found.';
+      } else if (err.name === 'NotReadableError') {
+        msg = 'Microphone is in use by another application.';
+      } else {
+        msg = `Microphone error: ${err.message}`;
+      }
+      if (mountedRef.current) {
+        setError(msg);
+        onErrorRef.current?.(msg);
+      }
+      wantListeningRef.current = false;
+      startingRef.current = false;
+      if (mountedRef.current) {
+        setIsListening(false);
+      }
+      cleanupAudio();
+    }
+  }, [chunkDurationMs, silenceTimeoutMs, flushAndTranscribe, stopListening, cleanupAudio]);
+
   const toggleListening = useCallback(() => {
-    if (isListening) {
+    if (wantListeningRef.current || startingRef.current) {
       stopListening();
     } else {
       startListening();
     }
-  }, [isListening, startListening, stopListening]);
+  }, [startListening, stopListening]);
 
-  // Cleanup on unmount
+  // ─── Cleanup on unmount ───────────────────────────────────────────
   useEffect(() => {
     return () => {
-      shouldRestartRef.current = false;
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
-      }
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (e) {
-          // Ignore cleanup errors
-        }
-        recognitionRef.current = null;
-      }
+      mountedRef.current = false;
+      wantListeningRef.current = false;
+      startingRef.current = false;
+      clearTimers();
+      cleanupAudio();
     };
-  }, []);
+  }, [clearTimers, cleanupAudio]);
 
   return {
     isListening,
@@ -354,5 +580,127 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}): UseSpeech
     toggleListening,
     isSupported,
     error,
+    accumulatedText,
   };
+}
+
+/**
+ * Post-process whisper transcript:
+ * 1. Strip bracketed/parenthesized annotations like [BLANK_AUDIO], (music), etc.
+ * 2. Convert spoken punctuation words to their actual symbols.
+ * 3. Clean up extra whitespace.
+ */
+function postProcessTranscript(text: string): string {
+  // 1. Remove bracketed/parenthesized annotations: [BLANK_AUDIO], (music), [laughter], etc.
+  let result = text.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '');
+
+  // 2. Convert spoken punctuation to symbols.
+  // These replacements are case-insensitive and handle word boundaries.
+  // Order matters: longer phrases before shorter ones to avoid partial matches.
+  const punctuationMap: Array<[RegExp, string]> = [
+    // Multi-word phrases first
+    [/\bquestion mark\b/gi, '?'],
+    [/\bexclamation point\b/gi, '!'],
+    [/\bexclamation mark\b/gi, '!'],
+    [/\bopen parenthesis\b/gi, '('],
+    [/\bclose parenthesis\b/gi, ')'],
+    [/\bopen bracket\b/gi, '['],
+    [/\bclose bracket\b/gi, ']'],
+    [/\bopen quote\b/gi, '"'],
+    [/\bclose quote\b/gi, '"'],
+    [/\bnew line\b/gi, '\n'],
+    [/\bnew paragraph\b/gi, '\n\n'],
+    // Single words
+    [/\bperiod\b/gi, '.'],
+    [/\bfull stop\b/gi, '.'],
+    [/\bcomma\b/gi, ','],
+    [/\bapostrophe\b/gi, "'"],
+    [/\bcolon\b/gi, ':'],
+    [/\bsemicolon\b/gi, ';'],
+    [/\bdash\b/gi, '—'],
+    [/\bhyphen\b/gi, '-'],
+    [/\bellipsis\b/gi, '…'],
+    [/\bampersand\b/gi, '&'],
+    [/\bat sign\b/gi, '@'],
+    [/\bhashtag\b/gi, '#'],
+    [/\bpercent\b/gi, '%'],
+    [/\basterisk\b/gi, '*'],
+    [/\bunderscore\b/gi, '_'],
+    [/\bslash\b/gi, '/'],
+    [/\bbackslash\b/gi, '\\'],
+    [/\bequals\b/gi, '='],
+    [/\bplus sign\b/gi, '+'],
+  ];
+
+  for (const [pattern, replacement] of punctuationMap) {
+    result = result.replace(pattern, replacement);
+  }
+
+  // 3. Fix spacing around punctuation marks (remove space before punctuation)
+  result = result.replace(/\s+([.,;:!?…)\]])/g, '$1');
+  // Fix space after opening brackets
+  result = result.replace(/([\[(])\s+/g, '$1');
+
+  // 4. Clean up multiple spaces
+  result = result.replace(/\s{2,}/g, ' ').trim();
+
+  return result;
+}
+
+/**
+ * Whisper sometimes "hallucinates" text when given silence or noise.
+ * Common hallucinations include repeated phrases, thank-you messages,
+ * and transcription artifacts. Filter these out.
+ */
+function isHallucination(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+
+  // Common whisper hallucinations with silence/noise
+  const hallucinations = [
+    'thank you',
+    'thank you.',
+    'thanks for watching',
+    'thanks for watching.',
+    'thanks for listening',
+    'thanks for listening.',
+    'subscribe',
+    'please subscribe',
+    'like and subscribe',
+    'you',
+    '...',
+    'the end',
+    'the end.',
+    'bye',
+    'bye.',
+    'goodbye',
+    'goodbye.',
+    '♪',
+    '♫',
+    '[music]',
+    '(music)',
+    '[silence]',
+    '(silence)',
+    '[blank_audio]',
+    '[applause]',
+    '(applause)',
+    '[laughter]',
+    '(laughter)',
+    'i\'m going to',
+    'so',
+    'um',
+    'uh',
+  ];
+  if (hallucinations.some(h => lower === h)) return true;
+
+  // Single character or very short noise
+  if (lower.length <= 1) return true;
+
+  // Repeated single word/char pattern (e.g., "you you you you")
+  const words = lower.split(/\s+/);
+  if (words.length > 2 && new Set(words).size === 1) return true;
+
+  // All punctuation / special chars
+  if (/^[^a-z0-9]+$/.test(lower)) return true;
+
+  return false;
 }

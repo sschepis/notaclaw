@@ -5,7 +5,7 @@ import { generateText, LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { AIProviderConfig, AISettings, AIRequestOptions, AIResponse, AIContentType, ToolCall } from '../shared/ai-types';
+import { AIProviderConfig, AISettings, AIRequestOptions, AIResponse, AIContentType, ToolCall } from '@notaclaw/core/ai-types';
 
 const DEFAULT_SETTINGS: AISettings = {
   providers: [],
@@ -106,8 +106,8 @@ export class AIProviderManager {
         
         return { ...provider, models };
       });
-    } catch {
-      console.log('No existing model cache found');
+    } catch (e) {
+      console.debug('No existing model cache found or parse error:', e);
       this.modelCache = {};
     }
   }
@@ -747,6 +747,11 @@ export class AIProviderManager {
 
   /**
    * Fetch with exponential backoff retry for transient errors.
+   *
+   * TODO: Replace this inline implementation with the shared `fetchWithTimeout`
+   * and `withRetry` utilities from `client/src/shared/utils/retry.ts` once the
+   * headless `src/` package can import from the shared module (requires either
+   * a shared package or path alias).
    */
   private async fetchWithRetry(url: string, init?: RequestInit, retries = MAX_RETRIES): Promise<Response> {
     let lastError: Error | null = null;

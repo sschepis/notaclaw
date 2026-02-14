@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { StakingTier } from '../shared/alephnet-types';
+import type { StakingTier } from '@notaclaw/core/alephnet-types';
 import type {
   ITrustEvaluator,
   SignedEnvelope,
@@ -8,14 +8,14 @@ import type {
   TrustFactors,
   TrustLevel,
   TrustOverride,
-} from '../shared/trust-types';
+} from '@notaclaw/core/trust-types';
 import {
   TRUST_WEIGHTS,
   SOCIAL_DISTANCE_SCORES,
   STAKING_TIER_SCORES,
   TRUST_THRESHOLDS,
   TRUST_CACHE_TTL,
-} from '../shared/trust-types';
+} from '@notaclaw/core/trust-types';
 import type { SignedEnvelopeService } from './SignedEnvelopeService';
 import type { IdentityManager } from './IdentityManager';
 import type { DomainManager } from './DomainManager';

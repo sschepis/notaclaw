@@ -27,6 +27,7 @@ import {
   appendUserResponse,
 } from './AgentContextBuilder';
 import { CONTROL_TOOL_NAMES } from './AgentToolkit';
+import { sanitizeToolArgs, summarizeToolResult } from '../../../shared/rich-content-types';
 
 /**
  * Run the agentic loop. This is the heart of the system.
@@ -138,16 +139,16 @@ export async function runAgentLoop(
 
     // ── Process tool calls ────────────────────────────────────────────
     if (stepResult.toolCalls && stepResult.toolCalls.length > 0) {
-      // If the AI also produced text, send it as a message first
+      // Accumulate step content segments (text + tool call fences)
+      const stepContentParts: string[] = [];
+
+      // If the AI also produced text, include it in the step message
       if (stepResult.text && stepResult.text.trim()) {
-        await deps.sendMessage(task.conversationId, stepResult.text, {
-          agentTaskId: task.id,
-          stepNumber: task.stepCount,
-        });
+        stepContentParts.push(stepResult.text.trim());
         currentMessages = appendAssistantMessage(currentMessages, stepResult.text);
       }
 
-      // Process each tool call
+      // Process each tool call, building fences inline
       for (const toolCall of stepResult.toolCalls) {
         if (signal.aborted) {
           task.status = 'cancelled';
@@ -167,11 +168,31 @@ export async function runAgentLoop(
         );
 
         if (handled.terminate) {
+          // For control tools that terminate, send accumulated content first if any
+          if (stepContentParts.length > 0 && toolCall.name !== CONTROL_TOOL_NAMES.TASK_COMPLETE) {
+            await deps.sendMessage(task.conversationId, stepContentParts.join('\n\n'), {
+              agentTaskId: task.id,
+              stepNumber: task.stepCount,
+            });
+          }
           return; // Task is completed, cancelled, or errored
+        }
+
+        // Append the tool call fence to step content (only for non-control tools)
+        if (handled.toolFence) {
+          stepContentParts.push(handled.toolFence);
         }
 
         // Update messages with tool result
         currentMessages = handled.updatedMessages;
+      }
+
+      // Send the combined step message (text + tool call fences)
+      if (stepContentParts.length > 0) {
+        await deps.sendMessage(task.conversationId, stepContentParts.join('\n\n'), {
+          agentTaskId: task.id,
+          stepNumber: task.stepCount,
+        });
       }
 
       // After processing all tool calls, delay and continue loop
@@ -222,6 +243,8 @@ interface ToolCallResult {
   terminate: boolean;
   /** Updated message history */
   updatedMessages: AIMessage[];
+  /** Optional tool_call fence content to include in the step message */
+  toolFence?: string;
 }
 
 async function handleToolCall(
@@ -283,7 +306,13 @@ async function handleToolCall(
   // ── send_update ──
   if (toolCall.name === CONTROL_TOOL_NAMES.SEND_UPDATE) {
     const updateMsg = toolCall.args.message || 'Working...';
-    await deps.sendMessage(task.conversationId, updateMsg, {
+    // Build a status fence for inline rendering
+    const statusFence = '```status\n' + JSON.stringify({
+      label: updateMsg,
+      status: 'running',
+      step: task.stepCount,
+    }, null, 2) + '\n```';
+    await deps.sendMessage(task.conversationId, statusFence, {
       agentTaskId: task.id,
       isUpdate: true,
     });
@@ -319,8 +348,11 @@ async function handleToolCall(
     task.status = 'running';
     deps.emitUpdate(task);
 
+    // Build tool_call fence for inline rendering
+    const toolFence = buildToolCallFence(toolCall, result, 'success');
+
     const updated = appendToolResult(messages, toolCall.id, toolCall.name, result);
-    return { terminate: false, updatedMessages: updated };
+    return { terminate: false, updatedMessages: updated, toolFence };
   } catch (err: any) {
     task.currentTool = undefined;
     task.status = 'running';
@@ -332,8 +364,12 @@ async function handleToolCall(
       hint: "The tool execution failed. Please check the error message and try a different approach or parameters."
     };
     task.scratchpad.push(`Tool ${toolCall.name} FAILED: ${errorMessage}`);
+
+    // Build error tool_call fence
+    const toolFence = buildToolCallFence(toolCall, errorResult, 'error');
+
     const updated = appendToolResult(messages, toolCall.id, toolCall.name, errorResult);
-    return { terminate: false, updatedMessages: updated };
+    return { terminate: false, updatedMessages: updated, toolFence };
   }
 }
 
@@ -341,4 +377,25 @@ async function handleToolCall(
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Build a tool_call fence block for inline rendering in the message.
+ * This produces markdown with a ```tool_call fence containing JSON that
+ * the ToolCallCard component will render as a collapsible card.
+ */
+function buildToolCallFence(
+  toolCall: AgentToolCall,
+  result: any,
+  status: 'success' | 'error'
+): string {
+  const fenceData = {
+    id: toolCall.id || `tc-${Date.now()}`,
+    toolName: toolCall.name,
+    args: sanitizeToolArgs(toolCall.args),
+    result: summarizeToolResult(result),
+    status,
+    timestamp: Date.now(),
+  };
+  return '```tool_call\n' + JSON.stringify(fenceData, null, 2) + '\n```';
 }

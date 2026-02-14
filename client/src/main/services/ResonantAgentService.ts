@@ -5,7 +5,7 @@
  *   - Agent CRUD (previously scattered between AlephNet SRIA and local stores)
  *   - Agent lifecycle (summon / dismiss)
  *   - Task delegation to AgentTaskRunner
- *   - Team management (absorbs TeamManager)
+ *   - Team management
  *   - Template management
  *
  * This is the single entry point for all agent operations.
@@ -369,7 +369,7 @@ export class ResonantAgentService extends EventEmitter {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // Teams (absorbs TeamManager)
+  // Teams
   // ═══════════════════════════════════════════════════════════════════════
 
   async listTeams(): Promise<ResonantAgentTeam[]> {

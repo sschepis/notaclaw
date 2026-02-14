@@ -17,6 +17,7 @@ import { TrustGate } from './TrustGate';
 import { SignedEnvelope, Capability, TrustAssessment, CapabilityCheckResult } from '../../shared/trust-types';
 import { BasePluginManager } from '../../shared/plugin-core/BasePluginManager';
 import { TraitDefinition } from '../../shared/trait-types';
+import { PluginError } from '../../shared/errors';
 
 export class PluginManager extends BasePluginManager<PluginContext> {
   private pluginsDir: string;
@@ -33,6 +34,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
   private serviceRegistry: ServiceRegistry;
   private personalityManager: PersonalityManager;
   private storageCache: Record<string, any> | null = null;
+  private storageDirty = false;
+  private storageFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private registeredIPCChannels: Set<string> = new Set();
   private pluginIPCHandlers: Map<string, (data: any) => Promise<any>> = new Map();
 
@@ -73,7 +76,8 @@ export class PluginManager extends BasePluginManager<PluginContext> {
   private async ensurePluginsDir() {
     try {
       await fs.access(this.pluginsDir);
-    } catch {
+    } catch (e) {
+      console.debug('Creating plugins directory:', e);
       await fs.mkdir(this.pluginsDir, { recursive: true });
     }
   }
@@ -90,6 +94,29 @@ export class PluginManager extends BasePluginManager<PluginContext> {
   private async saveStorage() {
     if (this.storageCache) {
       await fs.writeFile(this.storagePath, JSON.stringify(this.storageCache, null, 2));
+    }
+  }
+
+  private scheduleSaveStorage(): void {
+    this.storageDirty = true;
+    if (this.storageFlushTimer) clearTimeout(this.storageFlushTimer);
+    this.storageFlushTimer = setTimeout(() => {
+      this.storageFlushTimer = null;
+      if (this.storageDirty) {
+        this.storageDirty = false;
+        this.saveStorage().catch(err => console.error('Failed to save plugin storage:', err));
+      }
+    }, 500);
+  }
+
+  async flushStorage(): Promise<void> {
+    if (this.storageFlushTimer) {
+      clearTimeout(this.storageFlushTimer);
+      this.storageFlushTimer = null;
+    }
+    if (this.storageDirty) {
+      this.storageDirty = false;
+      await this.saveStorage();
     }
   }
 
@@ -219,12 +246,29 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         }
       }
 
-      // Load Aleph config
+      // Load Aleph config from aleph.json or inline manifest.json "aleph" block
       try {
         const alephContent = await fs.readFile(alephPath, 'utf-8');
         manifest.alephConfig = JSON.parse(alephContent);
         manifest.isAlephExtension = true;
-      } catch {}
+      } catch {
+        // No aleph.json — check for inline "aleph" block in manifest.json
+        const rawManifest = manifest as any;
+        if (rawManifest.aleph && typeof rawManifest.aleph === 'object') {
+          manifest.alephConfig = rawManifest.aleph;
+          manifest.isAlephExtension = true;
+        } else {
+          console.debug('No aleph config found for plugin', manifest.id);
+        }
+      }
+
+      // Normalize: some manifests use "settings" instead of "configuration"
+      if (manifest.alephConfig) {
+        const cfg = manifest.alephConfig as any;
+        if (Array.isArray(cfg.settings) && !Array.isArray(cfg.configuration)) {
+          cfg.configuration = cfg.settings;
+        }
+      }
 
       // Set isCore flag on manifest
       manifest.isCore = isCore;
@@ -264,7 +308,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
             }
         }
       } catch (e) {
-        // No envelope found logic
+        console.debug('No signed envelope found for plugin', manifest.id);
       }
 
       if (status === 'blocked') return false;
@@ -276,36 +320,45 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       // BasePluginManager doesn't handle capabilityDecisions directly, so we might need to store them or pass them.
       // We can attach them to the loaded plugin after loading, but createContext needs them.
       // Solution: Store them temporarily or override createContext to use them.
-      this.currentCapabilityDecisions = capabilityDecisions;
-
-      const result = await this.loadPluginFromManifest(manifest, pluginPath);
-      this.currentCapabilityDecisions = undefined;
+      const result = await this.loadPluginFromManifest(manifest, pluginPath, capabilityDecisions);
       return result;
 
     } catch (error) {
-      console.error(`Failed to load plugin at ${pluginPath}:`, error);
-      return false;
+      throw new PluginError(
+        `Failed to load plugin at ${pluginPath}: ${error instanceof Error ? error.message : String(error)}`,
+        'PLUGIN_LOAD_FAILED',
+        { pluginPath, originalError: error instanceof Error ? error.message : String(error) }
+      );
     }
   }
 
-  private currentCapabilityDecisions: Map<Capability, CapabilityCheckResult> | undefined;
+  /**
+   * Dynamically import a plugin module from a filesystem path and resolve its
+   * exports through the ESM / CJS / __esModule compatibility layer.
+   *
+   * Uses `new Function` to bypass webpack/vite transpilation so the native
+   * Node.js ESM loader is used at runtime.
+   *
+   * @returns The resolved plugin module (with `activate` / `deactivate` exports).
+   */
+  private async loadModuleFromPath(entryPoint: string): Promise<any> {
+    // @ts-ignore – intentional use of native dynamic import via new Function
+    const dynamicImport = new Function('specifier', 'return import(specifier)');
+    const rawModule = await dynamicImport(pathToFileURL(entryPoint).href);
+    // Support both ESM (named exports) and CommonJS (default export).
+    // Handle double-wrapped default exports from CJS modules bundled with __esModule flag
+    // e.g. { default: { __esModule: true, default: { activate, deactivate } } }
+    let pluginModule = rawModule.activate ? rawModule : (rawModule.default || rawModule);
+    if (pluginModule && pluginModule.__esModule && pluginModule.default) {
+      pluginModule = pluginModule.default;
+    }
+    return pluginModule;
+  }
 
   protected async executePlugin(manifest: PluginManifest, pluginPath: string, _context: PluginContext): Promise<any> {
     if (manifest.status === 'active' && manifest.main) {
         const entryPoint = path.join(pluginPath, manifest.main);
-        // @ts-ignore
-        // Use new Function to bypass webpack/vite transpilation of dynamic import
-        // This ensures we use the native Node.js ESM loader for plugins
-        const dynamicImport = new Function('specifier', 'return import(specifier)');
-        const rawModule = await dynamicImport(pathToFileURL(entryPoint).href);
-        // Support both ESM (named exports) and CommonJS (default export)
-        // Handle double-wrapped default exports from CJS modules bundled with __esModule flag
-        // e.g. { default: { __esModule: true, default: { activate, deactivate } } }
-        let pluginModule = rawModule.activate ? rawModule : (rawModule.default || rawModule);
-        if (pluginModule && pluginModule.__esModule && pluginModule.default) {
-            pluginModule = pluginModule.default;
-        }
-        return pluginModule;
+        return await this.loadModuleFromPath(entryPoint);
     }
     return null;
   }
@@ -329,11 +382,13 @@ export class PluginManager extends BasePluginManager<PluginContext> {
 
   async uninstallPlugin(id: string): Promise<boolean> {
       const plugin = this.plugins.get(id);
-      if (!plugin) return false;
+      if (!plugin) {
+          throw new PluginError('Plugin not found: ' + id, 'PLUGIN_NOT_FOUND', { pluginId: id });
+      }
       
       // Core plugins cannot be uninstalled
       if (plugin.manifest.isCore) {
-          throw new Error("Cannot uninstall core plugins. You can disable them instead.");
+          throw new PluginError("Cannot uninstall core plugins. You can disable them instead.", 'PLUGIN_UNINSTALL_DENIED', { pluginId: id });
       }
       
       // User plugins (in userData/plugins) can always be uninstalled
@@ -343,7 +398,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       const isExtendedPlugin = this.resolvedExtendedDir && plugin.path.startsWith(this.resolvedExtendedDir);
       
       if (!isUserPlugin && !isExtendedPlugin) {
-          throw new Error("Cannot uninstall this plugin");
+          throw new PluginError("Cannot uninstall this plugin", 'PLUGIN_UNINSTALL_DENIED', { pluginId: id });
       }
 
       await this.unloadPlugin(id);
@@ -357,9 +412,9 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       return true;
   }
 
-  protected createContext(manifest: PluginManifest): PluginContext {
+  protected createContext(manifest: PluginManifest, capabilityDecisions?: Map<Capability, CapabilityCheckResult>): PluginContext {
     const eventEmitter = new EventEmitter();
-    const decisions = this.currentCapabilityDecisions; // Capture from load scope
+    const decisions = capabilityDecisions;
 
     const check = (cap: Capability) => {
         if (!decisions) return;
@@ -384,13 +439,13 @@ export class PluginManager extends BasePluginManager<PluginContext> {
           if (!this.storageCache) this.storageCache = {};
           if (!this.storageCache[manifest.id]) this.storageCache[manifest.id] = {};
           this.storageCache[manifest.id][key] = value;
-          await this.saveStorage();
+          this.scheduleSaveStorage();
         },
         delete: async (key) => {
           check('store:write');
           if (this.storageCache?.[manifest.id]) {
             delete this.storageCache[manifest.id][key];
-            await this.saveStorage();
+            this.scheduleSaveStorage();
           }
         }
       },
@@ -467,7 +522,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         },
         publishObservation: (_content: string, _smf: number[]) => {
             check('dsn:publish-observation');
-            console.log(`Plugin ${manifest.id} publishing observation`);
+            console.warn(`Plugin ${manifest.id}: publishObservation not yet implemented — observation discarded`);
         },
         getIdentity: async () => {
             check('dsn:identity');
@@ -499,7 +554,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
         register: (trait: TraitDefinition) => {
             // check('traits:register'); // TODO: Add permission check
             console.log(`Plugin ${manifest.id} registering trait: ${trait.name}`);
-            this.personalityManager.getTraitRegistry().register({
+            this.personalityManager.registerTrait({
                 ...trait,
                 source: manifest.id // Enforce source
             });
@@ -508,7 +563,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
             // check('traits:write');
             const trait = this.personalityManager.getTraitRegistry().get(traitId);
             if (trait && trait.source === manifest.id) {
-                this.personalityManager.getTraitRegistry().unregister(traitId);
+                this.personalityManager.unregisterTrait(traitId);
             } else {
                 console.warn(`Plugin ${manifest.id} tried to unregister trait ${traitId} which it does not own.`);
             }
@@ -537,15 +592,19 @@ export class PluginManager extends BasePluginManager<PluginContext> {
     });
 
     ipcMain.handle('get-plugins', () => {
-      return Array.from(this.plugins.values()).map(p => ({
-        ...p.manifest,
-        path: p.path,
-        isAlephExtension: !!p.alephConfig,
-        alephConfig: p.alephConfig,
-        trust: p.trust,
-        status: p.status,
-        isCore: p.manifest.isCore || false
-      }));
+      return Array.from(this.plugins.values()).map(p => {
+        // Resolve alephConfig: prefer LoadedPlugin.alephConfig, fall back to manifest.alephConfig
+        const alephConfig = p.alephConfig || p.manifest.alephConfig;
+        return {
+          ...p.manifest,
+          path: p.path,
+          isAlephExtension: !!alephConfig || p.manifest.isAlephExtension,
+          alephConfig,
+          trust: p.trust,
+          status: p.status,
+          isCore: p.manifest.isCore || false
+        };
+      });
     });
 
     ipcMain.handle('read-plugin-file', async (_event, filePath) => {
@@ -653,7 +712,9 @@ export class PluginManager extends BasePluginManager<PluginContext> {
 
   public async disablePlugin(id: string): Promise<boolean> {
       const plugin = this.plugins.get(id);
-      if (!plugin) return false;
+      if (!plugin) {
+          throw new PluginError('Plugin not found: ' + id, 'PLUGIN_NOT_FOUND', { pluginId: id });
+      }
 
       await this.setDisabledState(id, true);
       plugin.status = 'disabled';
@@ -663,7 +724,9 @@ export class PluginManager extends BasePluginManager<PluginContext> {
 
   public async enablePlugin(id: string): Promise<boolean> {
       const plugin = this.plugins.get(id);
-      if (!plugin) return false;
+      if (!plugin) {
+          throw new PluginError('Plugin not found: ' + id, 'PLUGIN_NOT_FOUND', { pluginId: id });
+      }
 
       await this.setDisabledState(id, false);
       plugin.status = 'active';
@@ -671,25 +734,19 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       if (plugin.manifest.main && !plugin.instance) {
           try {
             const entryPoint = path.join(plugin.path, plugin.manifest.main);
-            // @ts-ignore
-            // Use new Function to bypass webpack/vite transpilation of dynamic import
-            // This ensures we use the native Node.js ESM loader for plugins
-            const dynamicImport = new Function('specifier', 'return import(specifier)');
-            const rawModule = await dynamicImport(pathToFileURL(entryPoint).href);
-            // Handle double-wrapped default exports from CJS modules bundled with __esModule flag
-            let pluginModule = rawModule.activate ? rawModule : (rawModule.default || rawModule);
-            if (pluginModule && pluginModule.__esModule && pluginModule.default) {
-                pluginModule = pluginModule.default;
-            }
+            const pluginModule = await this.loadModuleFromPath(entryPoint);
             
             if (typeof pluginModule.activate === 'function') {
                 plugin.instance = pluginModule.activate(plugin.context);
                 console.log(`Plugin ${id} activated.`);
             }
           } catch (e) {
-              console.error(`Failed to activate plugin ${id}:`, e);
               plugin.status = 'error';
-              return false;
+              throw new PluginError(
+                `Failed to activate plugin ${id}: ${e instanceof Error ? e.message : String(e)}`,
+                'PLUGIN_ACTIVATE_FAILED',
+                { pluginId: id, originalError: e instanceof Error ? e.message : String(e) }
+              );
           }
       }
       
@@ -728,7 +785,7 @@ export class PluginManager extends BasePluginManager<PluginContext> {
       try {
           const stats = await fs.stat(sourcePath);
           if (!stats.isDirectory()) {
-              throw new Error("Installation only supports directories for now.");
+              throw new PluginError("Installation only supports directories for now.", 'PLUGIN_INSTALL_FAILED', { sourcePath });
           }
 
           const manifestPath = path.join(sourcePath, 'manifest.json');
@@ -743,19 +800,24 @@ export class PluginManager extends BasePluginManager<PluginContext> {
                   const content = await fs.readFile(packagePath, 'utf-8');
                   id = JSON.parse(content).name;
               } catch {
-                  throw new Error("Invalid plugin: missing manifest.json or package.json");
+                  throw new PluginError("Invalid plugin: missing manifest.json or package.json", 'PLUGIN_INSTALL_FAILED', { sourcePath });
               }
           }
 
-          if (!id) throw new Error("Invalid plugin: no ID found");
+          if (!id) throw new PluginError("Invalid plugin: no ID found", 'PLUGIN_INSTALL_FAILED', { sourcePath });
 
           const destPath = path.join(this.pluginsDir, id);
           await fs.cp(sourcePath, destPath, { recursive: true });
           await this.loadPlugin(destPath);
           return true;
       } catch (e) {
+          if (e instanceof PluginError) throw e;
           console.error("Failed to install plugin:", e);
-          throw e;
+          throw new PluginError(
+            `Failed to install plugin: ${e instanceof Error ? e.message : String(e)}`,
+            'PLUGIN_INSTALL_FAILED',
+            { sourcePath, originalError: e instanceof Error ? e.message : String(e) }
+          );
       }
   }
 

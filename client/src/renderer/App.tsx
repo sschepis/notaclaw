@@ -26,7 +26,7 @@ function App() {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('welcome');
   
-  const { addMessage, setWallet, setAgentState, setSMF, setNetwork, hasIdentity, setHasIdentity, setIsGenerating, setGenerationProgress, loadConversations, loadConversationMessages, loadSelectedModelFromSettings, restoreSessionState, handleTaskUpdate } = useAppStore();
+  const { addMessage, setWallet, setAgentState, setSMF, setNetwork, hasIdentity, setHasIdentity, setIsGenerating, setGenerationProgress, loadConversations, loadConversationMessages, loadSelectedModelFromSettings, restoreSessionState, handleTaskUpdate, startStreaming, appendStreamChunk, finalizeStream, setWorkspacePath, setPendingSuggestions } = useAppStore();
 
   useEffect(() => {
     const checkSetupState = async () => {
@@ -62,6 +62,14 @@ function App() {
         setNeedsOnboarding(false);
         setLoading(false);
         
+        // Load workspace path from main process
+        try {
+            const wsPath = await window.electronAPI.configGetWorkspace();
+            if (wsPath) setWorkspacePath(wsPath);
+        } catch (wsErr) {
+            console.error('Failed to load workspace path:', wsErr);
+        }
+
         // Full startup sequence:
         // 1. Load conversation list (from local cache, fast)
         // 2. Restore session state (active conversation, open tabs)
@@ -135,14 +143,25 @@ function App() {
     let cleanupAppInvoke: (() => void) | undefined;
     let cleanupAgentTaskUpdate: (() => void) | undefined;
     let cleanupAgentTaskMessage: (() => void) | undefined;
+    let cleanupAgentStreamChunk: (() => void) | undefined;
     let cleanupConversationChanged: (() => void) | undefined;
     let cleanupResonantAgentChanged: (() => void) | undefined;
+    let cleanupWorkspaceChanged: (() => void) | undefined;
+    let cleanupAgentSuggestions: (() => void) | undefined;
 
     try {
         cleanupMessage = window.electronAPI.onMessage((_event, msg) => {
           addMessage(msg);
           setIsGenerating(false);
           setGenerationProgress(null);
+          setPendingSuggestions(null); // Clear stale suggestions on new response
+        });
+
+        // Agent suggestions (arrives asynchronously after the response)
+        cleanupAgentSuggestions = window.electronAPI.onAgentSuggestions?.((_event: any, data: any) => {
+          if (data?.suggestedNextSteps?.length) {
+            setPendingSuggestions(data.suggestedNextSteps);
+          }
         });
         cleanupWallet = window.electronAPI.onWalletUpdate((_event, data) => setWallet(data));
         cleanupAgent = window.electronAPI.onAgentStateUpdate((_event, data) => setAgentState(data));
@@ -169,6 +188,18 @@ function App() {
           // Add message to conversation
           addMessage(message as any, conversationId);
           // Don't modify isGenerating here, as it's controlled by task status
+        });
+
+        // Stream chunk listener for token-by-token streaming
+        cleanupAgentStreamChunk = window.electronAPI.onAgentStreamChunk?.((_event, { messageId, chunk, done }) => {
+          if (done) {
+            finalizeStream();
+          } else {
+            if (!useAppStore.getState().streamingMessageId) {
+              startStreaming(messageId);
+            }
+            appendStreamChunk(chunk);
+          }
         });
 
         // AlephNet Real-time Event Subscriptions
@@ -277,6 +308,11 @@ function App() {
             useResonantAgentStore.getState().handleAgentChanged(event);
         });
 
+        // Workspace change listener
+        cleanupWorkspaceChanged = window.electronAPI.onWorkspaceChanged((_event: any, data: { path: string | null }) => {
+            setWorkspacePath(data.path);
+        });
+
         // Bootstrap Resonant Agent store after identity is confirmed
         useResonantAgentStore.getState().loadAgents().catch(err => {
             console.error('[App] Failed to load resonant agents:', err);
@@ -322,8 +358,11 @@ function App() {
       cleanupAppInvoke?.();
       cleanupAgentTaskUpdate?.();
       cleanupAgentTaskMessage?.();
+      cleanupAgentStreamChunk?.();
       cleanupConversationChanged?.();
       cleanupResonantAgentChanged?.();
+      cleanupWorkspaceChanged?.();
+      cleanupAgentSuggestions?.();
     };
 
   }, []);

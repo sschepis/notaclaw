@@ -15,6 +15,9 @@ export interface PluginContext {
       register: (gateway: any) => void;
     };
   };
+  traits?: {
+    register: (trait: any) => void;
+  };
   on: (event: string, callback: () => void) => void;
 }
 
@@ -330,6 +333,17 @@ export default {
         console.log('[API Gateway] Registered as "webhook" gateway');
       } else {
         console.warn('[API Gateway] Host does not support gateway registration. Running standalone.');
+      }
+
+      if (context.traits) {
+        context.traits.register({
+          id: 'webhook-gateway',
+          name: 'Webhook Gateway',
+          description: 'Receive and process webhooks.',
+          instruction: 'You can receive webhooks via the API Gateway. The gateway listens on port 3000 by default. Incoming messages are automatically published to the semantic graph.',
+          activationMode: 'dynamic',
+          triggerKeywords: ['webhook', 'api', 'gateway', 'listen', 'port', 'http', 'server']
+        });
       }
 
     } catch (err) {

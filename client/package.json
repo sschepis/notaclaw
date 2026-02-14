@@ -89,6 +89,7 @@
     "robotjs": "^0.6.0",
     "tailwind-merge": "^1.0.0",
     "tailwindcss-animate": "^1.0.7",
+    "whisper-node-ts": "^0.0.16",
     "zustand": "^4.0.0"
   },
   "optionalDependencies": {

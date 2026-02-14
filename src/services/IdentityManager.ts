@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import crypto from 'crypto';
 import Gun from 'gun';
 import 'gun/sea';
-import { KeyTriplet } from '../shared/types';
+import { KeyTriplet } from '@notaclaw/core';
 
 const IDENTITY_FILE = 'identity.json';
 

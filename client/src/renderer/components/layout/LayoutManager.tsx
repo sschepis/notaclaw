@@ -28,6 +28,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
 
     useEffect(() => {
         // Clear old layout versions to ensure clean slate
+        localStorage.removeItem('alephnet-layout-v8');
+        localStorage.removeItem('alephnet-layout-v7');
         localStorage.removeItem('alephnet-layout-v6');
         localStorage.removeItem('alephnet-layout-v5');
         localStorage.removeItem('alephnet-layout-v4');
@@ -36,8 +38,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
         localStorage.removeItem('alephnet-layout');
         
         // Load from local storage or use default
-        // Bump version to v7 to reset corrupted layouts
-        const savedLayout = localStorage.getItem('alephnet-layout-v7');
+        // Bump version to v9 — splitter fix, forces fresh layout
+        const savedLayout = localStorage.getItem('alephnet-layout-v9');
         let jsonModel: IJsonModel = defaultLayout;
 
         if (savedLayout) {
@@ -48,11 +50,11 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
                     jsonModel = parsed;
                 } else {
                     console.log("Saved layout missing stage-panel, using default");
-                    localStorage.removeItem('alephnet-layout-v7');
+                    localStorage.removeItem('alephnet-layout-v9');
                 }
             } catch (e) {
                 console.error("Failed to parse saved layout, using default", e);
-                localStorage.removeItem('alephnet-layout-v7');
+                localStorage.removeItem('alephnet-layout-v9');
             }
         }
 
@@ -293,7 +295,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ mode, inspectorOpe
     }, []);
 
     const onModelChange = useCallback((newModel: Model) => {
-        localStorage.setItem('alephnet-layout-v7', JSON.stringify(newModel.toJson()));
+        localStorage.setItem('alephnet-layout-v9', JSON.stringify(newModel.toJson()));
     }, []);
 
     const onAction = useCallback((action: Action) => {

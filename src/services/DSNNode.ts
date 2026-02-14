@@ -1,10 +1,11 @@
 import { EventEmitter } from 'events';
 import { AlephGunBridge, DSNNode as LibDSNNode } from '@sschepis/alephnet-node';
 import { IdentityManager } from './IdentityManager';
-import { DSNNodeConfig } from '../shared/types';
+import { DSNNodeConfig } from '@notaclaw/core';
 import { AIProviderManager } from './AIProviderManager';
 import { PersonalityManager } from './PersonalityManager';
 import { DomainManager } from './DomainManager';
+import { DecentralizedWebManager } from './DecentralizedWebManager';
 import { SignedEnvelopeService } from './SignedEnvelopeService';
 import { configManager } from './ConfigManager';
 import Gun from 'gun';
@@ -16,6 +17,7 @@ export interface DSNNodeDeps {
   personalityManager: PersonalityManager;
   signedEnvelopeService?: SignedEnvelopeService;
   domainManager?: DomainManager;
+  decentralizedWebManager?: DecentralizedWebManager;
 }
 
 export class DSNNode extends EventEmitter {
@@ -25,6 +27,7 @@ export class DSNNode extends EventEmitter {
   private aiManager: AIProviderManager;
   private personalityManager: PersonalityManager;
   private domainManager: DomainManager;
+  private decentralizedWebManager: DecentralizedWebManager;
   private envelopeService: SignedEnvelopeService;
   private config: DSNNodeConfig | null = null;
   private gunInstance: any = null;
@@ -59,6 +62,7 @@ export class DSNNode extends EventEmitter {
       this.personalityManager = personalityManager!;
       this.envelopeService = new SignedEnvelopeService(this.identityManager);
       this.domainManager = new DomainManager(this.bridge, this.identityManager, this.envelopeService);
+      this.decentralizedWebManager = new DecentralizedWebManager(this.bridge, this.domainManager);
     } else {
       // New DI constructor
       const deps = depsOrAiManager;
@@ -67,6 +71,7 @@ export class DSNNode extends EventEmitter {
       this.personalityManager = deps.personalityManager;
       this.envelopeService = deps.signedEnvelopeService ?? new SignedEnvelopeService(this.identityManager);
       this.domainManager = deps.domainManager ?? new DomainManager(this.bridge, this.identityManager, this.envelopeService);
+      this.decentralizedWebManager = deps.decentralizedWebManager ?? new DecentralizedWebManager(this.bridge, this.domainManager);
     }
   }
 
@@ -288,5 +293,9 @@ export class DSNNode extends EventEmitter {
 
   public getIdentityManager() {
       return this.identityManager;
+  }
+
+  public getDecentralizedWebManager() {
+      return this.decentralizedWebManager;
   }
 }

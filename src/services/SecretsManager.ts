@@ -13,7 +13,7 @@ import {
   VaultStatus,
   SecretEvent,
   SecretEventType,
-} from '../shared/secrets-types';
+} from '@notaclaw/core/secrets-types';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 

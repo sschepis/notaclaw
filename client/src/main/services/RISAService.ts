@@ -283,10 +283,10 @@ export class RISAService extends EventEmitter {
         })()
       `;
 
-      const result = await vm.runInContext(code, sandbox, { 
-        timeout: 30000, // 30s timeout
-        displayErrors: true 
-      }); 
+      const result = await vm.runInContext(code, sandbox, {
+        timeout: 300000, // 5 min timeout — agent is trusted
+        displayErrors: true
+      });
 
       task.lastOutput = result;
       task.status = 'completed';

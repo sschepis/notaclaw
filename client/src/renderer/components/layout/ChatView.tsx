@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback } from 'react';
+// pendingSuggestions comes from the store, populated via the agent-suggestions IPC event
 import { MessageBubble } from '../ui/MessageBubble';
-import { ProgressSpinner } from '../ui/ProgressSpinner';
+import { InlineAgentStatus } from '../ui/InlineAgentStatus';
+import { SuggestionChips } from '../ui/SuggestionChips';
 import { useAppStore, Message } from '../../store/useAppStore';
 import { useTaskStore, useTasksForConversation } from '../../store/useTaskStore';
 import { TaskResultMessage } from '../conversation/TaskResultMessage';
@@ -25,6 +27,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
   const { 
     conversations,
     activeConversationId,
+    addMessage,
     updateMessage, 
     deleteMessage, 
     deleteMessagesAfter, 
@@ -32,7 +35,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
     setIsGenerating,
     setGenerationProgress,
     activeTaskByConversation,
-    scrollSignal
+    scrollSignal,
+    pendingSuggestions,
+    setPendingSuggestions,
   } = useAppStore();
   
   const { tasks } = useTaskStore();
@@ -145,6 +150,38 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
     }
   };
 
+  const handleSuggestionSelect = useCallback(async (suggestion: string) => {
+    if (isGenerating) return;
+
+    // Clear pending suggestions immediately on selection
+    setPendingSuggestions(null);
+
+    // Add user message to the store
+    const userMessage: Message = {
+      id: `user-${Date.now()}`,
+      content: suggestion,
+      type: 'cognitive',
+      sender: 'user',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    addMessage(userMessage);
+
+    // Send via IPC
+    setIsGenerating(true);
+    setGenerationProgress({ status: 'Processing suggestion...', step: 1 });
+    try {
+      await window.electronAPI.sendMessage({
+        content: suggestion,
+        mode: 'Chat',
+        resonance: 50,
+      });
+    } catch (error) {
+      console.error('Failed to send suggestion:', error);
+      setIsGenerating(false);
+      setGenerationProgress(null);
+    }
+  }, [isGenerating, addMessage, setIsGenerating, setGenerationProgress, setPendingSuggestions]);
+
   return (
     <div className="h-full min-h-0 w-full overflow-hidden flex flex-col relative z-10 bg-background">
       {/* Background Grid Pattern */}
@@ -158,7 +195,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
       {/* Messages Area - takes remaining space and scrolls */}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 relative z-10 scroll-smooth">
         <div className="min-h-full flex flex-col justify-end">
-            <div className="w-full space-y-1">
+            <div className="w-full space-y-3">
                 {timeline.length === 0 ? (
                     <ChatEmptyStateSlot
                         fallback={
@@ -235,17 +272,19 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTaskClick }) => {
                 </AnimatePresence>
             )}
             
-            {/* Generation Progress Spinner */}
+            {/* Suggestion Chips — predicted next actions from MomentaryContext */}
+            {!isGenerating && pendingSuggestions && pendingSuggestions.length > 0 && (
+              <SuggestionChips
+                suggestions={pendingSuggestions}
+                onSelect={handleSuggestionSelect}
+                disabled={isGenerating}
+              />
+            )}
+
+            {/* Inline Agent Status — replaces the old floating ProgressSpinner */}
             <AnimatePresence>
               {isGenerating && (
-                  <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="flex justify-center py-2"
-                  >
-                      <ProgressSpinner />
-                  </motion.div>
+                  <InlineAgentStatus task={activeTask} />
               )}
             </AnimatePresence>
             

@@ -1,4 +1,4 @@
-import { PluginContext } from '../../../src/shared/plugin-types';
+import { PluginContext } from './types';
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
@@ -610,6 +610,43 @@ class VSCodeClient {
 }
 
 // ============================================================================
+// Path sanitization — normalize paths before sending to VS Code server
+// ============================================================================
+
+/**
+ * Sanitize a file path before sending to the VS Code server.
+ * The server's FileSystemService.resolvePath() handles both absolute and
+ * relative paths correctly:
+ *   - Absolute paths are used as-is (normalized)
+ *   - Relative paths are resolved against the workspace root
+ *
+ * This function normalizes the path but preserves absolute paths so the
+ * server can resolve them properly. Only bare "/" or "\\" are mapped to
+ * "." (workspace root).
+ */
+function sanitizePath(inputPath: string | undefined): string {
+    if (!inputPath || inputPath.trim() === '') return '.';
+
+    let p = inputPath.trim();
+
+    // Root path "/" or "\\" alone means "workspace root"
+    if (p === '/' || p === '\\') return '.';
+
+    // Normalize the path (collapse ./ and ../ sequences, fix separators)
+    const normalized = path.normalize(p);
+
+    // For relative paths, prevent traversal outside workspace
+    if (!path.isAbsolute(normalized)) {
+        if (normalized.startsWith('..')) {
+            // Path would escape workspace — clamp to workspace root
+            return '.';
+        }
+    }
+
+    return normalized || '.';
+}
+
+// ============================================================================
 // Plugin activation — registers all available tools
 // ============================================================================
 
@@ -868,7 +905,7 @@ export const activate = async (context: PluginContext) => {
         'Read the content of a file',
         { path: { type: 'string', description: 'Path to the file to read' } },
         ['path'],
-        async (args) => client!.send('fs.readFile', { path: args.path })
+        async (args) => client!.send('fs.readFile', { path: sanitizePath(args.path) })
     );
 
     registerTool(
@@ -879,7 +916,7 @@ export const activate = async (context: PluginContext) => {
             content: { type: 'string', description: 'Content to write' }
         },
         ['path', 'content'],
-        async (args) => client!.send('fs.writeFile', { path: args.path, content: args.content })
+        async (args) => client!.send('fs.writeFile', { path: sanitizePath(args.path), content: args.content })
     );
 
     registerTool(
@@ -887,7 +924,7 @@ export const activate = async (context: PluginContext) => {
         'Delete a file',
         { path: { type: 'string', description: 'Path to the file to delete' } },
         ['path'],
-        async (args) => client!.send('fs.deleteFile', { path: args.path })
+        async (args) => client!.send('fs.deleteFile', { path: sanitizePath(args.path) })
     );
 
     registerTool(
@@ -898,7 +935,7 @@ export const activate = async (context: PluginContext) => {
             recursive: { type: 'boolean', description: 'List recursively (default: false)' }
         },
         ['path'],
-        async (args) => client!.send('fs.listDirectory', { path: args.path, recursive: args.recursive })
+        async (args) => client!.send('fs.listDirectory', { path: sanitizePath(args.path), recursive: args.recursive })
     );
 
     registerTool(
@@ -909,7 +946,7 @@ export const activate = async (context: PluginContext) => {
             newPath: { type: 'string', description: 'New path' }
         },
         ['oldPath', 'newPath'],
-        async (args) => client!.send('fs.rename', { oldPath: args.oldPath, newPath: args.newPath })
+        async (args) => client!.send('fs.rename', { oldPath: sanitizePath(args.oldPath), newPath: sanitizePath(args.newPath) })
     );
 
     registerTool(
@@ -917,7 +954,7 @@ export const activate = async (context: PluginContext) => {
         'Check if a file or directory exists',
         { path: { type: 'string', description: 'Path to check' } },
         ['path'],
-        async (args) => client!.send('fs.exists', { path: args.path })
+        async (args) => client!.send('fs.exists', { path: sanitizePath(args.path) })
     );
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1154,7 +1191,7 @@ export const activate = async (context: PluginContext) => {
             watchId: { type: 'string', description: 'Unique ID for this watcher (for later removal)' }
         },
         ['pattern', 'watchId'],
-        async (args) => client!.send('fs.watchFiles', { pattern: args.pattern, watchId: args.watchId })
+        async (args) => client!.send('fs.watchFiles', { pattern: sanitizePath(args.pattern), watchId: args.watchId })
     );
 
     registerTool(

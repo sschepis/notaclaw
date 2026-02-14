@@ -188,11 +188,12 @@ export const activate = async (context: PluginContext) => {
     console.log('[OpenClaw Skill Manager] Activating...');
 
     // Register trait for AI to understand legacy skill capabilities
-    context.traits.register({
-      id: '@alephnet/openclaw-skills:legacy-skills',
-      name: 'OpenClaw Legacy Skills',
-      description: 'Provides access to OpenClaw legacy skill definitions for context injection',
-      instruction: `You have access to OpenClaw legacy skills - pre-defined task templates and instructions.
+    if (context.traits) {
+      context.traits.register({
+        id: '@alephnet/openclaw-skills:legacy-skills',
+        name: 'OpenClaw Legacy Skills',
+        description: 'Provides access to OpenClaw legacy skill definitions for context injection',
+        instruction: `You have access to OpenClaw legacy skills - pre-defined task templates and instructions.
 
 Legacy skills are located in SKILL.md files and contain structured guidance for specific tasks.
 When a skill is executed, its content is injected as context for you to follow.
@@ -201,11 +202,12 @@ Use case: When the user references a known skill or task pattern, you can invoke
 to get detailed instructions on how to proceed.
 
 Skills are registered dynamically based on what's found in the user's OpenClaw workspace.`,
-      activationMode: 'dynamic',
-      triggerKeywords: ['skill', 'openclaw', 'legacy', 'SKILL.md', 'task template'],
-      priority: 10,
-      source: '@alephnet/openclaw-skills'
-    });
+        activationMode: 'dynamic',
+        triggerKeywords: ['skill', 'openclaw', 'legacy', 'SKILL.md', 'task template'],
+        priority: 10,
+        source: '@alephnet/openclaw-skills'
+      });
+    }
 
     const home = process.env.HOME || (process.platform === 'win32' ? process.env.USERPROFILE : '') || '';
     const searchPaths = [

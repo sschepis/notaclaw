@@ -1,5 +1,6 @@
 import { AIProviderManager } from './AIProviderManager';
-import { AIRequestOptions, AIResponse } from '../shared/ai-types';
+import { AIRequestOptions, AIResponse } from '@notaclaw/core/ai-types';
+import { TraitDefinition } from '@notaclaw/core/trait-types';
 
 // ---------------------------------------------------------------------------
 // Conversation History (2.4.2)
@@ -63,9 +64,31 @@ export class PersonalityManager {
     private sessions: Map<string, ConversationSession> = new Map();
     private systemPrompts: SystemPromptTemplate[] = [...DEFAULT_SYSTEM_PROMPTS];
     private customSystemPrompt: string | null = null;
+    private traits: Map<string, TraitDefinition> = new Map();
 
     constructor(aiManager: AIProviderManager) {
         this.aiManager = aiManager;
+    }
+
+    // -----------------------------------------------------------------------
+    // Trait Management (New)
+    // -----------------------------------------------------------------------
+
+    registerTrait(trait: TraitDefinition): void {
+        this.traits.set(trait.id, trait);
+        console.log(`[PersonalityManager] Registered trait: ${trait.name} (${trait.id})`);
+    }
+
+    unregisterTrait(traitId: string): void {
+        this.traits.delete(traitId);
+    }
+
+    getTrait(traitId: string): TraitDefinition | undefined {
+        return this.traits.get(traitId);
+    }
+
+    listTraits(): TraitDefinition[] {
+        return Array.from(this.traits.values());
     }
 
     // -----------------------------------------------------------------------
@@ -73,9 +96,9 @@ export class PersonalityManager {
     // -----------------------------------------------------------------------
 
     /**
-     * Get the system prompt for a given content type.
+     * Get the base system prompt for a given content type.
      */
-    getSystemPrompt(contentType: string): string {
+    getBaseSystemPrompt(contentType: string): string {
         // Custom override takes priority
         if (this.customSystemPrompt) return this.customSystemPrompt;
 
@@ -83,6 +106,50 @@ export class PersonalityManager {
             t => t.appliesTo.includes(contentType) || t.appliesTo.includes('*')
         );
         return template?.content || DEFAULT_SYSTEM_PROMPTS[0].content;
+    }
+
+    /**
+     * Decorate an existing system prompt with active traits.
+     */
+    decorateSystemPrompt(basePrompt: string, context: { text?: string; activeTraits?: string[] } = {}): string {
+        const traitInstructions: string[] = [];
+
+        // Sort traits by priority (descending)
+        const sortedTraits = Array.from(this.traits.values()).sort((a, b) => (b.priority || 10) - (a.priority || 10));
+
+        for (const trait of sortedTraits) {
+            let active = false;
+
+            if (trait.activationMode === 'global') {
+                active = true;
+            } else if (trait.activationMode === 'dynamic' && context.text && trait.triggerKeywords) {
+                // Check if any keyword matches
+                const lowerText = context.text.toLowerCase();
+                if (trait.triggerKeywords.some(kw => lowerText.includes(kw.toLowerCase()))) {
+                    active = true;
+                }
+            } else if (context.activeTraits && context.activeTraits.includes(trait.id)) {
+                active = true;
+            }
+
+            if (active) {
+                traitInstructions.push(`### ${trait.name}\n${trait.instruction}`);
+            }
+        }
+
+        if (traitInstructions.length > 0) {
+            return `${basePrompt}\n\n## Capabilities & Traits\n${traitInstructions.join('\n\n')}`;
+        }
+
+        return basePrompt;
+    }
+
+    /**
+     * Assemble the final system prompt by mixing base prompt + traits.
+     */
+    assembleSystemPrompt(contentType: string, context: { text?: string; activeTraits?: string[] } = {}): string {
+        const basePrompt = this.getBaseSystemPrompt(contentType);
+        return this.decorateSystemPrompt(basePrompt, context);
     }
 
     /**
@@ -212,14 +279,22 @@ export class PersonalityManager {
                 maxTokens: metadata.maxTokens || 2048
             };
 
-            const systemPrompt = this.getSystemPrompt(contentType);
+            // Replaced getSystemPrompt with assembleSystemPrompt
+            const systemPrompt = this.assembleSystemPrompt(contentType, { 
+                text: content,
+                activeTraits: metadata.activeTraits
+            });
 
             // Session-based conversation with history
             if (metadata.sessionId) {
                 const session = this.getOrCreateSession(metadata.sessionId, { mode: metadata.mode });
 
-                // Inject system prompt if session is new
-                if (session.messages.length === 0) {
+                // Inject system prompt if session is new OR if we want to update it (for dynamic traits)
+                // For simplicity, we only inject at start, but a sophisticated agent might update the system message.
+                // Here, we overwrite the FIRST message if it's 'system' to keep traits fresh.
+                if (session.messages.length > 0 && session.messages[0].role === 'system') {
+                    session.messages[0].content = systemPrompt;
+                } else if (session.messages.length === 0) {
                     this.addMessage(metadata.sessionId, 'system', systemPrompt);
                 }
 

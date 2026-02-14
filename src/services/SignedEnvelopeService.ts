@@ -8,7 +8,7 @@ import type {
   ResonanceProof,
   SignedEnvelope,
   VerificationResult,
-} from '../shared/trust-types';
+} from '@notaclaw/core/trust-types';
 import { AlephGunBridge } from '@sschepis/alephnet-node';
 import type { IdentityManager } from './IdentityManager';
 

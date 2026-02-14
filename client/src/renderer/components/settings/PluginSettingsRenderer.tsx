@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PluginManifest } from '../../../shared/plugin-types';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../ui/card';
+import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
@@ -28,8 +28,12 @@ export const PluginSettingsRenderer: React.FC<PluginSettingsRendererProps> = ({ 
     const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
     const { showToast } = useSlotRegistry();
 
-    // Safely cast configuration to ConfigField[]
-    const configFields = (plugin.alephConfig?.configuration || []) as ConfigField[];
+    // Safely cast configuration to ConfigField[] — support both "configuration" and "settings" keys
+    const configFields = (
+        plugin.alephConfig?.configuration ||
+        plugin.alephConfig?.settings ||
+        []
+    ) as ConfigField[];
 
     useEffect(() => {
         loadSettings();
@@ -81,15 +85,15 @@ export const PluginSettingsRenderer: React.FC<PluginSettingsRendererProps> = ({ 
             }
             showToast({
                 title: "Settings Saved",
-                description: `Configuration for ${plugin.name} has been updated.`,
-                variant: "default"
+                message: `Configuration for ${plugin.name} has been updated.`,
+                type: "success"
             });
         } catch (err) {
             console.error("Failed to save settings", err);
             showToast({
                 title: "Error",
-                description: "Failed to save settings. Check console for details.",
-                variant: "destructive"
+                message: "Failed to save settings. Check console for details.",
+                type: "error"
             });
         }
     };

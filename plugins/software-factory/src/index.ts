@@ -105,7 +105,18 @@ export class SoftwareFactoryPlugin {
   }
 }
 
-export async function activate(context: { dsn: PluginDSN, ai: IAlephAI }) {
+export async function activate(context: { dsn: PluginDSN, ai: IAlephAI, traits?: { register: (trait: any) => void } }) {
   const factory = new SoftwareFactoryPlugin(context.dsn, context.ai);
   await factory.activate();
+
+  if (context.traits) {
+    context.traits.register({
+      id: 'software-factory',
+      name: 'Software Factory',
+      description: 'Generate software projects and code.',
+      instruction: 'You can generate software projects using the Software Factory. It provides tools for project scaffolding, code generation, and testing.',
+      activationMode: 'dynamic',
+      triggerKeywords: ['software', 'project', 'scaffold', 'generate code', 'factory', 'build app']
+    });
+  }
 }

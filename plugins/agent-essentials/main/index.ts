@@ -38,8 +38,8 @@ Call web_search with a 'query' parameter containing your search terms. Results i
     context.traits.register({
       id: '@alephnet/agent-essentials:filesystem',
       name: 'Filesystem Access',
-      description: 'Enables reading and writing files in a secure sandbox',
-      instruction: `You can access files in a secure sandbox. Use 'fs_read_file', 'fs_write_file', 'fs_list_files' to manage files.`,
+      description: 'Enables unrestricted reading and writing files across the filesystem',
+      instruction: `You have full filesystem access. Use 'fs_read_file', 'fs_write_file', 'fs_list_files' to manage files anywhere on disk. Paths can be absolute or relative.`,
       activationMode: 'dynamic',
       triggerKeywords: ['file', 'read', 'write', 'save', 'list files', 'directory'],
       priority: 10,

@@ -75,7 +75,7 @@ export interface DSNNodeConfig extends Omit<AlephDSNNodeConfig, 'status' | 'stak
 export interface MessagePayload {
   content: string;
   mode: 'Chat' | 'Task' | 'Proposal';
-  resonance: number;
+  resonance?: number;
   model?: string;
   attachments?: Array<{
     name: string;
@@ -120,6 +120,19 @@ export interface IElectronAPI {
   configGetLogging: () => Promise<any>;
   configUpdateLogging: (updates: any) => Promise<void>;
 
+  // Agent Sandbox
+  configIsSandboxed: () => Promise<boolean>;
+  configSetSandboxed: (sandboxed: boolean) => Promise<{ success: boolean; sandboxed: boolean }>;
+
+  // Workspace
+  configGetWorkspace: () => Promise<string | null>;
+  configSetWorkspace: (path: string) => Promise<{ success: boolean; path?: string | null; error?: string }>;
+  selectWorkspace: () => Promise<string | null>;
+  workspaceOpenFolder: () => Promise<{ success: boolean; path?: string; name?: string | null; error?: string } | null>;
+  workspaceClose: () => Promise<{ success: boolean }>;
+  workspaceGetInfo: () => Promise<{ open: boolean; path: string | null; name: string | null }>;
+  onWorkspaceChanged: (callback: (event: any, data: { path: string | null }) => void) => () => void;
+
   // AI Provider Management
   getAISettings: () => Promise<AISettings>;
   saveAISettings: (settings: AISettings) => Promise<boolean>;
@@ -152,6 +165,18 @@ export interface IElectronAPI {
   pluginStorageSet: (pluginId: string, key: string, value: any) => Promise<void>;
   pluginStorageDelete: (pluginId: string, key: string) => Promise<void>;
 
+  // Plugin Tooling
+  pluginRegisterTool: (pluginId: string, toolName: string) => void;
+  pluginInvokeTool: (toolName: string, args: unknown) => Promise<unknown>;
+  pluginInvokeRenderer: (pluginId: string, channel: string, data: unknown) => Promise<unknown>;
+
+  // Session Management
+  sessionStart: () => Promise<void>;
+  sessionStop: () => Promise<void>;
+  sessionSnapshot: () => Promise<unknown>;
+  sessionAct: (action: unknown) => Promise<unknown>;
+  sessionGetState: () => Promise<unknown>;
+
   // Logging
   getLogs: (limit?: number) => Promise<LogEntry[]>;
   getLogsByCategory: (category: string, limit?: number) => Promise<LogEntry[]>;
@@ -175,12 +200,25 @@ export interface IElectronAPI {
   agentUserResponse: (params: AgentUserResponsePayload) => Promise<void>;
   agentGetTask: (params: { taskId: string }) => Promise<AgentTask | null>;
   agentGetActiveTask: (params: { conversationId: string }) => Promise<AgentTask | null>;
+  agentGetDefaultChain: () => Promise<string | null>;
+  agentSetDefaultChain: (params: { chainName: string | null }) => Promise<void>;
   onAgentTaskUpdate: (callback: (event: any, data: AgentTaskUpdateEvent) => void) => () => void;
   onAgentTaskMessage: (callback: (event: any, data: AgentTaskMessageEvent) => void) => () => void;
+  onAgentStreamChunk?: (callback: (event: any, data: { messageId: string; chunk: string; done?: boolean }) => void) => () => void;
+  onAgentSuggestions?: (callback: (event: any, data: { messageId: string; conversationId: string; suggestedNextSteps: string[] }) => void) => () => void;
 
   // App-level Command Invocation
   onAppInvoke: (callback: (event: any, payload: { requestId: string, channel: string, data: any }) => void) => () => void;
   sendAppResponse: (requestId: string, response: any) => Promise<void>;
+
+  // OpenClaw Gateway
+  openclawConnect: (options: { url?: string }) => Promise<{ connected: boolean }>;
+  openclawDisconnect: () => Promise<void>;
+  openclawStatus: () => Promise<{ connected: boolean; url?: string }>;
+  openclawListNodes: () => Promise<Array<{ id: string; [key: string]: unknown }>>;
+  openclawSubmitTask: (options: { description: string; requirements?: Record<string, unknown> }) => Promise<{ taskId: string }>;
+  openclawGetTaskStatus: (options: { taskId: string }) => Promise<{ status: string; result?: unknown }>;
+  openclawCancelTask: (options: { taskId: string }) => Promise<{ cancelled: boolean }>;
 
   // ─── Resonant Agents ──────────────────────────────────────────────
   resonantAgentList: (params?: any) => Promise<ResonantAgent[]>;
@@ -204,6 +242,11 @@ export interface IElectronAPI {
   resonantTeamOrchestrate: (params: OrchestrateTeamParams) => Promise<OrchestrateResult>;
   resonantToolList: () => Promise<Array<Omit<ToolRegistration, 'handler'>>>;
   onResonantAgentChanged?: (callback: (event: any, data: any) => void) => () => void;
+
+  // ─── Whisper Speech-to-Text ──────────────────────────────────────
+  whisperIsReady: () => Promise<boolean>;
+  whisperTranscribe: (wavBase64: string) => Promise<{ text: string; error: string | null }>;
+  whisperRefine: (rawText: string, previousRefinedText?: string) => Promise<{ text: string; error: string | null }>;
 }
 
 declare global {

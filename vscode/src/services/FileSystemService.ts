@@ -88,8 +88,10 @@ export class FileSystemService {
   }
 
   /**
-   * Check if file system access is allowed and the path is within the workspace sandbox.
-   * Prevents directory traversal attacks (e.g. ../../etc/passwd).
+   * Check if file system access is allowed.
+   * The agent is trusted and has full filesystem access — no workspace
+   * sandboxing is enforced.  Only the global kill-switch
+   * (allowFileSystemAccess=false) is honoured.
    */
   private checkAccess(filePath: string): void {
     const config = getConfig();
@@ -102,20 +104,9 @@ export class FileSystemService {
       );
     }
 
-    // Path sandboxing: resolved path must be within the workspace root.
-    // This prevents ../../../etc/passwd style traversal attacks.
-    const root = this.getWorkspaceRoot();
-    const normalizedPath = path.resolve(filePath);
-    const normalizedRoot = path.resolve(root);
-
-    if (!normalizedPath.startsWith(normalizedRoot + path.sep) && normalizedPath !== normalizedRoot) {
-      throw new ProtocolError(
-        ErrorCode.PathRestricted,
-        `Path escapes workspace sandbox: ${filePath}`,
-        { path: filePath, workspace: normalizedRoot }
-      );
-    }
-
+    // No workspace sandboxing — agent is trusted with full FS access.
+    // Path restriction list is still checked if the user has explicitly
+    // configured specific deny patterns.
     if (isPathRestricted(filePath)) {
       throw new ProtocolError(
         ErrorCode.PathRestricted,

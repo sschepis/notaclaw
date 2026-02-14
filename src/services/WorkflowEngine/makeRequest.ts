@@ -1,5 +1,5 @@
 import { AIProviderManager } from '../AIProviderManager';
-import { AIRequestOptions, AIResponse } from '../../shared/ai-types';
+import { AIRequestOptions, AIResponse } from '@notaclaw/core/ai-types';
 import { AIError } from './AIError';
 
 export async function makeRequestWithRetry(

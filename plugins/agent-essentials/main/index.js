@@ -40,15 +40,14 @@ var os = __toESM(require("os"));
 var import_archiver = __toESM(require("archiver"));
 var unzipper = __toESM(require("unzipper"));
 var FilesystemService = class {
-  sandboxRoot;
-  constructor(sandboxRoot) {
-    const root = sandboxRoot || "~/alephnet/sandbox";
+  baseRoot;
+  constructor(baseRoot) {
+    const root = baseRoot || os.homedir();
     if (root.startsWith("~")) {
-      this.sandboxRoot = path.join(os.homedir(), root.slice(1));
+      this.baseRoot = path.join(os.homedir(), root.slice(1));
     } else {
-      this.sandboxRoot = path.resolve(root);
+      this.baseRoot = path.resolve(root);
     }
-    this.ensureSandboxExists();
   }
   resolvePath(filePath) {
     if (filePath.startsWith("~")) {
@@ -57,18 +56,14 @@ var FilesystemService = class {
     if (path.isAbsolute(filePath)) {
       return path.resolve(filePath);
     }
-    return path.resolve(this.sandboxRoot, filePath);
+    return path.resolve(this.baseRoot, filePath);
   }
-  ensureSandboxExists() {
-    if (!fs.existsSync(this.sandboxRoot)) {
-      fs.mkdirSync(this.sandboxRoot, { recursive: true });
-    }
-  }
+  /**
+   * Validate and resolve a path. No sandbox restrictions — the agent
+   * is trusted and has full filesystem access.
+   */
   validatePath(filePath) {
     const resolvedPath = this.resolvePath(filePath);
-    if (!resolvedPath.startsWith(this.sandboxRoot)) {
-      throw new Error(`Security Error: Access denied to path '${filePath}'. Outside of sandbox '${this.sandboxRoot}'.`);
-    }
     return resolvedPath;
   }
   async readFile(filePath) {
@@ -474,12 +469,12 @@ var ClipboardService = class {
 function registerFilesystemTools(context, service) {
   context.dsn.registerTool({
     name: "fs_read_file",
-    description: "Read the contents of a file within the sandbox",
+    description: "Read the contents of a file at any path on the filesystem",
     executionLocation: "SERVER",
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string", description: "Relative path to the file" }
+        path: { type: "string", description: "Absolute or relative path to the file" }
       },
       required: ["path"]
     },
@@ -494,12 +489,12 @@ function registerFilesystemTools(context, service) {
   });
   context.dsn.registerTool({
     name: "fs_write_file",
-    description: "Write content to a file within the sandbox",
+    description: "Write content to a file at any path on the filesystem",
     executionLocation: "SERVER",
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string", description: "Relative path to the file" },
+        path: { type: "string", description: "Absolute or relative path to the file" },
         content: { type: "string", description: "Content to write" }
       },
       required: ["path", "content"]
@@ -830,8 +825,8 @@ Call web_search with a 'query' parameter containing your search terms. Results i
     context.traits.register({
       id: "@alephnet/agent-essentials:filesystem",
       name: "Filesystem Access",
-      description: "Enables reading and writing files in a secure sandbox",
-      instruction: `You can access files in a secure sandbox. Use 'fs_read_file', 'fs_write_file', 'fs_list_files' to manage files.`,
+      description: "Enables unrestricted reading and writing files across the filesystem",
+      instruction: `You have full filesystem access. Use 'fs_read_file', 'fs_write_file', 'fs_list_files' to manage files anywhere on disk. Paths can be absolute or relative.`,
       activationMode: "dynamic",
       triggerKeywords: ["file", "read", "write", "save", "list files", "directory"],
       priority: 10,

@@ -9,11 +9,10 @@ import { SessionManager } from './services/SessionManager';
 import { ServiceRegistry } from './services/ServiceRegistry';
 import { ServiceClient } from './services/ServiceClient';
 import { SecretsManager } from './services/SecretsManager';
-import { logManager } from './services/LogManager';
 import { logger } from './services/Logger';
 import { configManager } from './services/ConfigManager';
 
-export { logManager, logger, configManager };
+export { logger, configManager };
 import { AlephNetClient } from './services/AlephNetClient';
 import { registerAlephNetIPC } from './services/AlephNetIPC';
 import { ConversationManager } from './services/ConversationManager';
@@ -30,14 +29,54 @@ import { MarketplaceService } from './services/MarketplaceService';
 import { getOpenClawGateway } from './services/OpenClawGatewayService';
 import { DesktopAccessibilityLearner } from './services/desktop-learner';
 import { AgentTaskRunner } from './services/agent-runner';
-import { TeamManager } from './services/TeamManager';
 import { AgentToolRegistry } from './services/AgentToolRegistry';
 import { ResonantAgentService } from './services/ResonantAgentService';
+import { WhisperService } from './services/WhisperService';
+import { MomentaryContextService } from './services/MomentaryContextService';
+import { workspaceService } from './services/WorkspaceService';
+import { SoftwareFactoryService } from './services/SoftwareFactoryService';
+
+export { workspaceService };
+
+// --- Renderer communication helper ---
+// Stored reference to the window factory; set during initializeServices.
+let _getMainWindow: (() => Electron.BrowserWindow | null) | null = null;
+
+/**
+ * Send a message to the renderer process if the window is available.
+ * Silently skips if the window is unavailable — this is expected during startup/shutdown.
+ */
+function sendToRenderer(channel: string, ...args: unknown[]): void {
+    const w = _getMainWindow?.();
+    if (w && !w.isDestroyed()) {
+        w.webContents.send(channel, ...args);
+    }
+}
+
+/**
+ * Log via the Logger singleton AND forward to the renderer as a log-entry event
+ * (replaces the dual Logger + LogManager pattern).
+ */
+function logToRenderer(
+    level: 'info' | 'warn' | 'error' | 'debug',
+    category: string,
+    title: string,
+    message: string,
+): void {
+    logger[level](category, title, message);
+    sendToRenderer('log-entry', {
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        level,
+        category,
+        title,
+        message,
+    });
+}
 
 // Instantiate core services
 export const aiManager = new AIProviderManager();
 export const personalityManager = new PersonalityManager(aiManager);
-export const teamManager = new TeamManager();
 export const dsnNode = new DSNNode(aiManager, personalityManager);
 export const identityManager = new IdentityManager();
 export const alephNetClient = new AlephNetClient(dsnNode.getBridge(), aiManager, identityManager, dsnNode.getDomainManager());
@@ -82,28 +121,43 @@ export const taskScheduler = new TaskScheduler(dsnNode.getBridge(), identityMana
 export const risaService = new RISAService();
 export const desktopLearner = new DesktopAccessibilityLearner(alephNetClient, aiManager, sessionManager);
 
+// Agent Tool Registry (centralized tool definitions)
+export const agentToolRegistry = new AgentToolRegistry();
+agentToolRegistry.registerCoreTools();
+
+// Software Factory — core prompt chain integration (loads chain, compiles tools, registers in registry)
+export const softwareFactoryService = new SoftwareFactoryService(agentToolRegistry, aiManager);
+
 // Agent Task Runner
 export const agentTaskRunner = new AgentTaskRunner(
     aiManager,
     personalityManager,
     conversationManager,
-    alephNetClient
+    alephNetClient,
+    agentToolRegistry
 );
 
 // Inject AgentTaskRunner into DSNNode
 dsnNode.setAgentTaskRunner(agentTaskRunner);
 
 // Resonant Agents (consolidated agent system)
-export const agentToolRegistry = new AgentToolRegistry();
-agentToolRegistry.registerCoreTools();
-agentTaskRunner.setToolRegistry(agentToolRegistry);
 export const resonantAgentService = new ResonantAgentService(agentTaskRunner, agentToolRegistry);
+
+// Whisper Speech-to-Text
+export const whisperService = new WhisperService();
+
+// Momentary Context Service — generates compressed situational summaries
+export const momentaryContextService = new MomentaryContextService(aiManager);
 
 // Wire up Personality Manager
 personalityManager.setAlephNetClient(alephNetClient);
 personalityManager.setConversationManager(conversationManager);
 personalityManager.setSessionManager(sessionManager);
 personalityManager.setDesktopLearner(desktopLearner);
+personalityManager.setMomentaryContextService(momentaryContextService);
+
+// Wire Momentary Context into DSNNode
+dsnNode.setMomentaryContextService(momentaryContextService);
 
 conversationManager.setMemoryFieldCreator(async (options) => {
     return alephNetClient.memoryCreate({
@@ -137,6 +191,9 @@ export const services = {
 };
 
 export async function initializeServices(getMainWindow: () => Electron.BrowserWindow | null) {
+    // Store the window factory for the sendToRenderer helper
+    _getMainWindow = getMainWindow;
+
     // Initialize production logger first
     if (logger) {
         await logger.initialize();
@@ -144,77 +201,79 @@ export async function initializeServices(getMainWindow: () => Electron.BrowserWi
     } else {
         console.error('CRITICAL: Logger is undefined during initialization');
     }
-    
+
+    // Initialize Workspace Service (loads persisted workspace path)
+    logToRenderer('info', 'Workspace', 'Initializing', 'Loading workspace configuration...');
+    await workspaceService.initialize();
+    const wsPath = workspaceService.workspacePath;
+    if (wsPath) {
+        logToRenderer('info', 'Workspace', 'Ready', `Workspace: ${wsPath}`);
+    } else {
+        logToRenderer('info', 'Workspace', 'No Workspace', 'No workspace folder configured.');
+    }
+
+    // Forward workspace changes to renderer
+    workspaceService.on('workspace:changed', ({ path: newPath }) => {
+        sendToRenderer('workspace:changed', { path: newPath });
+        logToRenderer('info', 'Workspace', 'Changed', `Workspace changed to: ${newPath || '(none)'}`);
+    });
+
     // Initialize Secrets Manager
-    logManager.info('Security', 'Secrets Vault Initializing', 'Loading encrypted vault...');
-    if (logger) logger.info('Security', 'Secrets Vault', 'Loading encrypted vault...');
+    logToRenderer('info', 'Security', 'Secrets Vault Initializing', 'Loading encrypted vault...');
     await secretsManager.initialize();
     
-    // Forward audit events to log manager
+    // Forward audit events to logger + renderer
     secretsManager.on('secret-event', (event) => {
         const level = event.type.includes('error') ? 'warn' : 'debug';
-        logManager.log(level, 'Security', event.type, event.details || `${event.namespace || ''}/${event.key || ''}`);
+        logToRenderer(level, 'Security', event.type, event.details || `${event.namespace || ''}/${event.key || ''}`);
     });
-    logManager.info('Security', 'Secrets Vault Ready', 'Encrypted secrets vault initialized.');
+    logToRenderer('info', 'Security', 'Secrets Vault Ready', 'Encrypted secrets vault initialized.');
 
     // Initialize AI Manager
-    logManager.info('AI', 'AI Manager Initializing', 'Loading AI settings and providers...');
+    logToRenderer('info', 'AI', 'AI Manager Initializing', 'Loading AI settings and providers...');
     await aiManager.initialize();
-    logManager.info('AI', 'AI Manager Ready', 'AI providers loaded successfully.');
+    logToRenderer('info', 'AI', 'AI Manager Ready', 'AI providers loaded successfully.');
     
     // Initialize Session Manager
     sessionManager.initialize();
 
     // Bind DSNNode events to IPC
     dsnNode.on('status', (status) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('network-update', { status });
-        }
-        logManager.info('Network', 'Status Changed', `DSN Node status: ${status}`);
+        sendToRenderer('network-update', { status });
+        logToRenderer('info', 'Network', 'Status Changed', `DSN Node status: ${status}`);
     });
     dsnNode.on('heartbeat', (timestamp) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('network-update', { lastHeartbeat: timestamp });
-        }
+        sendToRenderer('network-update', { lastHeartbeat: timestamp });
     });
     
     // Forward agent responses to renderer
     dsnNode.on('agent-response', (message) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('message', message);
-        }
+        sendToRenderer('message', message);
+    });
+
+    // Forward agent suggestion chips (arrives after the response, non-blocking)
+    dsnNode.on('agent-suggestions', (data) => {
+        sendToRenderer('agent-suggestions', data);
     });
 
     // Forward local inference requests
     dsnNode.on('request-local-inference', (data) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('request-local-inference', data);
-        }
+        sendToRenderer('request-local-inference', data);
     });
     
     // Agent Task Runner Events
     agentTaskRunner.on('taskUpdate', (event) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('agent:taskUpdate', event);
-        }
+        sendToRenderer('agent:taskUpdate', event);
     });
 
     agentTaskRunner.on('taskMessage', (event) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('agent:taskMessage', event);
-        }
+        sendToRenderer('agent:taskMessage', event);
     });
 
     // Start DSN Node
-    logManager.info('Network', 'DSN Node Starting', 'Connecting to mesh network...');
+    logToRenderer('info', 'Network', 'DSN Node Starting', 'Connecting to mesh network...');
     await dsnNode.start();
-    logManager.info('Network', 'DSN Node Online', 'Successfully connected to mesh network.');
+    logToRenderer('info', 'Network', 'DSN Node Online', 'Successfully connected to mesh network.');
 
     // Initialize Wallet & Service Registry
     const gunIdentity = await identityManager.getIdentity();
@@ -232,16 +291,16 @@ export async function initializeServices(getMainWindow: () => Electron.BrowserWi
         services.pluginManager = new PluginManager(dsnNode, aiManager, signedEnvelopeService, trustEvaluator, trustGate, services.serviceRegistry, personalityManager);
         services.pluginManager.setSecretsProvider(secretsManager);
         
-        logManager.info('Services', 'ServiceRegistry', 'Initialized with Wallet support.');
+        logToRenderer('info', 'Services', 'ServiceRegistry', 'Initialized with Wallet support.');
     } else {
-        logManager.error('Services', 'Initialization Failed', 'No identity found. Cannot initialize ServiceRegistry/Wallet.');
+        logToRenderer('error', 'Services', 'Initialization Failed', 'No identity found. Cannot initialize ServiceRegistry/Wallet.');
     }
     
     // Initialize Plugin Manager
     if (services.pluginManager) {
-        logManager.info('Plugins', 'Plugin Manager Initializing', 'Scanning for plugins...');
+        logToRenderer('info', 'Plugins', 'Plugin Manager Initializing', 'Scanning for plugins...');
         await services.pluginManager.initialize();
-        logManager.info('Plugins', 'Plugin Manager Ready', `Loaded ${services.pluginManager.getPlugins().length} plugins.`);
+        logToRenderer('info', 'Plugins', 'Plugin Manager Ready', `Loaded ${services.pluginManager.getPlugins().length} plugins.`);
     }
 
     // Inject Gun.js bridge
@@ -251,129 +310,110 @@ export async function initializeServices(getMainWindow: () => Electron.BrowserWi
     // Authenticate Gun User
     if (gunIdentity && gunIdentity.sea) {
         try {
-            logManager.info('System', 'GunDB Auth', 'Authenticating with local graph...');
+            logToRenderer('info', 'System', 'GunDB Auth', 'Authenticating with local graph...');
             await dsnNode.getBridge().authenticate(gunIdentity.sea);
-            logManager.info('System', 'GunDB Auth', 'Authenticated with local graph.');
+            logToRenderer('info', 'System', 'GunDB Auth', 'Authenticated with local graph.');
         } catch (err: any) {
-            logManager.error('System', 'GunDB Auth Failed', err.message || String(err));
+            logToRenderer('error', 'System', 'GunDB Auth Failed', err.message || String(err));
         }
     } else {
-        logManager.warn('System', 'GunDB Auth', 'No SEA keys found. Conversations will not be encrypted/persisted correctly.');
+        logToRenderer('warn', 'System', 'GunDB Auth', 'No SEA keys found. Conversations will not be encrypted/persisted correctly.');
     }
 
     // Register AlephNet IPC handlers
-    logManager.info('AlephNet', 'Registering IPC', 'Wiring AlephNet IPC channels...');
+    logToRenderer('info', 'AlephNet', 'Registering IPC', 'Wiring AlephNet IPC channels...');
     registerAlephNetIPC(alephNetClient, getMainWindow);
 
     // Forward AlephNet connection status events to renderer
     alephNetClient.on('aleph:connectionStatus', (statusData: any) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('alephnet-status', statusData);
-        }
-        logManager.info('AlephNet', 'Connection Status', `AlephNet status: ${statusData.status}${statusData.error ? ` - ${statusData.error}` : ''}`);
+        sendToRenderer('alephnet-status', statusData);
+        logToRenderer('info', 'AlephNet', 'Connection Status', `AlephNet status: ${statusData.status}${statusData.error ? ` - ${statusData.error}` : ''}`);
     });
 
     // Connect to AlephNet and push full status to renderer
     const connectResult = await alephNetClient.connect();
     if (connectResult.connected) {
         const fullStatus = await alephNetClient.getStatus();
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('network-update', {
-                status: fullStatus.status,
-                nodeId: fullStatus.id,
-                peers: fullStatus.peers,
-                alephnetConnected: true,
-                tier: fullStatus.tier,
-                version: fullStatus.version,
-                connectedAt: fullStatus.connectedAt,
-                uptime: fullStatus.uptime,
-            });
-        }
-        logManager.info('AlephNet', 'Connected', `Connected as ${fullStatus.id}, tier: ${fullStatus.tier}`);
+        sendToRenderer('network-update', {
+            status: fullStatus.status,
+            nodeId: fullStatus.id,
+            peers: fullStatus.peers,
+            alephnetConnected: true,
+            tier: fullStatus.tier,
+            version: fullStatus.version,
+            connectedAt: fullStatus.connectedAt,
+            uptime: fullStatus.uptime,
+        });
+        logToRenderer('info', 'AlephNet', 'Connected', `Connected as ${fullStatus.id}, tier: ${fullStatus.tier}`);
     } else {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('network-update', {
-                status: 'ERROR',
-                alephnetConnected: false,
-                error: connectResult.error || 'Unknown connection error',
-            });
-        }
-        logManager.error('AlephNet', 'Connection Failed', connectResult.error || 'Unknown error');
+        sendToRenderer('network-update', {
+            status: 'ERROR',
+            alephnetConnected: false,
+            error: connectResult.error || 'Unknown connection error',
+        });
+        logToRenderer('error', 'AlephNet', 'Connection Failed', connectResult.error || 'Unknown error');
     }
-    if (logger) logger.info('AlephNet', 'IPC Ready', 'All AlephNet IPC channels registered.');
-    logManager.info('AlephNet', 'IPC Ready', 'All AlephNet IPC channels registered.');
+    logToRenderer('info', 'AlephNet', 'IPC Ready', 'All AlephNet IPC channels registered.');
 
     // Initialize Desktop Learner (after AlephNet is connected)
-    logManager.info('DesktopLearner', 'Initializing', 'Starting accessibility learner...');
+    logToRenderer('info', 'DesktopLearner', 'Initializing', 'Starting accessibility learner...');
     await desktopLearner.initialize();
 
     // Initialize Task Scheduler
-    logManager.info('TaskScheduler', 'Initializing', 'Loading scheduled tasks...');
+    logToRenderer('info', 'TaskScheduler', 'Initializing', 'Loading scheduled tasks...');
     await taskScheduler.initialize();
     
     taskScheduler.on('task:executed', (result) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('aleph:taskExecution', result);
-        }
+        sendToRenderer('aleph:taskExecution', result);
     });
     taskScheduler.on('task:updated', (task) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('aleph:taskStatusChange', { taskId: task.id, status: task.status });
-        }
+        sendToRenderer('aleph:taskStatusChange', { taskId: task.id, status: task.status });
     });
-    logManager.info('TaskScheduler', 'Ready', 'Task scheduler initialized.');
+    logToRenderer('info', 'TaskScheduler', 'Ready', 'Task scheduler initialized.');
+
+    // Initialize Whisper speech-to-text
+    logToRenderer('info', 'Whisper', 'Initializing', 'Setting up local speech-to-text...');
+    await whisperService.init();
+    if (whisperService.isReady()) {
+        logToRenderer('info', 'Whisper', 'Ready', 'Local speech-to-text available.');
+    } else {
+        logToRenderer('warn', 'Whisper', 'Not Available', 'Whisper binary or model not found. Speech-to-text disabled.');
+    }
+
+    // Initialize Software Factory (loads chain + compiles tools into registry)
+    logToRenderer('info', 'SoftwareFactory', 'Initializing', 'Loading prompt chain and compiling tools...');
+    await softwareFactoryService.initialize();
+    if (softwareFactoryService.isReady()) {
+        logToRenderer('info', 'SoftwareFactory', 'Ready', `Loaded ${softwareFactoryService.getPromptNames().length} prompts, tools registered in AgentToolRegistry.`);
+    } else {
+        logToRenderer('warn', 'SoftwareFactory', 'Not Available', 'Software Factory chain not loaded. Agent will use basic mode.');
+    }
 
     // Initialize Resonant Agent Service
-    logManager.info('ResonantAgents', 'Initializing', 'Loading agent definitions...');
+    logToRenderer('info', 'ResonantAgents', 'Initializing', 'Loading agent definitions...');
     await resonantAgentService.initialize();
-    logManager.info('ResonantAgents', 'Ready', `Loaded ${(await resonantAgentService.listAgents()).length} agents.`);
+    logToRenderer('info', 'ResonantAgents', 'Ready', `Loaded ${(await resonantAgentService.listAgents()).length} agents.`);
 
     // Forward ResonantAgentService events to renderer
     resonantAgentService.on('agentCreated', (agent) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('resonant:agentChanged', { type: 'created', agent });
-        }
+        sendToRenderer('resonant:agentChanged', { type: 'created', agent });
     });
     resonantAgentService.on('agentUpdated', (agent) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('resonant:agentChanged', { type: 'updated', agent });
-        }
+        sendToRenderer('resonant:agentChanged', { type: 'updated', agent });
     });
     resonantAgentService.on('agentDeleted', (agentId) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('resonant:agentChanged', { type: 'deleted', agentId });
-        }
+        sendToRenderer('resonant:agentChanged', { type: 'deleted', agentId });
     });
     resonantAgentService.on('agentSummoned', (agent) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('resonant:agentChanged', { type: 'summoned', agent });
-        }
+        sendToRenderer('resonant:agentChanged', { type: 'summoned', agent });
     });
     resonantAgentService.on('agentDismissed', (agentId) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('resonant:agentChanged', { type: 'dismissed', agentId });
-        }
+        sendToRenderer('resonant:agentChanged', { type: 'dismissed', agentId });
     });
     resonantAgentService.on('agentBusy', (agent) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('resonant:agentChanged', { type: 'busy', agent });
-        }
+        sendToRenderer('resonant:agentChanged', { type: 'busy', agent });
     });
     resonantAgentService.on('agentTaskCompleted', (data) => {
-        const mainWindow = getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('resonant:agentChanged', { type: 'taskCompleted', ...data });
-        }
+        sendToRenderer('resonant:agentChanged', { type: 'taskCompleted', ...data });
     });
 }

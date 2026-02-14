@@ -4,12 +4,12 @@ import { FilesystemService } from '../services/FilesystemService';
 export function registerFilesystemTools(context: PluginContext, service: FilesystemService) {
     context.dsn.registerTool({
         name: 'fs_read_file',
-        description: 'Read the contents of a file within the sandbox',
+        description: 'Read the contents of a file at any path on the filesystem',
         executionLocation: 'SERVER',
         parameters: {
             type: 'object',
             properties: {
-                path: { type: 'string', description: 'Relative path to the file' }
+                path: { type: 'string', description: 'Absolute or relative path to the file' }
             },
             required: ['path']
         },
@@ -24,12 +24,12 @@ export function registerFilesystemTools(context: PluginContext, service: Filesys
 
     context.dsn.registerTool({
         name: 'fs_write_file',
-        description: 'Write content to a file within the sandbox',
+        description: 'Write content to a file at any path on the filesystem',
         executionLocation: 'SERVER',
         parameters: {
             type: 'object',
             properties: {
-                path: { type: 'string', description: 'Relative path to the file' },
+                path: { type: 'string', description: 'Absolute or relative path to the file' },
                 content: { type: 'string', description: 'Content to write' }
             },
             required: ['path', 'content']

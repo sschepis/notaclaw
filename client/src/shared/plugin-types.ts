@@ -27,18 +27,22 @@ export interface AlephSkillDefinition {
 
 export interface AlephExtension {
   $schema?: string;
-  type: 'aleph-extension';
-  alephVersion: string;
-  capabilities: {
+  type?: 'aleph-extension';
+  alephVersion?: string;
+  capabilities?: {
     skillProvider: boolean;
     dsnEnabled: boolean;
     semanticDomain?: string;
   };
   skills?: AlephSkillDefinition[];
-  permissions: PluginPermission[];
+  tools?: AlephSkillDefinition[];
+  permissions?: PluginPermission[];
   components?: any;
   actions?: any;
-  configuration?: any;
+  /** Plugin configuration fields (canonical key) */
+  configuration?: any[];
+  /** Plugin settings fields (alias for configuration, used in some manifests) */
+  settings?: any[];
 }
 
 export interface PluginManifest {

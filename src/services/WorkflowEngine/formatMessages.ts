@@ -21,7 +21,17 @@ export function formatMessages(runner: any, prompt: WorkflowConfig['prompts'][0]
     let system: string, user: string;
 
     try {
-        system = interpolate(prompt.system, combinedArgs);
+        // Decorate system prompt with traits if PersonalityManager is available
+        let rawSystem = prompt.system;
+        if (runner.context.personalityManager) {
+            const contextArgs = combinedArgs as any;
+            rawSystem = runner.context.personalityManager.decorateSystemPrompt(rawSystem, {
+                text: JSON.stringify(combinedArgs), // Scan full context for keywords
+                activeTraits: contextArgs.activeTraits // Allow explicit activation
+            });
+        }
+
+        system = interpolate(rawSystem, combinedArgs);
         user = interpolate(prompt.user, combinedArgs);
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);

@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "_name": "Project Health Check",
+    "_description": "AI-driven health assessment for active projects",
+    "_version": "1.0.0"
+  },
+  "prompts": [
+    {
+      "name": "assess",
+      "system": "You are a project health analyst specializing in AI-driven software development. Evaluate project progress, identify risks, detect blockers, and provide actionable recommendations. Be precise and data-driven. Return valid JSON only.",
+      "user": "Evaluate the health of this project:\n\nProject: {projectName}\nDescription: {projectDescription}\nStatus: {projectStatus}\nCompletion: {completionPercentage}%\n\nTasks:\n{taskSummary}\n\nMilestones:\n{milestoneSummary}\n\nCheck for:\n1. Stale tasks (in_progress for too long relative to estimate)\n2. Blocked tasks with no resolution path\n3. Critical path drift (will the project miss its estimated completion?)\n4. Agent errors or unresponsive agents\n5. Upcoming milestone deadlines at risk\n\nReturn JSON:\n{\n  \"overallHealth\": \"healthy|at_risk|critical\",\n  \"findings\": [\n    {\n      \"type\": \"stale_task|blocker|critical_path_drift|agent_error|milestone_reached\",\n      \"severity\": \"info|warning|critical\",\n      \"taskId\": \"optional task ID\",\n      \"message\": \"Description of the finding\",\n      \"suggestedAction\": \"What to do about it\"\n    }\n  ],\n  \"recommendations\": [\"Actionable recommendation strings\"],\n  \"estimatedCompletionAt\": 0\n}",
+      "responseFormat": {
+        "overallHealth": "string",
+        "findings": [{
+          "type": "string",
+          "severity": "string",
+          "taskId": "string",
+          "message": "string",
+          "suggestedAction": "string"
+        }],
+        "recommendations": ["string"],
+        "estimatedCompletionAt": "number"
+      }
+    }
+  ]
+}

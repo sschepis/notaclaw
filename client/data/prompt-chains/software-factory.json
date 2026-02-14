@@ -324,7 +324,7 @@
       "type": "function",
       "function": {
         "name": "executeBash",
-        "description": "Execute a bash command",
+        "description": "Execute a bash command and return stdout or error output",
         "parameters": {
           "type": "object",
           "properties": {
@@ -337,14 +337,14 @@
             "command"
           ]
         },
-        "script": "async ({ command }, context) => {\n  const { exec } = context.require('child_process');\n  return new Promise((resolve, reject) => {\n    exec(command.trim(), { cwd: process.cwd() }, (error, stdout, stderr) => {\n      if (error) {\n        resolve(error.message || stderr);\n      } else {\n        resolve(stdout);\n      }\n    });\n  });\n}"
+        "script": "async ({ command }, context) => {\n  const { exec } = require('child_process');\n  return new Promise((resolve) => {\n    exec(command.trim(), { cwd: process.cwd() }, (error, stdout, stderr) => {\n      if (error) {\n        resolve(error.message || stderr);\n      } else {\n        resolve(stdout);\n      }\n    });\n  });\n}"
       }
     },
     {
       "type": "function",
       "function": {
         "name": "callStructuredPrompt",
-        "description": "Call a structured prompt",
+        "description": "Call a structured prompt by name, enabling recursive/nested prompt execution (DAG traversal)",
         "parameters": {
           "type": "object",
           "properties": {
@@ -368,8 +368,33 @@
     {
       "type": "function",
       "function": {
+        "name": "completeWithFunction",
+        "description": "Complete a task by calling a named function tool with arguments, then mark the task as done",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "functionName": {
+              "type": "string",
+              "description": "The name of the tool function to call"
+            },
+            "args": {
+              "type": "object",
+              "description": "Arguments to pass to the function"
+            }
+          },
+          "required": [
+            "functionName",
+            "args"
+          ]
+        },
+        "script": "async ({ functionName, args }, context) => {\n  const toolFn = context.tools[functionName];\n  if (!toolFn) {\n    throw new Error(`Function \"${functionName}\" not found in available tools`);\n  }\n  const result = await toolFn(args || {});\n  context.state.set('taskCompleted', true);\n  return { response: result, taskCompleted: true };\n}"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
         "name": "completeTask",
-        "description": "Complete the original task",
+        "description": "Complete the original task with a final response",
         "parameters": {
           "type": "object",
           "properties": {
@@ -461,6 +486,175 @@
           "required": []
         },
         "script": "async ({}, context) => {\n  return { keys: Object.keys(context.state.getAll()) };\n}"
+      }
+    }
+  ],
+  "loops": [],
+  "conditions": [],
+  "subchains": [],
+  "edges": [
+    {
+      "id": "e-main-tool-completeTask-{state.taskCompleted} === true",
+      "source": "main",
+      "target": "tool-completeTask",
+      "label": "{state.taskCompleted} === true",
+      "data": {
+        "condition": "{state.taskCompleted} === true",
+        "arguments": {
+          "response": "{result.response}"
+        }
+      }
+    },
+    {
+      "id": "e-main-main-{state.taskCompleted} !== true",
+      "source": "main",
+      "target": "main",
+      "label": "{state.taskCompleted} !== true",
+      "data": {
+        "condition": "{state.taskCompleted} !== true",
+        "arguments": {
+          "primaryTask": "{state.primaryTask}",
+          "history": "{history}\nQ: {state.primaryTask}\nA: {result.response}"
+        }
+      }
+    },
+    {
+      "id": "e-taskDecomposer-tool-completeTask-true",
+      "source": "taskDecomposer",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": {
+          "subtasks": "{subtasks}"
+        }
+      }
+    },
+    {
+      "id": "e-expertRouter-{expertModule}-expertModule !== 'general'",
+      "source": "expertRouter",
+      "target": "{expertModule}",
+      "label": "expertModule !== 'general'",
+      "data": {
+        "condition": "expertModule !== 'general'",
+        "arguments": {
+          "task": "{task}"
+        }
+      }
+    },
+    {
+      "id": "e-expertRouter-main-true",
+      "source": "expertRouter",
+      "target": "main",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": {
+          "query": "{task}",
+          "history": ""
+        }
+      }
+    },
+    {
+      "id": "e-projectStateAnalyzer-tool-completeTask-true",
+      "source": "projectStateAnalyzer",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": "{result}"
+      }
+    },
+    {
+      "id": "e-requirementsEnhancer-tool-completeTask-true",
+      "source": "requirementsEnhancer",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": "{result}"
+      }
+    },
+    {
+      "id": "e-applicationDesigner-tool-completeTask-true",
+      "source": "applicationDesigner",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": "{result}"
+      }
+    },
+    {
+      "id": "e-taskListGenerator-tool-completeTask-true",
+      "source": "taskListGenerator",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": "{result}"
+      }
+    },
+    {
+      "id": "e-taskExecutor-tool-completeTask-true",
+      "source": "taskExecutor",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": "{result}"
+      }
+    },
+    {
+      "id": "e-documentationGenerator-tool-completeTask-true",
+      "source": "documentationGenerator",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": "{result}"
+      }
+    },
+    {
+      "id": "e-testCoverageAnalyzer-tool-completeTask-true",
+      "source": "testCoverageAnalyzer",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": "{result}"
+      }
+    },
+    {
+      "id": "e-cicdAutomationGenerator-tool-completeTask-true",
+      "source": "cicdAutomationGenerator",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": "{result}"
+      }
+    },
+    {
+      "id": "e-gitProjectInitializer-tool-completeTask-true",
+      "source": "gitProjectInitializer",
+      "target": "tool-completeTask",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": "{result}"
+      }
+    },
+    {
+      "id": "e-stateManager-tool-respond-true",
+      "source": "stateManager",
+      "target": "tool-respond",
+      "label": "Always",
+      "data": {
+        "condition": "true",
+        "arguments": {
+          "response": "{result}"
+        }
       }
     }
   ]

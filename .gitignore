@@ -45,5 +45,13 @@ yarn-error.log*
 .Trashes
 ehthumbs.db
 
+# Python virtual environments
+.venv/
+__pycache__/
+
 # Test artifacts
 *.lcov
+
+# Shared build artifacts
+src/shared/**/*.js
+src/shared/**/*.js.map

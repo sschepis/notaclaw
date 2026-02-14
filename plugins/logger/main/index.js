@@ -25,4 +25,14 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 var index_default = (context) => {
   console.log("[Logger] Main process loaded");
+  if (context.traits) {
+    context.traits.register({
+      id: "system-logger",
+      name: "System Logging",
+      description: "Log system events.",
+      instruction: "You can log system events for debugging or auditing purposes. The system automatically captures logs, but you can explicitly note important events.",
+      activationMode: "manual"
+      // Passive
+    });
+  }
 };

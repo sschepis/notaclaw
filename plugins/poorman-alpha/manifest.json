@@ -1,0 +1,144 @@
+{
+  "id": "com.notaclaw.poorman-alpha",
+  "version": "0.2.0",
+  "name": "Poorman Computational Tool",
+  "description": "Unit conversion, symbolic algebra, matrix operations, and computational math via mathjs and nerdamer, with optional SymPy bridge for advanced operations including step-by-step solutions and plot generation.",
+  "author": "notaclaw",
+  "main": "index.js",
+  "renderer": "renderer/bundle.js",
+  "permissions": [
+    "dsn:register-tool",
+    "exec:spawn",
+    "store:read",
+    "store:write"
+  ],
+  "semanticDomain": "cognitive",
+  "aleph": {
+    "configuration": [
+      {
+        "key": "pythonPath",
+        "label": "Python 3 Path",
+        "type": "string",
+        "default": "python3",
+        "description": "Path to the Python 3 interpreter for SymPy operations."
+      },
+      {
+        "key": "sympyTimeout",
+        "label": "SymPy Timeout (ms)",
+        "type": "number",
+        "default": 30000,
+        "description": "Maximum time in milliseconds for SymPy computations."
+      },
+      {
+        "key": "nerdamerTimeout",
+        "label": "Nerdamer Timeout (ms)",
+        "type": "number",
+        "default": 10000,
+        "description": "Maximum time in milliseconds for nerdamer worker computations."
+      },
+      {
+        "key": "cacheEnabled",
+        "label": "Enable Result Cache",
+        "type": "boolean",
+        "default": true,
+        "description": "Cache computation results to avoid redundant calculations."
+      },
+      {
+        "key": "defaultFormat",
+        "label": "Default Output Format",
+        "type": "select",
+        "options": ["text", "latex", "all"],
+        "default": "text",
+        "description": "Default output format for computation results."
+      },
+      {
+        "key": "persistentPython",
+        "label": "Persistent Python Process",
+        "type": "boolean",
+        "default": true,
+        "description": "Keep a persistent Python process running for faster SymPy operations."
+      }
+    ],
+    "tools": [
+      {
+        "name": "compute",
+        "description": "Evaluate math expressions: unit conversions, symbolic algebra, arithmetic, expand, factor, simplify. Supports text and LaTeX output formats.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "A math expression to evaluate."
+            },
+            "format": {
+              "type": "string",
+              "description": "Output format: text, latex, or all.",
+              "enum": ["text", "latex", "all"]
+            }
+          },
+          "required": ["expression"]
+        }
+      },
+      {
+        "name": "sympy_compute",
+        "description": "Evaluate advanced symbolic math via SymPy. Supports integrals, derivatives, differential equations, series, step-by-step solutions, and plot generation.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "A SymPy expression to evaluate."
+            },
+            "format": {
+              "type": "string",
+              "enum": ["text", "latex", "all"]
+            },
+            "steps": {
+              "type": "boolean",
+              "description": "Include step-by-step solution."
+            },
+            "plot": {
+              "type": "boolean",
+              "description": "Generate a plot as base64 PNG."
+            }
+          },
+          "required": ["expression"]
+        }
+      },
+      {
+        "name": "matrix_compute",
+        "description": "Matrix and linear algebra operations: determinant, inverse, transpose, eigenvalues, rank.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "A matrix expression (e.g. det([[1,2],[3,4]]))"
+            },
+            "format": {
+              "type": "string",
+              "enum": ["text", "latex", "all"]
+            }
+          },
+          "required": ["expression"]
+        }
+      },
+      {
+        "name": "compute_cache_stats",
+        "description": "Get cache statistics or clear the computation cache.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": ["stats", "clear"]
+            }
+          },
+          "required": ["action"]
+        }
+      }
+    ],
+    "smfProfile": [0.9, 0.1, 0.8, 0.2, 0.3, 0.1, 0.7, 0.4,
+                   0.6, 0.2, 0.8, 0.1, 0.5, 0.3, 0.7, 0.3]
+  }
+}

@@ -23,6 +23,20 @@ export interface LoggingConfig {
 export interface AgentConfig {
   /** Name of the default prompt chain file (without .json extension) */
   defaultPromptChain: string | null;
+  /**
+   * When true (default), the agent's filesystem and shell tools are sandboxed
+   * to the active workspace directory. When false, the agent can access any
+   * path the OS user can reach (e.g. the home folder).
+   */
+  sandboxAgent: boolean;
+}
+
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  isMaximized?: boolean;
 }
 
 export interface AppConfig {
@@ -30,6 +44,7 @@ export interface AppConfig {
   logging: LoggingConfig;
   workspace?: WorkspaceConfig;
   agent?: AgentConfig;
+  windowBounds?: WindowBounds;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -90,19 +105,53 @@ export class ConfigManager {
     return this.config.logging;
   }
 
+  private static readonly DEFAULT_AGENT_CONFIG: AgentConfig = {
+    defaultPromptChain: 'software-factory',
+    sandboxAgent: true,
+  };
+
   getAgentConfig(): AgentConfig {
-    return this.config.agent || { defaultPromptChain: null };
+    return this.config.agent || { ...ConfigManager.DEFAULT_AGENT_CONFIG };
   }
 
   getDefaultPromptChain(): string | null {
-    return this.config.agent?.defaultPromptChain || null;
+    return this.getAgentConfig().defaultPromptChain;
   }
 
   async setDefaultPromptChain(chainName: string | null): Promise<void> {
     if (!this.config.agent) {
-      this.config.agent = { defaultPromptChain: null };
+      this.config.agent = { ...ConfigManager.DEFAULT_AGENT_CONFIG };
     }
-    this.config.agent.defaultPromptChain = chainName;
+    this.config.agent!.defaultPromptChain = chainName;
+    await this.save();
+  }
+
+  /**
+   * Whether the agent is sandboxed to the workspace directory.
+   * Defaults to true (sandboxed).
+   */
+  isSandboxed(): boolean {
+    return this.config.agent?.sandboxAgent ?? true;
+  }
+
+  /**
+   * Toggle agent sandboxing.
+   * When false, the agent can access paths outside the workspace (e.g. home folder).
+   */
+  async setSandboxed(sandboxed: boolean): Promise<void> {
+    if (!this.config.agent) {
+      this.config.agent = { ...ConfigManager.DEFAULT_AGENT_CONFIG };
+    }
+    this.config.agent!.sandboxAgent = sandboxed;
+    await this.save();
+  }
+
+  getWindowBounds(): WindowBounds | undefined {
+    return this.config.windowBounds;
+  }
+
+  async setWindowBounds(bounds: WindowBounds): Promise<void> {
+    this.config.windowBounds = bounds;
     await this.save();
   }
 

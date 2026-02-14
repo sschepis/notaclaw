@@ -11,6 +11,9 @@ export interface PluginContext {
     get: (key: string) => Promise<any>;
     set: (key: string, value: any) => Promise<void>;
   };
+  traits?: {
+    register: (trait: any) => void;
+  };
 }
 
 class TradingService {
@@ -39,6 +42,16 @@ class TradingService {
       this.positions.push(trade);
       return trade;
     });
+
+    if (this.context.traits) {
+      this.context.traits.register({
+        id: 'degen-trader',
+        name: 'Crypto Trading',
+        description: 'Execute trades and manage portfolio.',
+        instruction: 'You can execute cryptocurrency trades using `trade:execute` (via IPC or tool mapping). Use this carefully for portfolio management tasks.',
+        activationMode: 'manual' // Manual activation for safety
+      });
+    }
   }
 }
 

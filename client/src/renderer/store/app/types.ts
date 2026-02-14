@@ -109,9 +109,14 @@ export interface AppState {
   isGenerating: boolean;
   generationProgress: GenerationProgress | null;
   pendingAttachments: Attachment[];
+  pendingSuggestions: string[] | null;
   abortController: AbortController | null;
   editingMessageId: string | null;
   selectedModel: string | null;
+  
+  // Streaming state — accumulates content for a message being streamed token-by-token
+  streamingMessageId: string | null;
+  streamingContent: string;
 
   // Layout Actions
   layoutAction: { type: 'open', component: string, name: string, icon?: string, props?: any } | null;
@@ -166,8 +171,14 @@ export interface AppState {
   clearPendingAttachments: () => void;
   setAbortController: (controller: AbortController | null) => void;
   setEditingMessageId: (id: string | null) => void;
+  setPendingSuggestions: (suggestions: string[] | null) => void;
   setSelectedModel: (model: string | null) => void;
   loadSelectedModelFromSettings: () => Promise<void>;
+  
+  // Streaming Actions
+  startStreaming: (messageId: string) => void;
+  appendStreamChunk: (chunk: string) => void;
+  finalizeStream: () => void;
 
   // Agent Task Actions
   startAgentTask: (conversationId: string, message: string, metadata: any) => Promise<string>;

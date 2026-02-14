@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Like openclaw but better",
   "main": "src/index.ts",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "test": "jest",
     "test:coverage": "jest --coverage"

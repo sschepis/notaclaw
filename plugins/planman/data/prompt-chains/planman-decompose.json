@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "_name": "Project Plan Decomposition",
+    "_description": "Multi-step chain for decomposing project goals into executable task plans",
+    "_version": "1.0.0"
+  },
+  "prompts": [
+    {
+      "name": "analyze",
+      "system": "You are a senior technical project manager with deep experience in software engineering, product development, and team coordination. Analyze the given project and identify all implicit requirements, technical risks, required skill domains, and constraints. Be thorough and consider edge cases. Return valid JSON only.",
+      "user": "Analyze this project:\nName: {name}\nDescription: {description}\nGoals:\n{goals}\n\nIdentify:\n1. Implicit requirements not explicitly stated\n2. Technical risks with severity (high/medium/low) and mitigations\n3. Skill domains needed (e.g., frontend, backend, DevOps, ML)\n4. Constraints (time, technology, resource)\n\nReturn JSON:\n{\n  \"requirements\": [\"string\"],\n  \"risks\": [{\"description\": \"string\", \"severity\": \"high|medium|low\", \"mitigation\": \"string\"}],\n  \"skillDomains\": [\"string\"],\n  \"constraints\": [\"string\"]\n}",
+      "responseFormat": {
+        "requirements": ["string"],
+        "risks": [{"description": "string", "severity": "string", "mitigation": "string"}],
+        "skillDomains": ["string"],
+        "constraints": ["string"]
+      },
+      "then": { "next": "decompose" }
+    },
+    {
+      "name": "decompose",
+      "system": "You are a project decomposition specialist. Given a project analysis, break the project into milestones and actionable tasks. Each task must be concrete, independently assignable to an AI agent, and have testable acceptance criteria. Tasks should be small enough for a single focused work session (1-8 hours). Return valid JSON only.",
+      "user": "Given the analysis:\n{state.analyze}\n\nDecompose into milestones and tasks. Each task MUST have:\n- Clear, actionable title (verb-noun format, e.g., 'Implement user authentication')\n- Detailed description of what to do\n- Acceptance criteria (specific, testable conditions for completion)\n- Dependencies on other tasks (by exact title)\n- Priority: critical, high, medium, or low\n- Estimated effort (e.g., '2 hours', '4 hours', '1 day')\n- Tags for skill domains needed (e.g., ['backend', 'database'])\n\nReturn JSON:\n{\n  \"milestones\": [\n    {\n      \"name\": \"Milestone Name\",\n      \"tasks\": [\n        {\n          \"title\": \"Task title\",\n          \"description\": \"Detailed description\",\n          \"priority\": \"high\",\n          \"estimatedEffort\": \"2 hours\",\n          \"dependsOn\": [\"Other task title\"],\n          \"tags\": [\"backend\", \"database\"],\n          \"acceptanceCriteria\": [\"Criterion 1\", \"Criterion 2\"]\n        }\n      ]\n    }\n  ]\n}",
+      "responseFormat": {
+        "milestones": [{
+          "name": "string",
+          "tasks": [{
+            "title": "string",
+            "description": "string",
+            "priority": "string",
+            "estimatedEffort": "string",
+            "dependsOn": ["string"],
+            "tags": ["string"],
+            "acceptanceCriteria": ["string"]
+          }]
+        }]
+      },
+      "then": { "next": "sequence" }
+    },
+    {
+      "name": "sequence",
+      "system": "You are a dependency analysis and scheduling specialist. Given a task breakdown, validate and refine dependencies, identify the critical path, and flag any issues. Return valid JSON only.",
+      "user": "Given the task breakdown:\n{state.decompose}\n\nValidate and refine dependencies:\n1. Check for circular dependencies (flag if found)\n2. Identify tasks with missing dependency declarations\n3. Find parallelizable tasks currently sequenced unnecessarily\n4. Identify bottleneck tasks (many dependents)\n5. Compute the critical path (longest dependency chain)\n\nReturn the refined task list with corrected dependencies.\n\nReturn JSON:\n{\n  \"tasks\": [\n    {\n      \"title\": \"Task title\",\n      \"description\": \"string\",\n      \"priority\": \"string\",\n      \"estimatedEffort\": \"string\",\n      \"dependsOn\": [\"Corrected task title references\"],\n      \"tags\": [\"string\"],\n      \"acceptanceCriteria\": [\"string\"]\n    }\n  ],\n  \"criticalPath\": [\"task title 1\", \"task title 2\"],\n  \"warnings\": [\"Any issues found\"]\n}",
+      "responseFormat": {
+        "tasks": ["PlanTask"],
+        "criticalPath": ["string"],
+        "warnings": ["string"]
+      },
+      "then": { "next": "validate" }
+    },
+    {
+      "name": "validate",
+      "system": "You are a QA specialist for project plans. Review the plan for completeness, feasibility, and quality. Ensure every original goal is covered, acceptance criteria are specific, and estimates are realistic. Return valid JSON only.",
+      "user": "Review this plan for completeness:\n{state.sequence}\n\nOriginal goals:\n{goals}\n\nCheck:\n1. Every goal is addressed by at least one task\n2. No acceptance criteria are vague or untestable\n3. Effort estimates are reasonable (not too small or too large)\n4. The plan is achievable with the identified skill domains\n5. No critical tasks are missing\n\nReturn the final validated plan with any corrections applied.\n\nReturn JSON:\n{\n  \"plan\": {\n    \"milestones\": [...],\n    \"tasks\": [...],\n    \"criticalPath\": [...]\n  },\n  \"validationIssues\": [\"Any remaining issues\"],\n  \"confidence\": 0.85\n}",
+      "responseFormat": {
+        "plan": "Plan",
+        "validationIssues": ["string"],
+        "confidence": "number"
+      }
+    }
+  ]
+}

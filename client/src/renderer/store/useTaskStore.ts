@@ -1,3 +1,15 @@
+/**
+ * Scheduled-task store for the renderer process.
+ *
+ * NOTE: All `window.electronAPI.task*` methods used in this store
+ * (taskList, taskCreate, taskUpdate, taskDelete, taskPause, taskResume,
+ * taskExecute, taskGetHistory, taskParse) are provided by the AlephNet
+ * preload bridge (`client/src/preload/alephnet.ts`), NOT the standard
+ * preload (`client/src/preload/index.ts`). They are spread into
+ * `electronAPI` via `...alephNetBridge` and typed through the
+ * `IAlephNetAPI` interface (see `client/src/shared/alephnet-api.ts`),
+ * which is intersected with `IElectronAPI` on `window.electronAPI`.
+ */
 import { create } from 'zustand';
 import {
     ScheduledTask,

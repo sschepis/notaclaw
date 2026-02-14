@@ -1,0 +1,134 @@
+{
+  "id": "com.notaclaw.planman",
+  "version": "0.1.0",
+  "name": "PlanMan",
+  "description": "AI-driven project manager with autonomous task planning, agent assignment, and adaptive re-planning.",
+  "author": "notaclaw",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": [
+    "store:read",
+    "store:write",
+    "ai:complete",
+    "dsn:register-tool",
+    "dsn:invoke-tool"
+  ],
+  "semanticDomain": "cognitive",
+  "aleph": {
+    "type": "aleph-extension",
+    "capabilities": {
+      "skillProvider": true,
+      "dsnEnabled": true,
+      "semanticDomain": "cognitive"
+    },
+    "tools": [
+      {
+        "name": "project_create",
+        "description": "Create a new managed project from a description and goals",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "description": "Project name" },
+            "description": { "type": "string", "description": "Project description" },
+            "goals": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Project goals (optional)"
+            }
+          },
+          "required": ["name", "description"]
+        }
+      },
+      {
+        "name": "project_plan",
+        "description": "Generate or regenerate the execution plan for a project using AI decomposition",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "projectId": { "type": "string" },
+            "constraints": { "type": "string", "description": "Optional constraints or preferences for planning" }
+          },
+          "required": ["projectId"]
+        }
+      },
+      {
+        "name": "project_status",
+        "description": "Get the current status summary of a project including task completion and health",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "projectId": { "type": "string" }
+          },
+          "required": ["projectId"]
+        }
+      },
+      {
+        "name": "project_execute",
+        "description": "Start executing ready tasks in a project by dispatching them to agents",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "projectId": { "type": "string" }
+          },
+          "required": ["projectId"]
+        }
+      },
+      {
+        "name": "project_list",
+        "description": "List all managed projects with optional status filter",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "description": "Filter by status" }
+          }
+        }
+      },
+      {
+        "name": "task_update",
+        "description": "Update a task's status or add notes",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "projectId": { "type": "string" },
+            "taskId": { "type": "string" },
+            "status": { "type": "string" },
+            "notes": { "type": "string" }
+          },
+          "required": ["projectId", "taskId"]
+        }
+      },
+      {
+        "name": "task_assign",
+        "description": "Assign a task to a specific agent",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "projectId": { "type": "string" },
+            "taskId": { "type": "string" },
+            "agentId": { "type": "string" }
+          },
+          "required": ["projectId", "taskId", "agentId"]
+        }
+      },
+      {
+        "name": "task_search",
+        "description": "Semantic search across all project tasks",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string" }
+          },
+          "required": ["query"]
+        }
+      }
+    ],
+    "configuration": [
+      { "name": "checkInterval", "type": "string", "default": "*/30 * * * *", "description": "Cron expression for automated progress checks" },
+      { "name": "autoAssign", "type": "boolean", "default": true, "description": "Automatically assign tasks to best-fit agents" },
+      { "name": "autoReplan", "type": "boolean", "default": false, "description": "Automatically re-plan when blockers detected" },
+      { "name": "maxConcurrentTasks", "type": "number", "default": 3, "description": "Maximum tasks executing in parallel" }
+    ],
+    "smfProfile": [0.9, 0.3, 0.7, 0.2, 0.8, 0.4, 0.6, 0.5,
+                   0.7, 0.3, 0.8, 0.2, 0.9, 0.4, 0.5, 0.6]
+  }
+}

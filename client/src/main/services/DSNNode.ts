@@ -6,11 +6,13 @@ import { AIProviderManager } from './AIProviderManager';
 import { PersonalityManager } from './PersonalityManager';
 import { DomainManager } from './DomainManager';
 import { SignedEnvelopeService } from './SignedEnvelopeService';
+import { DecentralizedWebManager } from './DecentralizedWebManager';
 import { configManager } from './ConfigManager';
 import Gun from 'gun';
 import 'gun/sea';
 
 import { AgentTaskRunner } from './agent-runner';
+import { MomentaryContextService } from './MomentaryContextService';
 
 export class DSNNode extends EventEmitter {
   private bridge: AlephGunBridge;
@@ -19,7 +21,9 @@ export class DSNNode extends EventEmitter {
   // private aiManager: AIProviderManager;
   private personalityManager: PersonalityManager;
   private agentTaskRunner: AgentTaskRunner | null = null;
+  private momentaryContextService: MomentaryContextService | null = null;
   private domainManager: DomainManager;
+  private decentralizedWebManager: DecentralizedWebManager;
   private envelopeService: SignedEnvelopeService;
   private config: DSNNodeConfig | null = null;
   private gunInstance: any = null;
@@ -39,10 +43,15 @@ export class DSNNode extends EventEmitter {
     this.personalityManager = personalityManager;
     this.envelopeService = new SignedEnvelopeService(this.identityManager);
     this.domainManager = new DomainManager(this.bridge, this.identityManager, this.envelopeService);
+    this.decentralizedWebManager = new DecentralizedWebManager(this.bridge, this.domainManager);
   }
 
   public setAgentTaskRunner(runner: AgentTaskRunner) {
     this.agentTaskRunner = runner;
+  }
+
+  public setMomentaryContextService(service: MomentaryContextService) {
+    this.momentaryContextService = service;
   }
 
   async start() {
@@ -223,15 +232,36 @@ export class DSNNode extends EventEmitter {
             return;
         }
 
-        const message = {
-            id: Date.now().toString(),
+        const messageId = Date.now().toString();
+        const message: any = {
+            id: messageId,
             content: response.content,
             type: 'cognitive',
             sender: 'agent',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
 
+        // Emit the response immediately — never block on context generation
         this.emit('agent-response', message);
+
+        // Fire-and-forget: generate momentary context for next turn
+        const conversationId = metadata.conversationId || metadata.id;
+        if (conversationId && this.momentaryContextService) {
+            this.momentaryContextService.generateContext(
+                conversationId, content, response.content, metadata.providerId
+            ).then(ctx => {
+                if (ctx.suggestedActions && ctx.suggestedActions.length > 0) {
+                    // Send suggestions as a separate event so the renderer can update
+                    this.emit('agent-suggestions', {
+                        messageId,
+                        conversationId,
+                        suggestedNextSteps: ctx.suggestedActions
+                    });
+                }
+            }).catch(err => {
+                console.warn('[DSNNode] Momentary context generation failed (non-blocking):', err);
+            });
+        }
         
     } catch (error) {
         console.error('[DSNNode] Message processing failed:', error);
@@ -267,5 +297,9 @@ export class DSNNode extends EventEmitter {
 
   public getDomainManager() {
       return this.domainManager;
+  }
+
+  public getDecentralizedWebManager() {
+      return this.decentralizedWebManager;
   }
 }

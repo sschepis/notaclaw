@@ -1,5 +1,6 @@
 import { AIProviderManager } from '../AIProviderManager';
 import { DSNNode } from '../DSNNode';
+import { PersonalityManager } from '../PersonalityManager';
 
 export type WorkflowConfig = {
     prompts: Array<{
@@ -21,7 +22,8 @@ export type WorkflowConfig = {
             name: string;
             description?: string;
             parameters: any;
-            script: (parameters: any, context: any) => Promise<any>;
+            /** Tool implementation — either a live function or a string to be compiled at runtime (from JSON chains) */
+            script: ((parameters: any, context: any) => Promise<any>) | string;
         };
     }>;
 };
@@ -41,4 +43,5 @@ export interface RunnerOptions {
 export interface WorkflowContext {
     aiManager: AIProviderManager;
     dsnNode: DSNNode;
+    personalityManager?: PersonalityManager;
 }

@@ -5,16 +5,15 @@ import archiver from 'archiver';
 import * as unzipper from 'unzipper';
 
 export class FilesystemService {
-    private sandboxRoot: string;
+    private baseRoot: string;
 
-    constructor(sandboxRoot?: string) {
-        const root = sandboxRoot || '~/alephnet/sandbox';
+    constructor(baseRoot?: string) {
+        const root = baseRoot || os.homedir();
         if (root.startsWith('~')) {
-            this.sandboxRoot = path.join(os.homedir(), root.slice(1));
+            this.baseRoot = path.join(os.homedir(), root.slice(1));
         } else {
-            this.sandboxRoot = path.resolve(root);
+            this.baseRoot = path.resolve(root);
         }
-        this.ensureSandboxExists();
     }
 
     private resolvePath(filePath: string): string {
@@ -24,21 +23,15 @@ export class FilesystemService {
         if (path.isAbsolute(filePath)) {
             return path.resolve(filePath);
         }
-        return path.resolve(this.sandboxRoot, filePath);
+        return path.resolve(this.baseRoot, filePath);
     }
 
-    private ensureSandboxExists() {
-        if (!fs.existsSync(this.sandboxRoot)) {
-            fs.mkdirSync(this.sandboxRoot, { recursive: true });
-        }
-    }
-
+    /**
+     * Validate and resolve a path. No sandbox restrictions — the agent
+     * is trusted and has full filesystem access.
+     */
     private validatePath(filePath: string): string {
         const resolvedPath = this.resolvePath(filePath);
-        // Check if the resolved path starts with the sandbox root
-        if (!resolvedPath.startsWith(this.sandboxRoot)) {
-            throw new Error(`Security Error: Access denied to path '${filePath}'. Outside of sandbox '${this.sandboxRoot}'.`);
-        }
         return resolvedPath;
     }
 

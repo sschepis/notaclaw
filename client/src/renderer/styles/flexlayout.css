@@ -130,16 +130,18 @@
     opacity: 1;
 }
 
-/* Splitter */
+/* Splitter — visible divider between panels */
 .flexlayout__splitter {
-    background-color: transparent !important;
+    background-color: hsl(var(--border)) !important;
     border: none !important;
     z-index: 10;
+    transition: background-color 0.15s ease;
 }
 
-.flexlayout__splitter:hover {
-    background-color: hsl(var(--primary)) !important;
-    transition: background-color 0.2s ease;
+@media (hover: hover) {
+    .flexlayout__splitter:hover {
+        background-color: hsl(var(--primary) / 0.6) !important;
+    }
 }
 
 .flexlayout__splitter_drag {

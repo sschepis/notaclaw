@@ -79,5 +79,16 @@ export function activate(context: any) {
       };
   });
 
+  if (context.traits) {
+    context.traits.register({
+      id: 'temporal-voyager',
+      name: 'Time Travel',
+      description: 'Explore history and fork timelines.',
+      instruction: 'You can explore the history of the knowledge graph using `getHistoryEvents` and view past states with `travelToTime`. You can also create alternate "what-if" scenarios by using `forkTimeline` to branch state.',
+      activationMode: 'dynamic',
+      triggerKeywords: ['time', 'history', 'past', 'future', 'timeline', 'fork', 'branch', 'what if', 'undo']
+    });
+  }
+
   console.log('[Temporal Voyager] Activated.');
 }

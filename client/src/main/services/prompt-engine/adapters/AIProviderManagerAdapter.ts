@@ -26,19 +26,22 @@ export class AIProviderManagerAdapter implements AIProvider {
         };
 
         console.log('[AIProviderManagerAdapter] Processing chat request...');
+        
+        // Pass messages directly — they may contain multimodal content objects
+        // (e.g., { text, imageAttachments } instead of plain string content)
         const response = await this.manager.processChatRequest(req.messages, req.tools || [], options);
         console.log('[AIProviderManagerAdapter] Raw response content:', response.content?.substring(0, 200));
         console.log('[AIProviderManagerAdapter] Tool calls:', response.toolCalls ? JSON.stringify(response.toolCalls) : 'none');
         
-        return { 
-            text: response.content, 
+        return {
+            text: response.content,
             raw: response,
             toolCalls: response.toolCalls
         };
     };
 
     toolFormat = {
-        formatTools: (tools: any[]) => tools, 
+        formatTools: (tools: any[]) => tools,
         formatTool: (tool: any) => tool
     };
 
@@ -52,8 +55,8 @@ export class AIProviderManagerAdapter implements AIProvider {
                 return {
                     function: {
                         name: call.function?.name || call.name, // Vercel AI SDK structure varies by provider sometimes
-                        arguments: typeof call.function?.arguments === 'string' 
-                            ? call.function.arguments 
+                        arguments: typeof call.function?.arguments === 'string'
+                            ? call.function.arguments
                             : (call.args ? JSON.stringify(call.args) : '{}')
                     }
                 };

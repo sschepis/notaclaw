@@ -10,11 +10,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   configRemovePeer: (peerUrl: string) => ipcRenderer.invoke('config:removePeer', peerUrl),
   configGetLogging: () => ipcRenderer.invoke('config:getLogging'),
   configUpdateLogging: (updates: any) => ipcRenderer.invoke('config:updateLogging', updates),
+
+  // Agent Sandbox
+  configIsSandboxed: () => ipcRenderer.invoke('config:isSandboxed'),
+  configSetSandboxed: (sandboxed: boolean) => ipcRenderer.invoke('config:setSandboxed', sandboxed),
   
   // Workspace
   configGetWorkspace: () => ipcRenderer.invoke('config:getWorkspace'),
   configSetWorkspace: (path: string) => ipcRenderer.invoke('config:setWorkspace', path),
   selectWorkspace: () => ipcRenderer.invoke('dialog:selectWorkspace'),
+  workspaceOpenFolder: () => ipcRenderer.invoke('workspace:openFolder'),
+  workspaceClose: () => ipcRenderer.invoke('workspace:close'),
+  workspaceGetInfo: () => ipcRenderer.invoke('workspace:getInfo'),
+  onWorkspaceChanged: (callback: (event: any, data: { path: string | null }) => void) => {
+    ipcRenderer.on('workspace:changed', callback);
+    return () => { ipcRenderer.removeListener('workspace:changed', callback); };
+  },
 
   // ─── AlephNet APIs (all tiers) ────────────────────────────────
   ...alephNetBridge,
@@ -163,16 +174,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('agent:taskMessage', callback);
     return () => { ipcRenderer.removeListener('agent:taskMessage', callback); };
   },
-
-  // Team Management
-  teamCreate: (params: { name: string; agentIds: string[] }) => ipcRenderer.invoke('team:create', params),
-  teamList: () => ipcRenderer.invoke('team:list'),
-  teamGet: (params: { teamId: string }) => ipcRenderer.invoke('team:get', params),
-  teamUpdate: (params: { teamId: string; updates: any }) => ipcRenderer.invoke('team:update', params),
-  teamDelete: (params: { teamId: string }) => ipcRenderer.invoke('team:delete', params),
-  teamSummon: (params: { teamId: string }) => ipcRenderer.invoke('team:summon', params),
-  teamStep: (params: { teamId: string; observation: string }) => ipcRenderer.invoke('team:step', params),
-  teamDismiss: (params: { teamId: string }) => ipcRenderer.invoke('team:dismiss', params),
+  onAgentStreamChunk: (callback: (event: any, data: { messageId: string; chunk: string; done?: boolean }) => void) => {
+    ipcRenderer.on('agent:streamChunk', callback);
+    return () => { ipcRenderer.removeListener('agent:streamChunk', callback); };
+  },
+  onAgentSuggestions: (callback: (event: any, data: { messageId: string; conversationId: string; suggestedNextSteps: string[] }) => void) => {
+    ipcRenderer.on('agent-suggestions', callback);
+    return () => { ipcRenderer.removeListener('agent-suggestions', callback); };
+  },
 
   // OpenClaw Gateway
   openclawConnect: (options: { url?: string }) => 
@@ -215,4 +224,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('resonant:agentChanged', callback);
     return () => { ipcRenderer.removeListener('resonant:agentChanged', callback); };
   },
+
+  // ─── Whisper Speech-to-Text ────────────────────────────────────────
+  whisperIsReady: () => ipcRenderer.invoke('whisper:isReady'),
+  whisperTranscribe: (wavBase64: string) => ipcRenderer.invoke('whisper:transcribe', { wavBase64 }),
+  whisperRefine: (rawText: string, previousRefinedText?: string) => ipcRenderer.invoke('whisper:refine', { rawText, previousRefinedText }),
 });

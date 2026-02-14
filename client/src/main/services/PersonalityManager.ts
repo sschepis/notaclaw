@@ -5,6 +5,7 @@ import { ServiceRegistry } from './ServiceRegistry';
 import { SessionManager } from './SessionManager';
 import { DesktopAccessibilityLearner } from './desktop-learner';
 import { TraitRegistry } from './TraitRegistry';
+import { MomentaryContextService } from './MomentaryContextService';
 import { AIResponse } from '../../shared/ai-types';
 import { MemoryField, MemoryFragment } from '../../shared/alephnet-types';
 import { PromptEngine } from './prompt-engine/PromptEngine';
@@ -13,7 +14,9 @@ import { AIProviderManagerAdapter } from './prompt-engine/adapters/AIProviderMan
 import { ToolDefinition } from './prompt-engine/types';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { exec } from 'child_process';
+import { configManager } from './ConfigManager';
 
 export interface Personality {
     id: string;
@@ -40,6 +43,7 @@ export class PersonalityManager {
     private serviceRegistry: ServiceRegistry | null = null;
     private sessionManager: SessionManager | null = null;
     private desktopLearner: DesktopAccessibilityLearner | null = null;
+    private momentaryContextService: MomentaryContextService | null = null;
     private traitRegistry: TraitRegistry;
     private commandInterface: CommandInterface | null = null;
     // private corePersonalityId: string | null = null;
@@ -53,6 +57,14 @@ export class PersonalityManager {
 
     public getTraitRegistry(): TraitRegistry {
         return this.traitRegistry;
+    }
+
+    public registerTrait(trait: import('../../shared/trait-types').TraitDefinition): void {
+        this.traitRegistry.register(trait);
+    }
+
+    public unregisterTrait(traitId: string): void {
+        this.traitRegistry.unregister(traitId);
     }
 
     public setServiceRegistry(registry: ServiceRegistry) {
@@ -134,6 +146,10 @@ export class PersonalityManager {
 
     public setDesktopLearner(learner: DesktopAccessibilityLearner) {
         this.desktopLearner = learner;
+    }
+
+    public setMomentaryContextService(service: MomentaryContextService) {
+        this.momentaryContextService = service;
     }
 
     /**
@@ -223,6 +239,34 @@ export class PersonalityManager {
         const conversationId = metadata.conversationId || metadata.id;
         let personalityId = metadata.personalityId;
 
+        // Extract image attachments for multimodal support and text attachments for context
+        const imageAttachments: Array<{ mimeType: string; data: string }> = [];
+        const textAttachmentParts: string[] = [];
+        if (metadata.attachments && Array.isArray(metadata.attachments)) {
+            for (const att of metadata.attachments) {
+                if (att.type === 'image' && att.dataUrl) {
+                    // dataUrl format: "data:image/png;base64,iVBOR..."
+                    const match = att.dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+                    if (match) {
+                        imageAttachments.push({
+                            mimeType: match[1],
+                            data: match[2]
+                        });
+                    }
+                } else if (att.content) {
+                    // Text/document/file attachments — include their content in the prompt
+                    textAttachmentParts.push(
+                        `--- Attached file: ${att.name} ---\n${att.content}\n--- End of ${att.name} ---`
+                    );
+                }
+            }
+        }
+
+        // Append text attachment contents to the user message so the AI can see them
+        if (textAttachmentParts.length > 0) {
+            content = content + '\n\n' + textAttachmentParts.join('\n\n');
+        }
+
         // If personalityId not provided in metadata, try to fetch from conversation
         if (!personalityId && conversationId && this.conversationManager) {
             try {
@@ -285,10 +329,18 @@ export class PersonalityManager {
             }
         }
 
-        // 2. Get Situational Context
+        // 2. Get Situational Context + Momentary Context
         let situationalContext = conversationId 
             ? await this.getSituationalContext(conversationId, content) 
             : '';
+
+        // Inject momentary context (compressed summary of the conversation state)
+        if (conversationId && this.momentaryContextService) {
+            const momentaryCtx = this.momentaryContextService.formatForPrompt(conversationId);
+            if (momentaryCtx) {
+                situationalContext = momentaryCtx + situationalContext;
+            }
+        }
 
         // 3. Construct Prompt & Call AI using PromptEngine
         const promptName = `personality-chat-${Date.now()}`;
@@ -344,7 +396,7 @@ export class PersonalityManager {
                     parameters: {
                         type: 'object',
                         properties: {
-                            filePath: { type: 'string', description: 'Path to the file to open (relative to workspace root)' }
+                            filePath: { type: 'string', description: configManager.isSandboxed() ? 'Path to the file to open (relative to workspace root)' : 'Path to the file to open (absolute or relative path)' }
                         },
                         required: ['filePath']
                     },
@@ -603,14 +655,27 @@ export class PersonalityManager {
                         type: 'object',
                         properties: {
                             command: { type: 'string' },
-                            args: { type: 'array', items: { type: 'string' } }
+                            args: { type: 'array', items: { type: 'string' } },
+                            cwd: { type: 'string', description: 'Working directory for the command (optional)' }
                         },
                         required: ['command']
                     },
-                    script: async ({ command, args }: { command: string, args?: string[] }) => {
+                    script: async ({ command, args, cwd }: { command: string, args?: string[], cwd?: string }) => {
                         const cmd = args ? `${command} ${args.join(' ')}` : command;
+                        const sandboxed = configManager.isSandboxed();
+                        let execCwd: string;
+                        if (cwd && !sandboxed) {
+                            // When unsandboxed, allow custom cwd
+                            execCwd = path.isAbsolute(cwd) ? cwd : path.resolve(os.homedir(), cwd);
+                        } else if (!sandboxed) {
+                            // When unsandboxed with no cwd, default to home directory
+                            execCwd = os.homedir();
+                        } else {
+                            // When sandboxed, always use process.cwd() (workspace)
+                            execCwd = process.cwd();
+                        }
                         return new Promise((resolve) => {
-                            exec(cmd, { cwd: process.cwd() }, (error, stdout, stderr) => {
+                            exec(cmd, { cwd: execCwd }, (error, stdout, stderr) => {
                                 resolve({
                                     stdout,
                                     stderr,
@@ -650,14 +715,15 @@ export class PersonalityManager {
             prompts: []
         });
 
-        console.log('[PersonalityManager] Calling PromptEngine.execute with providerId:', metadata.providerId);
+        console.log('[PersonalityManager] Calling PromptEngine.execute with providerId:', metadata.providerId, 'imageAttachments:', imageAttachments.length);
         let engineResult = await engine.execute(promptName, {
             corePersonality: systemPrompt,
             situationalContext: situationalContext,
             userMessage: content
-        }, { 
+        }, {
             defaultProvider: metadata.providerId,
-            state: { ...metadata }
+            state: { ...metadata },
+            imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined
         });
         console.log('[PersonalityManager] PromptEngine result:', JSON.stringify(engineResult)?.substring(0, 500));
 
@@ -709,6 +775,40 @@ export class PersonalityManager {
             const toolOutput = JSON.stringify(engineResult.toolResult, null, 2);
             engineResult.text = `Tool executed successfully:\n\`\`\`json\n${toolOutput}\n\`\`\``;
             console.log('[PersonalityManager] Fallback: formatted tool result as text');
+        }
+
+        // Final safety net: if text is STILL empty after all tool loops and fallbacks,
+        // retry once without tools to prevent the AI from silently returning nothing
+        // (this can happen when the model tries to call a tool instead of answering,
+        //  then the re-prompt also yields empty text)
+        if (!engineResult.text || engineResult.text.trim() === '') {
+            console.warn('[PersonalityManager] Response text is empty after all loops. Retrying without tools...');
+            try {
+                const fallbackEngine = new PromptEngine({
+                    providers: [new AIProviderManagerAdapter(this.aiManager, metadata.providerId)],
+                    tools: [], // No tools — forces a pure text response
+                    prompts: []
+                });
+                const fallbackResult = await fallbackEngine.execute(promptName, {
+                    corePersonality: systemPrompt,
+                    situationalContext: situationalContext,
+                    userMessage: content
+                }, {
+                    defaultProvider: metadata.providerId,
+                    state: { ...metadata },
+                    imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined
+                });
+                if (fallbackResult.text && fallbackResult.text.trim() !== '') {
+                    engineResult.text = fallbackResult.text;
+                    console.log('[PersonalityManager] Fallback (no-tools) succeeded:', engineResult.text?.substring(0, 200));
+                } else {
+                    engineResult.text = '[The AI returned an empty response. This may be due to content filtering or an issue with the model. Please try again or rephrase your request.]';
+                    console.error('[PersonalityManager] Fallback (no-tools) also returned empty. Raw:', JSON.stringify(fallbackResult.raw)?.substring(0, 500));
+                }
+            } catch (fallbackErr) {
+                console.error('[PersonalityManager] Fallback retry failed:', fallbackErr);
+                engineResult.text = `[Error: The AI failed to generate a response. ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}]`;
+            }
         }
 
         console.log('[PersonalityManager] Final text response:', engineResult.text?.substring(0, 200));

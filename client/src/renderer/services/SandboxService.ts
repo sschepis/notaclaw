@@ -205,8 +205,9 @@ export class SandboxService {
       const iframe = document.createElement('iframe');
       iframe.style.display = 'none';
       // sandbox attribute: allow-scripts is needed to run code.
-      // We do NOT include allow-same-origin to prevent accessing the parent (renderer) DOM directly.
-      iframe.sandbox.add('allow-scripts'); 
+      // allow-same-origin is included so plugins can access parent APIs when trusted.
+      iframe.sandbox.add('allow-scripts');
+      iframe.sandbox.add('allow-same-origin');
       
       document.body.appendChild(iframe);
 

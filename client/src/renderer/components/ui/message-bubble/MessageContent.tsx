@@ -2,10 +2,11 @@ import React, { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
-import { MarkdownContent } from '../MarkdownContent';
+import { RichMessageContent } from './RichMessageContent';
 import { CheckIcon, CancelIcon } from './icons';
 
 interface MessageContentProps {
+  messageId: string;
   content: string;
   isUser: boolean;
   isEditing: boolean;
@@ -14,9 +15,11 @@ interface MessageContentProps {
   onCancelEdit: () => void;
   onSubmitEdit: () => void;
   onEditKeyDown: (e: React.KeyboardEvent) => void;
+  metadata?: Record<string, any>;
 }
 
 export const MessageContent: React.FC<MessageContentProps> = ({
+  messageId,
   content,
   isUser,
   isEditing,
@@ -25,6 +28,7 @@ export const MessageContent: React.FC<MessageContentProps> = ({
   onCancelEdit,
   onSubmitEdit,
   onEditKeyDown,
+  metadata,
 }) => {
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -84,9 +88,14 @@ export const MessageContent: React.FC<MessageContentProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className={`text-sm leading-6 font-sans tracking-normal ${isUser ? 'text-gray-200' : 'text-gray-100'}`}
+          className="rich-message-display"
         >
-          <MarkdownContent content={content} />
+          <RichMessageContent
+            messageId={messageId}
+            content={content}
+            isUser={isUser}
+            metadata={metadata}
+          />
         </motion.div>
       )}
     </AnimatePresence>

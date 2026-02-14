@@ -126,6 +126,17 @@ export const activate = async (context: Context) => {
       };
   });
 
+  if (context.traits) {
+    context.traits.register({
+      id: 'document-reader',
+      name: 'Document Analysis',
+      description: 'Ingest and analyze documents (PDF, DOCX, etc.).',
+      instruction: 'You can ingest and analyze documents (PDF, DOCX, XLSX, Images, Text) using `ingest_document`. This extracts content and metadata, making it available for retrieval and summarization. Use `list_documents` to see what is available.',
+      activationMode: 'dynamic',
+      triggerKeywords: ['document', 'pdf', 'docx', 'excel', 'image', 'scan', 'read file', 'analyze file', 'ingest']
+    });
+  }
+
   context.on('ready', () => {
     console.log('[Document Reader] Ready');
   });

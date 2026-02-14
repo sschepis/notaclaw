@@ -149,6 +149,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 <MessageAttachments attachments={attachments || []} />
 
                 <MessageContent 
+                  messageId={id}
                   content={content}
                   isUser={isUser}
                   isEditing={isEditing}
@@ -157,6 +158,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   onCancelEdit={handleCancelEdit}
                   onSubmitEdit={handleSubmitEdit}
                   onEditKeyDown={handleEditKeyDown}
+                  metadata={metadata}
                 />
                 
                 {/* Metadata Footer */}

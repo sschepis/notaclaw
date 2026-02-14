@@ -112,5 +112,16 @@ export function activate(context: any) {
         return { status: "completed", results };
     });
 
+    if (context.traits) {
+        context.traits.register({
+            id: 'social-mirror',
+            name: 'Social Media Integration',
+            description: 'Post updates to Twitter and Farcaster.',
+            instruction: 'You can post content to social media platforms (Twitter, Farcaster). Use `configurePlatform` to set up credentials if needed, and `postContent` to publish updates. Use this to share findings or announcements.',
+            activationMode: 'dynamic',
+            triggerKeywords: ['social media', 'twitter', 'tweet', 'farcaster', 'cast', 'post', 'publish', 'share']
+        });
+    }
+
     console.log("[Social Mirror] Activated.");
 }

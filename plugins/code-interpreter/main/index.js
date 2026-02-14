@@ -62,6 +62,14 @@ var CodeInterpreter = class {
     this.context.ipc.handle("end-session", async ({ sessionId }) => this.endSession(sessionId));
     this.context.ipc.handle("upload-file", async ({ sessionId, filename, content }) => this.uploadFile(sessionId, filename, content));
     this.cleanupInterval = setInterval(() => this.cleanupSessions(), 6e4);
+    this.context.traits.register({
+      id: "code-execution",
+      name: "Code Execution",
+      description: "Execute Python or Node.js code in a secure sandbox.",
+      instruction: "You can execute Python or Node.js code. Use the `create-session` tool to start a sandbox, and `execute` to run code. Use this for calculations, data analysis, or complex logic.",
+      activationMode: "dynamic",
+      triggerKeywords: ["code", "python", "javascript", "calculate", "analyze", "script", "execute"]
+    });
   }
   deactivate() {
     if (this.cleanupInterval) {

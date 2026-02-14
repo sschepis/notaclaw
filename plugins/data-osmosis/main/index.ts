@@ -263,6 +263,16 @@ export default {
         return { sources: manager.list() };
     });
 
+    // Register Trait
+    context.traits.register({
+        id: 'data-osmosis',
+        name: 'Data Ingestion',
+        description: 'Ingest data from external sources (Postgres, MongoDB, Web, RSS).',
+        instruction: 'You can ingest data from external sources. Use `connectDataSource` to link a new source (Postgres, Mongo, Web, RSS) and `syncDataSource` to fetch data. Use `listDataSources` to see what is available.',
+        activationMode: 'dynamic',
+        triggerKeywords: ['data', 'database', 'postgres', 'mongodb', 'sql', 'ingest', 'scrape', 'rss', 'feed', 'sync']
+    });
+
     console.log('[Data Osmosis] Activated.');
     return manager; // Return manager instance for potential external usage or testing
   },

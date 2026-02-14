@@ -65,9 +65,19 @@ export class PromptEngine extends EnhancedEventEmitter {
         const provider = this.config.providers.find(p => p.name === (options.defaultProvider || this.config.defaultProvider));
         if (!provider) throw new AIError('No provider available');
 
+        // Build user message content — multimodal if image attachments are present
+        let userContent: any = userMessage;
+        if (options.imageAttachments && options.imageAttachments.length > 0) {
+            // Multimodal content: array of parts (text + images)
+            userContent = {
+                text: userMessage,
+                imageAttachments: options.imageAttachments
+            };
+        }
+
         const messages = [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
+            { role: 'user', content: userContent }
         ];
 
         // Format tools
@@ -96,7 +106,14 @@ export class PromptEngine extends EnhancedEventEmitter {
 
         // 4. Parse Response
         const content = provider.responseFormat.getContent(response);
-        console.log('[PromptEngine] Extracted content:', content?.substring(0, 200));
+        console.log('[PromptEngine] Extracted content:', content?.substring(0, 200) || '(empty/null)');
+        if (!content || content.trim() === '') {
+            console.warn('[PromptEngine] WARNING: Provider returned empty text content. Raw response keys:', response ? Object.keys(response).join(', ') : 'null');
+            if (response?.raw) {
+                const finishReason = response.raw.finishReason || response.raw.candidates?.[0]?.finishReason;
+                console.warn('[PromptEngine] Finish reason:', finishReason || 'unknown');
+            }
+        }
         let parsedContent;
         
         if (!template.responseFormat || template.responseFormat === 'text') {

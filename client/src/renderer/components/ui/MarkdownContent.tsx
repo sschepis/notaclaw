@@ -6,7 +6,17 @@ import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useFenceStore } from '../../store/useFenceStore';
-import { MermaidRenderer, MERMAID_LANGUAGES, HtmlArtifactRenderer, HTML_LANGUAGES } from './fences';
+import {
+  MermaidRenderer, MERMAID_LANGUAGES,
+  HtmlArtifactRenderer, HTML_LANGUAGES,
+  ToolCallCard, TOOL_CALL_LANGUAGES,
+  StatusBadge, STATUS_LANGUAGES,
+  SystemMessageRenderer, SYSTEM_LANGUAGES,
+  ImageRenderer, IMAGE_LANGUAGES,
+  VideoRenderer, VIDEO_LANGUAGES,
+  AudioPlayer, AUDIO_LANGUAGES,
+  DiffRenderer, DIFF_LANGUAGES,
+} from './fences';
 
 // KaTeX CSS is imported in index.css for proper math rendering
 
@@ -240,25 +250,68 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({
   const registerRenderer = useFenceStore((state) => state.registerRenderer);
   const getRenderer = useFenceStore((state) => state.getRenderer);
 
-  // Register built-in Mermaid renderer on mount
+  // Register built-in fence renderers on mount
   useEffect(() => {
-    const unregisterMermaid = registerRenderer({
-      id: 'builtin:mermaid',
-      languages: MERMAID_LANGUAGES,
-      component: MermaidRenderer,
-      priority: 0,
-    });
-
-    const unregisterHtml = registerRenderer({
-      id: 'builtin:html-artifact',
-      languages: HTML_LANGUAGES,
-      component: HtmlArtifactRenderer,
-      priority: 0,
-    });
+    const unregisters = [
+      registerRenderer({
+        id: 'builtin:mermaid',
+        languages: MERMAID_LANGUAGES,
+        component: MermaidRenderer,
+        priority: 0,
+      }),
+      registerRenderer({
+        id: 'builtin:html-artifact',
+        languages: HTML_LANGUAGES,
+        component: HtmlArtifactRenderer,
+        priority: 0,
+      }),
+      // Rich content fence renderers
+      registerRenderer({
+        id: 'builtin:tool-call',
+        languages: TOOL_CALL_LANGUAGES,
+        component: ToolCallCard,
+        priority: 0,
+      }),
+      registerRenderer({
+        id: 'builtin:status',
+        languages: STATUS_LANGUAGES,
+        component: StatusBadge,
+        priority: 0,
+      }),
+      registerRenderer({
+        id: 'builtin:system',
+        languages: SYSTEM_LANGUAGES,
+        component: SystemMessageRenderer,
+        priority: 0,
+      }),
+      registerRenderer({
+        id: 'builtin:image',
+        languages: IMAGE_LANGUAGES,
+        component: ImageRenderer,
+        priority: 0,
+      }),
+      registerRenderer({
+        id: 'builtin:video',
+        languages: VIDEO_LANGUAGES,
+        component: VideoRenderer,
+        priority: 0,
+      }),
+      registerRenderer({
+        id: 'builtin:audio',
+        languages: AUDIO_LANGUAGES,
+        component: AudioPlayer,
+        priority: 0,
+      }),
+      registerRenderer({
+        id: 'builtin:diff',
+        languages: DIFF_LANGUAGES,
+        component: DiffRenderer,
+        priority: 0,
+      }),
+    ];
 
     return () => {
-      unregisterMermaid();
-      unregisterHtml();
+      unregisters.forEach(unreg => unreg());
     };
   }, [registerRenderer]);
 

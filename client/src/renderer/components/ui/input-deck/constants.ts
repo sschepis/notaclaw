@@ -5,8 +5,14 @@ export const ALLOWED_MIME_TYPES = [
   'text/html',
   'text/css',
   'text/javascript',
+  'text/xml',
+  'text/csv',
+  'text/x-python',
   'application/javascript',
   'application/typescript',
+  'application/json',
+  'application/xml',
+  'application/x-yaml',
   'image/png',
   'image/jpeg',
   'image/gif',
@@ -14,7 +20,11 @@ export const ALLOWED_MIME_TYPES = [
 ];
 
 export const ALLOWED_EXTENSIONS = [
-  '.md', '.txt', '.html', '.htm', '.css', '.js', '.ts', '.tsx', '.jsx', 
+  '.md', '.txt', '.html', '.htm', '.css', '.js', '.ts', '.tsx', '.jsx',
+  '.json', '.yaml', '.yml', '.xml', '.csv', '.log', '.sh', '.bash',
+  '.py', '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp',
+  '.toml', '.ini', '.cfg', '.conf', '.env', '.sql', '.graphql', '.gql',
+  '.svelte', '.vue', '.astro',
   '.png', '.jpg', '.jpeg', '.gif', '.pdf'
 ];
 

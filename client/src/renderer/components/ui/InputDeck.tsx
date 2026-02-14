@@ -9,6 +9,7 @@ import { useSpeechToText } from '../../hooks/useSpeechToText';
 import { ChatInputBeforeSlot, ChatInputAfterSlot } from './ExtensionSlotV2';
 import { useCommandSystem } from '../../services/commands/useCommandSystem';
 import { CommandSuggestions } from './input-deck/CommandSuggestions';
+import { useDraftPersistence } from '../../hooks/useDraftPersistence';
 
 interface InputDeckProps {
   onMessageSent?: () => void;
@@ -16,8 +17,8 @@ interface InputDeckProps {
 
 export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
   const [mode] = useState<'Chat' | 'Task' | 'Proposal'>('Chat');
-  const [resonance, setResonance] = useState(50);
-  const [content, setContent] = useState('');
+  const activeConversationId = useAppStore(s => s.activeConversationId);
+  const { content, setContent, clearDraft } = useDraftPersistence(activeConversationId);
   const [isFocused, setIsFocused] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [inputMetadata, setInputMetadata] = useState<Record<string, any>>({});
@@ -65,14 +66,21 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
     });
   }, []);
 
+  // LLM-refined transcript replaces the entire content
+  const handleRefinedTranscript = useCallback((text: string) => {
+    setContent(text);
+  }, []);
+
   const {
     isListening,
     interimTranscript,
     toggleListening,
     isSupported: isSpeechSupported,
+    error: speechError,
   } = useSpeechToText({
     lang: 'en-US',
     onTranscript: handleSpeechTranscript,
+    onRefinedTranscript: handleRefinedTranscript,
   });
 
   // Generate unique ID
@@ -104,6 +112,25 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
     return ALLOWED_EXTENSIONS.includes(ext) || ALLOWED_MIME_TYPES.includes(file.type);
   };
 
+  // File extensions that should always be read as text, regardless of MIME type
+  const TEXT_FILE_EXTENSIONS = new Set([
+    '.md', '.txt', '.html', '.htm', '.css', '.js', '.ts', '.tsx', '.jsx',
+    '.json', '.yaml', '.yml', '.xml', '.csv', '.log', '.sh', '.bash',
+    '.py', '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp',
+    '.toml', '.ini', '.cfg', '.conf', '.env', '.sql', '.graphql', '.gql',
+    '.svelte', '.vue', '.astro',
+  ]);
+
+  // Check if a file should be read as text content
+  const isTextFile = (file: File): boolean => {
+    const ext = '.' + (file.name.split('.').pop()?.toLowerCase() || '');
+    if (TEXT_FILE_EXTENSIONS.has(ext)) return true;
+    if (file.type.startsWith('text/')) return true;
+    if (file.type === 'application/javascript' || file.type === 'application/typescript') return true;
+    if (file.type === 'application/json') return true;
+    return false;
+  };
+
   // Process a file and add as attachment
   const processFile = async (file: File) => {
     if (!isFileAllowed(file)) {
@@ -127,7 +154,7 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
 
     if (isImage) {
       attachment.dataUrl = await readFileAsDataUrl(file);
-    } else if (file.type.startsWith('text/') || file.type === 'application/javascript') {
+    } else if (isTextFile(file)) {
       attachment.content = await readFileAsText(file);
     }
 
@@ -213,7 +240,7 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
     if (content.trim().startsWith('/')) {
       const handled = await executeCommand(content.trim());
       if (handled) {
-        setContent('');
+        clearDraft();
         setShowSuggestions(false);
         return;
       }
@@ -243,7 +270,7 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
     const sentContent = content;
     const sentAttachments = [...pendingAttachments];
     const sentMetadata = { ...inputMetadata }; // Capture current metadata
-    setContent('');
+    clearDraft();
     clearPendingAttachments();
     // Don't clear metadata here, as it might be a persistent toggle (like "secure mode")
 
@@ -254,7 +281,6 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
       const messagePayload = {
         content: sentContent,
         mode,
-        resonance,
         model: selectedModel || undefined,
         attachments: sentAttachments.map(a => ({
           name: a.name,
@@ -415,13 +441,12 @@ export const InputDeck: React.FC<InputDeckProps> = ({ onMessageSent }) => {
           dragOver={dragOver}
           mode={mode}
           hasAttachments={pendingAttachments.length > 0}
-          resonance={resonance}
-          setResonance={setResonance}
           onFileSelect={() => fileInputRef.current?.click()}
           isListening={isListening}
           onToggleListening={toggleListening}
           isSpeechSupported={isSpeechSupported}
           interimTranscript={interimTranscript}
+          speechError={speechError}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
           className="flex-1"

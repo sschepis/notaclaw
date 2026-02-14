@@ -2,7 +2,6 @@ import React, { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
-import { Slider } from '../../ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 import { ModelSelector } from './ModelSelector';
 
@@ -20,14 +19,12 @@ interface InputAreaProps {
   dragOver: boolean;
   mode: string;
   hasAttachments: boolean;
-  // New props for controls
-  resonance: number;
-  setResonance: (val: number) => void;
   onFileSelect: () => void;
   isListening?: boolean;
   onToggleListening?: () => void;
   isSpeechSupported?: boolean;
   interimTranscript?: string;
+  speechError?: string | null;
   selectedModel?: string | null;
   onModelChange?: (model: string) => void;
   className?: string;
@@ -47,13 +44,11 @@ export const InputArea: React.FC<InputAreaProps> = ({
   dragOver,
   mode,
   hasAttachments,
-  resonance,
-  setResonance,
   onFileSelect,
   isListening = false,
   onToggleListening,
-  isSpeechSupported = false,
   interimTranscript = '',
+  speechError,
   selectedModel,
   onModelChange,
   className,
@@ -132,24 +127,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
               </div>
             )}
 
-            {/* Resonance Slider */}
-            <div className="flex items-center space-x-2 group ml-2">
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold group-hover:text-primary transition-colors hidden sm:inline">Resonance</span>
-              <div className="w-20 relative">
-                <Slider 
-                  value={[resonance]} 
-                  max={100}
-                  step={1}
-                  onValueChange={(vals) => setResonance(vals[0])}
-                  className="cursor-pointer" 
-                  disabled={isGenerating}
-                />
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[9px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg border border-border whitespace-nowrap z-50">
-                  {resonance}%
-                </div>
-              </div>
-            </div>
-
             {/* File Upload Button */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -171,18 +148,22 @@ export const InputArea: React.FC<InputAreaProps> = ({
             </Tooltip>
 
             {/* Speech-to-Text Button */}
-            {isSpeechSupported && onToggleListening && (
+            {onToggleListening && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <motion.button 
+                  <motion.button
                     onClick={onToggleListening}
                     disabled={isGenerating}
+                    aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+                    aria-pressed={isListening}
                     className={`relative p-1.5 rounded-md transition-all border ${
-                      isListening
-                        ? 'bg-destructive/10 text-destructive border-destructive/20'
-                        : isGenerating 
-                          ? 'bg-transparent text-muted-foreground cursor-not-allowed border-transparent'
-                          : 'bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground hover:border-border/50 border-transparent'
+                      speechError
+                        ? 'bg-destructive/10 text-destructive border-destructive/30'
+                        : isListening
+                          ? 'bg-destructive/10 text-destructive border-destructive/20'
+                          : isGenerating
+                            ? 'bg-transparent text-muted-foreground cursor-not-allowed border-transparent'
+                            : 'bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground hover:border-border/50 border-transparent'
                     }`}
                     whileTap={{ scale: isGenerating ? 1 : 0.95 }}
                   >
@@ -198,8 +179,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1.5, opacity: 0 }}
                           exit={{ opacity: 0 }}
-                          transition={{ 
-                            duration: 1.5, 
+                          transition={{
+                            duration: 1.5,
                             repeat: Infinity,
                             ease: "easeOut"
                           }}
@@ -210,7 +191,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
                   </motion.button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{isListening ? 'Stop listening' : 'Start voice input'}</p>
+                  <p>{speechError ? `Error: ${speechError}` : isListening ? 'Stop listening' : 'Start voice input'}</p>
                 </TooltipContent>
               </Tooltip>
             )}

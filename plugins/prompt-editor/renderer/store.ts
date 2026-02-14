@@ -67,7 +67,7 @@ interface PromptEditorState {
     deleteChain: (id: string, ipc: any) => Promise<void>;
     createChain: (id: string, ipc: any) => Promise<void>;
     
-    layoutGraph: () => void;
+    layoutGraph: (direction?: 'LR' | 'TB' | 'RL' | 'BT') => void;
     
     setChainConfig: (config: string) => void;
     setViewMode: (mode: 'json' | 'graph') => void;
@@ -311,7 +311,7 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
         set({ showNewChainModal: false, newChainId: '' });
     },
 
-    layoutGraph: () => {
+    layoutGraph: (direction: 'LR' | 'TB' | 'RL' | 'BT' = 'LR') => {
         const { nodes, edges } = get();
         const dagreGraph = new dagre.graphlib.Graph();
         dagreGraph.setDefaultEdgeLabel(() => ({}));
@@ -319,7 +319,7 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
         const nodeWidth = 200;
         const nodeHeight = 100;
 
-        dagreGraph.setGraph({ rankdir: 'LR' });
+        dagreGraph.setGraph({ rankdir: direction });
 
         nodes.forEach((node) => {
             dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
@@ -333,10 +333,25 @@ export const usePromptEditorStore = create<PromptEditorState>((set, get) => ({
 
         const newNodes = nodes.map((node) => {
             const nodeWithPosition = dagreGraph.node(node.id);
+            
+            let sourcePosition = Position.Right;
+            let targetPosition = Position.Left;
+
+            if (direction === 'TB') {
+                sourcePosition = Position.Bottom;
+                targetPosition = Position.Top;
+            } else if (direction === 'BT') {
+                sourcePosition = Position.Top;
+                targetPosition = Position.Bottom;
+            } else if (direction === 'RL') {
+                sourcePosition = Position.Left;
+                targetPosition = Position.Right;
+            }
+
             return {
                 ...node,
-                targetPosition: Position.Left,
-                sourcePosition: Position.Right,
+                targetPosition,
+                sourcePosition,
                 position: {
                     x: nodeWithPosition.x - nodeWidth / 2,
                     y: nodeWithPosition.y - nodeHeight / 2,

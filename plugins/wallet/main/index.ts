@@ -10,6 +10,9 @@ export interface PluginContext {
   dsn: {
     registerTool: (metadata: any, handler: () => Promise<any>) => void;
   };
+  traits?: {
+    register: (trait: any) => void;
+  };
 }
 
 class WalletService {
@@ -49,6 +52,18 @@ class WalletService {
         currency: 'ALEPH' 
       };
     });
+
+    // Register Trait
+    if (this.context.traits) {
+        this.context.traits.register({
+            id: 'wallet-management',
+            name: 'Wallet & Funds',
+            description: 'Manage digital assets and funds.',
+            instruction: 'You have access to a digital wallet. You can check your balance with `get_wallet_balance` and transfer funds if authorized. Use this when the user asks about money, crypto, or assets.',
+            activationMode: 'dynamic',
+            triggerKeywords: ['wallet', 'funds', 'balance', 'money', 'pay', 'transfer', 'crypto', 'asset']
+        });
+    }
   }
 }
 

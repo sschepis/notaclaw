@@ -74,6 +74,11 @@ export interface PromptEngineConfig {
     prompts: PromptTemplate[];
 }
 
+export interface ImageAttachment {
+    mimeType: string;
+    data: string; // base64-encoded image data
+}
+
 export interface RunnerOptions {
     maxDepth?: number;
     timeout?: number;
@@ -82,4 +87,5 @@ export interface RunnerOptions {
     defaultProvider?: string;
     cycleProviders?: boolean;
     state?: Record<string, any>;
+    imageAttachments?: ImageAttachment[];
 }

@@ -6,6 +6,9 @@ export interface PluginContext {
   ipc?: {
     handle: (channel: string, handler: (args: any) => Promise<any>) => void;
   };
+  traits?: {
+    register: (trait: any) => void;
+  };
 }
 
 class NetworkService {
@@ -30,6 +33,17 @@ class NetworkService {
         ]
       };
     });
+
+    if (this.context.traits) {
+      this.context.traits.register({
+        id: 'network-visualization',
+        name: 'Network Topology',
+        description: 'Visualize network nodes and connections.',
+        instruction: 'You have access to network topology data. If the user asks about the network structure, nodes, or latency, you can retrieve this data using `network:get-topology`.',
+        activationMode: 'dynamic',
+        triggerKeywords: ['network', 'topology', 'nodes', 'latency', 'visualize']
+      });
+    }
   }
 }
 
